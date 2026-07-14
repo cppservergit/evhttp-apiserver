@@ -183,7 +183,7 @@ struct json_object* sales_service_get_data(const char* start_date, const char* e
 You can test this endpoint natively from the terminal. The framework automatically embeds telemetry and thread execution metadata into every response.
 
 ```bash
-curl "http://cpp14:8080/sales" -s --json '{"start_date": "1994-01-01", "end_date": "1996-12-31"}' | jq
+curl "http://localhost:8080/sales" -s --json '{"start_date": "1994-01-01", "end_date": "1996-12-31"}' | jq
 ```
 
 **JSON Output:**
