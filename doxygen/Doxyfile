@@ -1,0 +1,12 @@
+PROJECT_NAME           = "EvHttp API Server"
+PROJECT_BRIEF          = "High-performance, event-driven C HTTP server"
+OUTPUT_DIRECTORY       = .
+INPUT                  = ../include ../src
+RECURSIVE              = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+GENERATE_LATEX         = NO
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+QUIET                  = YES

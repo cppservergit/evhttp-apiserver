@@ -1,0 +1,22 @@
+[Unit]
+Description=EvHttp API Server
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=apiserver
+Group=apiserver
+WorkingDirectory=/opt/evhttp/bin
+# Ensure apiserver.env is located in the WorkingDirectory
+ExecStart=/opt/evhttp/bin/apiserver
+# SIGHUP triggers our hot-reload logic without dropping the process
+ExecReload=/bin/kill -SIGHUP $MAINPID
+Restart=always
+RestartSec=3
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=apiserver
+
+[Install]
+WantedBy=multi-user.target

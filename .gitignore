@@ -1,0 +1,16 @@
+# Compiled objects
+obj/
+*.o
+
+# Executables and build output directories
+bin/
+test_asan
+test_tsan
+apiserver
+
+
+# Backups and temporary files
+*.backup/
+*.bak
+*~
+.DS_Store
