@@ -183,9 +183,7 @@ struct json_object* sales_service_get_data(const char* start_date, const char* e
 You can test this endpoint natively from the terminal. The framework automatically embeds telemetry and thread execution metadata into every response.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/sales \
-     -H "Content-Type: application/json" \
-     -d '{"start_date": "2024-01-01", "end_date": "2024-12-31"}'
+curl "http://cpp14:8080/sales" -s --json '{"start_date": "1994-01-01", "end_date": "1996-12-31"}' | jq
 ```
 
 **JSON Output:**
@@ -193,16 +191,23 @@ curl -X POST http://127.0.0.1:8080/sales \
 {
   "data": [
     {
-      "category": "Electronics",
-      "total_sales": 15420.50
+      "id": 1,
+      "item": "Beverages",
+      "subtotal": 267868.1800000
     },
     {
-      "category": "Furniture",
-      "total_sales": 8300.00
+      "id": 4,
+      "item": "Dairy Products",
+      "subtotal": 234507.2850000
+    },
+    {
+      "id": 3,
+      "item": "Confections",
+      "subtotal": 167357.2250000
     }
   ],
-  "thread_id": "0x7f23a41fc6c0",
-  "elapsed_ns": 4502100,
-  "hostname": "ubuntu-lxd-01"
+  "thread_id": "0x7f08cdffb6c0",
+  "elapsed_ns": 14592908,
+  "hostname": "cpp14"
 }
 ```
