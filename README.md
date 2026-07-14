@@ -22,6 +22,34 @@ flowchart TD
 * **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 0.5% of RAM under extreme stress loads (tested on an 8GB VM).
 * **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute legacy ODBC queries and orchestrate external downstream REST services.
 
+## Clean C Design
+
+### Declarative API Routing
+Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas:
+```c
+static const middleware_ctx_t g_routes[] = {
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .text_handler = metrics_handler }
+};
+```
+
+### Declarative JSON Validation
+Avoid messy manual JSON parsing. Define a strict schema and let the framework automatically validate types and execute custom logical boundaries before the handler is even invoked:
+```c
+static const FieldValidator SalesSchema[] = {
+    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = NULL},
+    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = NULL}
+};
+
+const ValidationContext SalesContext = {
+    .schema = SalesSchema,
+    .schema_count = sizeof(SalesSchema) / sizeof(SalesSchema[0]),
+    .global_validator = validate_start_before_end
+};
+```
+
 ## Repository
 **GitHub:** `git@github.com:cppservergit/evhttp-apiserver.git`  
 **Branch:** `main`
@@ -115,3 +143,66 @@ flowchart LR
 
 ## License
 This project is licensed under the 3-Clause BSD License - see the [LICENSE](LICENSE) file for details.
+
+## Example: API Handler via ODBC
+Below is a complete, step-by-step example of how the framework handles a POST request to `/sales`.
+
+### 1. The Request Handler
+Because the framework handles the JSON parsing and validation automatically, the handler simply extracts the validated parameters and calls the service layer:
+```c
+struct json_object* sales_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+    const char* start_date = json_get_string(body, "start_date");
+    const char* end_date = json_get_string(body, "end_date");
+    
+    *out_status = HTTP_OK;
+    *out_status_txt = "OK";
+    return sales_service_get_data(start_date, end_date);
+}
+```
+
+### 2. The Database Layer (ODBC)
+The service layer safely binds the parameters and streams the SQL rowset directly into a `json-c` object via the `odbcutil` abstraction:
+```c
+struct json_object* sales_service_get_data(const char* start_date, const char* end_date) {
+    SQLHDBC hdbc = odbcutil_connect();
+    SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
+    
+    SQLLEN cbStart = SQL_NTS, cbEnd = SQL_NTS;
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)start_date, 0, &cbStart);
+    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)end_date, 0, &cbEnd);
+    
+    SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_sales_by_category(?,?)}", SQL_NTS);
+    struct json_object* result_json = odbcutil_fetch_json(hstmt);
+    
+    odbcutil_disconnect(hdbc, hstmt);
+    return result_json;
+}
+```
+
+### 3. Execution & Output
+You can test this endpoint natively from the terminal. The framework automatically embeds telemetry and thread execution metadata into every response.
+
+```bash
+curl -X POST http://127.0.0.1:8080/sales \
+     -H "Content-Type: application/json" \
+     -d '{"start_date": "2024-01-01", "end_date": "2024-12-31"}'
+```
+
+**JSON Output:**
+```json
+{
+  "data": [
+    {
+      "category": "Electronics",
+      "total_sales": 15420.50
+    },
+    {
+      "category": "Furniture",
+      "total_sales": 8300.00
+    }
+  ],
+  "thread_id": "0x7f23a41fc6c0",
+  "elapsed_ns": 4502100,
+  "hostname": "ubuntu-lxd-01"
+}
+```
