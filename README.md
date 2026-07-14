@@ -20,6 +20,7 @@ flowchart TD
 * **Zero-Downtime Hot Reload:** Send a `SIGHUP` signal to the process to hot-reload configurations (`apiserver.env`) without dropping active sockets.
 * **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
 * **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 0.5% of RAM under extreme stress loads (tested on an 8GB VM).
+* **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute legacy ODBC queries and orchestrate external downstream REST services.
 
 ## Repository
 **GitHub:** `git@github.com:cppservergit/evhttp-apiserver.git`  
