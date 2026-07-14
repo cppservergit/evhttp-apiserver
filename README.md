@@ -147,7 +147,7 @@ This project is licensed under the 3-Clause BSD License - see the [LICENSE](LICE
 ## Example: API Handler via ODBC
 Below is a complete, step-by-step example of how the framework handles a POST request to `/sales`.
 
-### 1. The Request Handler
+### 1. The Request Handler (`include/handlers.h`, `src/handlers.c`)
 Because the framework handles the JSON parsing and validation automatically, the handler simply extracts the validated parameters and calls the service layer:
 ```c
 struct json_object* sales_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
@@ -160,7 +160,7 @@ struct json_object* sales_handler(struct evhttp_request* req, struct json_object
 }
 ```
 
-### 2. The Database Layer (ODBC)
+### 2. The Database Layer (ODBC) (`include/sales.h`, `src/sales.c`)
 The service layer safely binds the parameters and streams the SQL rowset directly into a `json-c` object via the `odbcutil` abstraction:
 ```c
 struct json_object* sales_service_get_data(const char* start_date, const char* end_date) {
