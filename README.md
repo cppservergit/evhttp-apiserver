@@ -116,7 +116,7 @@ make tsan   # Builds bin/test_tsan (Thread Sanitizer)
 ```
 
 ### 6. Stress Testing
-A dedicated testing suite is provided via `test/test.sh`. This script will automatically compile the server across all target configurations (Release, ASAN, TSAN) and bombard it with massive parallel curl requests to validate stability, thread safety, and memory leak freedom under extreme concurrency.
+A dedicated stress testing script is provided via `test/test.sh`. This script will bombard your running server with massive parallel `curl` requests to validate connection handling, thread-safety, and latency under extreme concurrency. Ensure the server is already compiled and running before executing the suite.
 ```bash
 cd test
 ./test.sh
