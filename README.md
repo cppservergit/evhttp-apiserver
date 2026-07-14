@@ -19,6 +19,7 @@ flowchart TD
 * **Cloud-Native Telemetry:** Native compatibility with Promtail/Loki via single-line JSON structured logging (`journalctl`), alongside a dedicated `/metrics` endpoint for Prometheus and `curl` scraping.
 * **Zero-Downtime Hot Reload:** Send a `SIGHUP` signal to the process to hot-reload configurations (`apiserver.env`) without dropping active sockets.
 * **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
+* **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 0.5% of RAM under extreme stress loads (tested on an 8GB VM).
 
 ## Repository
 **GitHub:** `git@github.com:cppservergit/evhttp-apiserver.git`  
@@ -85,6 +86,13 @@ make asan   # Builds bin/test_asan (Address/Leak Sanitizer)
 make tsan   # Builds bin/test_tsan (Thread Sanitizer)
 ```
 
+### 6. Stress Testing
+A dedicated testing suite is provided via `test/test.sh`. This script will automatically compile the server across all target configurations (Release, ASAN, TSAN) and bombard it with massive parallel curl requests to validate stability, thread safety, and memory leak freedom under extreme concurrency.
+```bash
+cd test
+./test.sh
+```
+
 ## Production Deployment
 For production environments, the server is designed to run securely as a persistent `systemd` daemon with automatic restart, logging, and hot-reload capabilities. 
 
@@ -99,7 +107,7 @@ flowchart LR
         HAP -->|HTTP :8080| LXD2[LXD Container 2\nEvHttp apiserver]
         HAP -->|HTTP :8080| LXD3[LXD Container 3\nEvHttp apiserver]
     end
-    LXD1 --> DB[(Database)]
+    LXD1 --> DB[(Database or REST backend)]
     LXD2 --> DB
     LXD3 --> DB
 ```
