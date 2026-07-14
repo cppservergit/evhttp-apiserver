@@ -1,6 +1,24 @@
 # EvHttp API Server
 
 **EvHttp API Server** is a high-performance, strictly-typed C23 web server and REST API gateway. Built on top of `libevent` and `json-c`, it utilizes a highly concurrent multithreaded reactor/worker-pool architecture to aggregate data from legacy ODBC SQL databases and external microservices. It is designed to be extremely fast, memory-safe, and capable of gracefully sustaining massive bursts of traffic.
+### Internal Architecture
+```mermaid
+flowchart TD
+    Client((Client)) <-->|HTTP/1.1| RT[Reactor Threads\nNetwork I/O]
+    RT -->|Enqueue Task| GQ[(Global Inbound Queue)]
+    GQ -->|Dequeue Task| WT[Worker Pool\nBusiness Logic]
+    WT <-->|ODBC / REST| DB[(External Systems)]
+    WT -->|eventfd signaling| CQ[Dedicated Reactor\nCompletion Queues]
+    CQ --> RT
+```
+
+## Features
+* **Thread-Safety & Memory-Safety:** Rigorously profiled with Google's AddressSanitizer (ASAN) and ThreadSanitizer (TSAN) to eliminate data races, memory leaks, and undefined behavior.
+* **Performance & Scalability:** Engineered for high-throughput, utilizing non-blocking `epoll` I/O.
+* **Hardware-Aware Affinity:** Uses `SO_REUSEPORT` with thread-per-core affinity to automatically adapt to available CPU cores for zero-contention network routing.
+* **Cloud-Native Telemetry:** Native compatibility with Promtail/Loki via single-line JSON structured logging (`journalctl`), alongside a dedicated `/metrics` endpoint for Prometheus and `curl` scraping.
+* **Zero-Downtime Hot Reload:** Send a `SIGHUP` signal to the process to hot-reload configurations (`apiserver.env`) without dropping active sockets.
+* **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
 
 ## Repository
 **GitHub:** `git@github.com:cppservergit/evhttp-apiserver.git`  
@@ -71,6 +89,20 @@ make tsan   # Builds bin/test_tsan (Thread Sanitizer)
 For production environments, the server is designed to run securely as a persistent `systemd` daemon with automatic restart, logging, and hot-reload capabilities. 
 
 Please see the [Systemd Installation Guide](systemd/install.md) for full instructions on deploying the binary and configuring the service.
+
+### Recommended Topology
+```mermaid
+flowchart LR
+    Internet((Internet)) -->|HTTPS / TLS| HAP[HAProxy Edge\nTLS Termination]
+    subgraph VM [Host Virtual Machine]
+        HAP -->|HTTP :8080| LXD1[LXD Container 1\nEvHttp apiserver]
+        HAP -->|HTTP :8080| LXD2[LXD Container 2\nEvHttp apiserver]
+        HAP -->|HTTP :8080| LXD3[LXD Container 3\nEvHttp apiserver]
+    end
+    LXD1 --> DB[(Database)]
+    LXD2 --> DB
+    LXD3 --> DB
+```
 
 ## License
 This project is licensed under the 3-Clause BSD License - see the [LICENSE](LICENSE) file for details.
