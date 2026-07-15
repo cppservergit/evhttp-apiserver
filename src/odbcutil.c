@@ -176,7 +176,7 @@ struct json_object* odbcutil_get_json(const char* sp_call, const char* func_name
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)sp_call, SQL_NTS);
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json = odbcutil_fetch_json(hstmt);
+        result_json = odbcutil_fetch_json_batch(hstmt);
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
