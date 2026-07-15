@@ -15,6 +15,7 @@ flowchart TD
 ## Features
 * **Thread-Safety & Memory-Safety:** Rigorously profiled with Google's AddressSanitizer (ASAN) and ThreadSanitizer (TSAN) to eliminate data races, memory leaks, and undefined behavior.
 * **Bulkheading Architecture:** Dynamically segments worker threads into separate "fast" and "slow" pools based on configuration (`FAST_POOL_PERCENTAGE`). This guarantees that slow external APIs never starve resources from fast database queries or health checks.
+* **Zero-Allocation Intrusive Queues:** Eliminates `malloc`/`free` bottlenecks on the critical request path by embedding intrusive linked-list pointers directly into the task state. This prevents memory fragmentation, OOM crashes under extreme load, and glibc lock contention.
 * **Performance & Scalability:** Engineered for high-throughput, utilizing non-blocking `epoll` I/O.
 * **Hardware-Aware Affinity:** Uses `SO_REUSEPORT` with thread-per-core affinity to automatically adapt to available CPU cores for zero-contention network routing.
 * **Cloud-Native Telemetry:** Native compatibility with Promtail/Loki via single-line JSON structured logging (`journalctl`), alongside a dedicated `/metrics` endpoint for Prometheus and `curl` scraping.
