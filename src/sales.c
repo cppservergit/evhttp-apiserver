@@ -22,7 +22,7 @@ struct json_object* sales_service_get_data(const char* start_date, const char* e
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_sales_by_category(?,?)}", SQL_NTS);
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json = odbcutil_fetch_json(hstmt);
+        result_json = odbcutil_fetch_json_batch(hstmt);
     } else {
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute SQLExecDirect for sp_sales_by_category");
     }
