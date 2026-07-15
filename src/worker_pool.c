@@ -8,14 +8,9 @@
 #include <unistd.h>
 #include <stdio.h>
 
-typedef struct task_node {
-    http_task_t* task;
-    struct task_node* next;
-} task_node_t;
-
 typedef struct {
-    task_node_t* head;
-    task_node_t* tail;
+    http_task_t* head;
+    http_task_t* tail;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     size_t size;
@@ -43,14 +38,11 @@ static void* worker_thread_main(void* arg) {
             break;
         }
         
-        task_node_t* node = pool->head;
-        pool->head = node->next;
+        http_task_t* task = pool->head;
+        pool->head = task->next;
         if (pool->head == nullptr) pool->tail = nullptr;
         pool->size--;
         pthread_mutex_unlock(&pool->mutex);
-        
-        http_task_t* task = node->task;
-        free(node);
         
         if (!atomic_load(&task->cancelled)) {
             const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
@@ -140,15 +132,13 @@ bool worker_pool_enqueue(http_task_t* task) {
         return false;
     }
     
-    task_node_t* node = malloc(sizeof(task_node_t));
-    node->task = task;
-    node->next = nullptr;
+    task->next = nullptr;
     
     if (pool->tail == nullptr) {
-        pool->head = pool->tail = node;
+        pool->head = pool->tail = task;
     } else {
-        pool->tail->next = node;
-        pool->tail = node;
+        pool->tail->next = task;
+        pool->tail = task;
     }
     pool->size++;
     pthread_cond_signal(&pool->cond);

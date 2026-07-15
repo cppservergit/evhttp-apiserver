@@ -34,6 +34,8 @@ char* jwt_decode_payload(const char* jwt) {
                 n |= b64_lookup((unsigned char)payload_start[i]);
                 chars++;
                 i++;
+            } else if (i < len && payload_start[i] == '=') {
+                i++; // Skip padding to prevent infinite loop
             }
         }
         if (chars > 1) out[j++] = (char)((n >> 16) & 0xFF);

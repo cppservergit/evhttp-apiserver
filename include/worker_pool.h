@@ -11,7 +11,7 @@
  * \\brief Asynchronous worker thread pool and task queue.
  */
 
-typedef struct {
+typedef struct http_task_s {
     struct evhttp_request* req;
     struct json_object* parsed_body;
     const void* middleware_ctx;
@@ -24,6 +24,9 @@ typedef struct {
     struct evbuffer* response_text;
     int status_code;
     const char* status_txt;
+
+    // Intrusive queue pointer (Zero-allocation queues)
+    struct http_task_s* next;
 } http_task_t;
 
 /** \brief Initializes the worker thread pools, splitting them into fast and slow pools (Bulkheading). */

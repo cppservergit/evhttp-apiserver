@@ -38,14 +38,9 @@ const char* get_server_version(void) {
 static _Atomic(struct event_base*) *g_worker_bases = nullptr;
 static size_t g_total_workers = 0;
 
-typedef struct comp_node {
-    http_task_t* task;
-    struct comp_node* next;
-} comp_node_t;
-
 typedef struct {
-    comp_node_t* head;
-    comp_node_t* tail;
+    http_task_t* head;
+    http_task_t* tail;
     pthread_mutex_t lock;
     int eventfd;
 } reactor_queue_t;
@@ -321,16 +316,14 @@ void server_notify_task_done(void* arg) {
     size_t rid = task->reactor_id;
     if (rid >= g_total_workers) return;
     
-    comp_node_t* node = malloc(sizeof(comp_node_t));
-    node->task = task;
-    node->next = nullptr;
+    task->next = nullptr;
     
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
     if (g_reactor_queues[rid].tail == nullptr) {
-        g_reactor_queues[rid].head = g_reactor_queues[rid].tail = node;
+        g_reactor_queues[rid].head = g_reactor_queues[rid].tail = task;
     } else {
-        g_reactor_queues[rid].tail->next = node;
-        g_reactor_queues[rid].tail = node;
+        g_reactor_queues[rid].tail->next = task;
+        g_reactor_queues[rid].tail = task;
     }
     pthread_mutex_unlock(&g_reactor_queues[rid].lock);
     
@@ -355,14 +348,13 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     size_t rid = tl_worker_id;
     
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
-    comp_node_t* curr = g_reactor_queues[rid].head;
+    http_task_t* curr = g_reactor_queues[rid].head;
     g_reactor_queues[rid].head = g_reactor_queues[rid].tail = nullptr;
     pthread_mutex_unlock(&g_reactor_queues[rid].lock);
     
     while (curr != nullptr) {
-        http_task_t* task = curr->task;
-        comp_node_t* next = curr->next;
-        free(curr);
+        http_task_t* task = curr;
+        http_task_t* next = curr->next;
         
         if (atomic_load(&task->cancelled)) {
             if (task->response_json) json_object_put(task->response_json);
