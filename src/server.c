@@ -319,7 +319,8 @@ void server_notify_task_done(void* arg) {
     task->next = nullptr;
     
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
-    if (g_reactor_queues[rid].tail == nullptr) {
+    bool was_empty = (g_reactor_queues[rid].tail == nullptr);
+    if (was_empty) {
         g_reactor_queues[rid].head = g_reactor_queues[rid].tail = task;
     } else {
         g_reactor_queues[rid].tail->next = task;
@@ -327,9 +328,12 @@ void server_notify_task_done(void* arg) {
     }
     pthread_mutex_unlock(&g_reactor_queues[rid].lock);
     
-    uint64_t one = 1;
-    if (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
-        LOG_ERROR("Failed to write to reactor eventfd");
+    // Event Coalescing pattern: only signal the reactor if it was asleep/empty
+    if (was_empty) {
+        uint64_t one = 1;
+        if (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
+            LOG_ERROR("Failed to write to reactor eventfd");
+        }
     }
 }
 

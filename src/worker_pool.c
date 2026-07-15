@@ -141,8 +141,11 @@ bool worker_pool_enqueue(http_task_t* task) {
         pool->tail = task;
     }
     pool->size++;
-    pthread_cond_signal(&pool->cond);
     pthread_mutex_unlock(&pool->mutex);
+    
+    // Unlock-before-Signal pattern: Wake up one thread outside the critical section
+    // to prevent the woken thread from immediately blocking on the mutex.
+    pthread_cond_signal(&pool->cond);
     return true;
 }
 
