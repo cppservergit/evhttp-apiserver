@@ -6,7 +6,7 @@ SRC = src/main.c src/server.c src/handlers.c src/http_client.c src/customer.c sr
 OBJ = $(patsubst src/%.c,obj/%.o,$(SRC))
 TARGET = bin/apiserver
 
-.PHONY: all release clean asan tsan
+.PHONY: all release clean asan tsan valgrind
 
 all: release
 
@@ -27,10 +27,14 @@ tsan:
 	@mkdir -p bin
 	$(CC) -std=gnu2x -Wall -Wextra -Wpedantic -g -O1 -fsanitize=thread -D_GNU_SOURCE -Iinclude $(SRC) -o bin/test_tsan $(LDFLAGS)
 
+valgrind:
+	@mkdir -p bin
+	$(CC) -std=gnu2x -Wall -Wextra -Wpedantic -g -O1 -D_GNU_SOURCE -Iinclude $(SRC) -o bin/test_valgrind $(LDFLAGS)
+
 obj/%.o: src/%.c
 	@mkdir -p obj
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf obj
-	rm -f bin/apiserver bin/test_asan bin/test_tsan
+	rm -f bin/apiserver bin/test_asan bin/test_tsan bin/test_valgrind
