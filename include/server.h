@@ -37,6 +37,7 @@ typedef struct {
     json_handler_fn json_handler;
     text_handler_fn text_handler;
     void* user_arg;
+    bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
 } middleware_ctx_t;
 
 /** \brief Retrieves the hardcoded server version string. */
@@ -45,11 +46,11 @@ const char* get_server_version(void);
 /** \brief Notifies the originating reactor that a task is complete. */
 void server_notify_task_done(void* task);
 
-/** \brief Records telemetry for a processed HTTP request. \param elapsed_ns Processing time in nanoseconds. */
-void server_record_request_stats(long long elapsed_ns);
+/** \brief Records telemetry for a processed HTTP request. \param elapsed_ms Processing time in milliseconds. */
+void server_record_request_stats(long long elapsed_ms);
 
 /** \brief Retrieves aggregated HTTP request performance metrics. */
-void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ns, uint64_t* avg_time_ns);
+void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ms, uint64_t* avg_time_ms);
 
 /** \brief Retrieves memory utilization metrics for the current process. */
 void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb);

@@ -51,8 +51,8 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     *out_status_txt = "OK";
     
     uint64_t total_requests = 0;
-    uint64_t avg_time_ns = 0;
-    server_get_request_stats(&total_requests, nullptr, &avg_time_ns);
+    uint64_t avg_time_ms = 0;
+    server_get_request_stats(&total_requests, nullptr, &avg_time_ms);
     
     uint64_t total_ram_kb = 0;
     uint64_t mem_usage_kb = 0;
@@ -63,7 +63,7 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     if (root != nullptr) {
         json_object_object_add(root, "start_time", json_object_new_string(server_get_start_time()));
         json_object_object_add(root, "total_requests", json_object_new_int64((int64_t)total_requests));
-        json_object_object_add(root, "average_processing_time_ns", json_object_new_int64((int64_t)avg_time_ns));
+        json_object_object_add(root, "average_processing_time_ms", json_object_new_int64((int64_t)avg_time_ms));
         json_object_object_add(root, "total_ram_kb", json_object_new_int64((int64_t)total_ram_kb));
         json_object_object_add(root, "memory_usage_kb", json_object_new_int64((int64_t)mem_usage_kb));
         
@@ -81,8 +81,8 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
     *out_status_txt = "OK";
     
     uint64_t total_requests = 0;
-    uint64_t total_time_ns = 0;
-    server_get_request_stats(&total_requests, &total_time_ns, nullptr);
+    uint64_t total_time_ms = 0;
+    server_get_request_stats(&total_requests, &total_time_ms, nullptr);
     
     uint64_t total_ram_kb = 0;
     uint64_t mem_usage_kb = 0;
@@ -95,9 +95,9 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
         "# HELP microservice_requests_total Total number of processed requests\n"
         "# TYPE microservice_requests_total counter\n"
         "microservice_requests_total %lu\n\n"
-        "# HELP microservice_processing_time_nanoseconds_total Total processing time across all requests\n"
-        "# TYPE microservice_processing_time_nanoseconds_total counter\n"
-        "microservice_processing_time_nanoseconds_total %lu\n\n"
+        "# HELP microservice_processing_time_milliseconds_total Total processing time across all requests\n"
+        "# TYPE microservice_processing_time_milliseconds_total counter\n"
+        "microservice_processing_time_milliseconds_total %lu\n\n"
         "# HELP microservice_memory_usage_bytes Current resident memory size in bytes\n"
         "# TYPE microservice_memory_usage_bytes gauge\n"
         "microservice_memory_usage_bytes %lu\n\n"
@@ -105,7 +105,7 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
         "# TYPE microservice_memory_total_bytes gauge\n"
         "microservice_memory_total_bytes %lu\n",
         total_requests,
-        total_time_ns,
+        total_time_ms,
         mem_usage_kb * 1024,
         total_ram_kb * 1024
     );

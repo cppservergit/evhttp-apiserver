@@ -60,7 +60,7 @@ const char* server_get_start_time(void) { return g_start_time; }
 
 struct worker_stats {
     _Atomic uint64_t total_requests;
-    _Atomic uint64_t total_processing_time_ns;
+    _Atomic uint64_t total_processing_time_ms;
 } __attribute__((aligned(64)));
 
 static struct worker_stats* g_worker_stats = nullptr;
@@ -93,8 +93,6 @@ int server_init_globals(size_t total_workers) {
     strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", tm_info);
     
     curl_global_init(CURL_GLOBAL_ALL);
-    
-    SQLSetEnvAttr(SQL_NULL_HENV, SQL_ATTR_CONNECTION_POOLING, (SQLPOINTER)SQL_CP_ONE_PER_HENV, 0);
     SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &g_odbc_env);
     SQLSetEnvAttr(g_odbc_env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
     atexit(odbc_cleanup);
@@ -154,25 +152,25 @@ void server_shutdown_workers(void) {
     }
 }
 
-void server_record_request_stats(long long elapsed_ns) {
+void server_record_request_stats(long long elapsed_ms) {
     if (g_worker_stats) {
         atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_processing_time_ns, elapsed_ns, memory_order_relaxed);
+        atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_processing_time_ms, elapsed_ms, memory_order_relaxed);
     }
 }
 
-void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ns, uint64_t* avg_time_ns) {
+void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ms, uint64_t* avg_time_ms) {
     uint64_t reqs = 0;
-    uint64_t time_ns = 0;
+    uint64_t time_ms = 0;
     if (g_worker_stats) {
         for (size_t i = 0; i < g_total_workers; ++i) {
             reqs += atomic_load_explicit(&g_worker_stats[i].total_requests, memory_order_relaxed);
-            time_ns += atomic_load_explicit(&g_worker_stats[i].total_processing_time_ns, memory_order_relaxed);
+            time_ms += atomic_load_explicit(&g_worker_stats[i].total_processing_time_ms, memory_order_relaxed);
         }
     }
     if (total_requests) *total_requests = reqs;
-    if (total_time_ns) *total_time_ns = time_ns;
-    if (avg_time_ns) *avg_time_ns = reqs > 0 ? time_ns / reqs : 0;
+    if (total_time_ms) *total_time_ms = time_ms;
+    if (avg_time_ms) *avg_time_ms = reqs > 0 ? time_ms / reqs : 0;
 }
 
 void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
@@ -197,16 +195,16 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
 // middleware_ctx_t now in server.h
 
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = version_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = sysinfo_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = rsysinfo_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_get_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = version_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = sysinfo_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = rsysinfo_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
+    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_get_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
@@ -260,20 +258,20 @@ static void send_json_response(struct evhttp_request* req, int status_code, cons
     evhttp_send_reply(req, status_code, status_txt, response_buf);
 }
 
-static long long measure_elapsed_ns(const struct timespec* start, const struct timespec* end) {
+static long long measure_elapsed_ms(const struct timespec* start, const struct timespec* end) {
     long long seconds = (long long)(end->tv_sec - start->tv_sec);
     long long nanoseconds = (long long)(end->tv_nsec - start->tv_nsec);
-    return (seconds * 1000000000LL) + nanoseconds;
+    return (seconds * 1000LL) + (nanoseconds / 1000000LL);
 }
 
-static struct json_object* augment_payload_with_metadata(struct json_object* payload, long long elapsed_ns) {
+static struct json_object* augment_payload_with_metadata(struct json_object* payload, long long elapsed_ms) {
     struct json_object* root = payload;
     if (json_object_get_type(payload) != json_type_object) {
         root = json_object_new_object();
         json_object_object_add(root, "data", payload);
     }
     json_object_object_add(root, "thread_id", json_object_new_string(tl_tid_str));
-    json_object_object_add(root, "elapsed_ns", json_object_new_int64(elapsed_ns));
+    json_object_object_add(root, "elapsed_ms", json_object_new_int64(elapsed_ms));
     json_object_object_add(root, "hostname", json_object_new_string(g_hostname));
     return root;
 }
@@ -379,7 +377,7 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
         
         struct timespec end_time;
         clock_gettime(CLOCK_MONOTONIC, &end_time);
-        long long elapsed = measure_elapsed_ns(&task->start_time, &end_time);
+        long long elapsed = measure_elapsed_ms(&task->start_time, &end_time);
         server_record_request_stats(elapsed);
         
         struct evhttp_connection* evcon = evhttp_request_get_connection(task->req);
@@ -388,7 +386,7 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
         if (evcon) evhttp_connection_get_peer(evcon, &client_ip, &port);
         
         if (config_get_access_log()) {
-            LOG_INFO("clientIP=%s uri=%s elapsed_ns=%lld", client_ip ? client_ip : "unknown", evhttp_request_get_uri(task->req), elapsed);
+            LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip ? client_ip : "unknown", evhttp_request_get_uri(task->req), elapsed);
         }
         
         if (task->response_json) {

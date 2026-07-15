@@ -18,6 +18,7 @@ static char g_api_pass[MAX_CONFIG_STR] = {0};
 static bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
+static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
 
 static void trim_newline(char* str) {
     size_t len = strlen(str);
@@ -27,9 +28,9 @@ static void trim_newline(char* str) {
     }
 }
 
-static void load_env_file(const char* filepath) {
+static bool load_env_file(const char* filepath) {
     FILE* f = fopen(filepath, "r");
-    if (!f) return;
+    if (!f) return false;
 
     char line[MAX_CONFIG_STR];
     while (fgets(line, sizeof(line), f)) {
@@ -45,17 +46,21 @@ static void load_env_file(const char* filepath) {
         }
     }
     fclose(f);
+    return true;
 }
 
 void config_reload(void) {
     // Attempt to load apiserver.env file from the directory where the executable resides
     char exe_path[PATH_MAX] = {0};
     char env_path[PATH_MAX] = {0};
+    bool loaded = false;
     if (readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1) != -1) {
         char* dir = dirname(exe_path);
         snprintf(env_path, sizeof(env_path), "%s/apiserver.env", dir);
-        load_env_file(env_path);
-    } else {
+        loaded = load_env_file(env_path);
+    }
+    
+    if (!loaded) {
         // Fallback to current working directory
         load_env_file("apiserver.env");
     }
@@ -67,6 +72,7 @@ void config_reload(void) {
     const char* env_access_log = getenv("ACCESS_LOG");
     const char* env_num_threads = getenv("NUM_THREADS");
     const char* env_max_queue = getenv("MAX_QUEUE_SIZE");
+    const char* env_fast_pool = getenv("FAST_POOL_PERCENTAGE");
     
     size_t num_threads_val = 0;
     if (env_num_threads) {
@@ -76,6 +82,12 @@ void config_reload(void) {
     size_t max_queue_val = 10000;
     if (env_max_queue) {
         max_queue_val = strtoul(env_max_queue, nullptr, 10);
+    }
+    
+    size_t fast_pool_val = 25;
+    if (env_fast_pool) {
+        fast_pool_val = strtoul(env_fast_pool, nullptr, 10);
+        if (fast_pool_val > 100) fast_pool_val = 100;
     }
     
     bool access_log_val = true;
@@ -109,11 +121,17 @@ void config_reload(void) {
     g_access_log = access_log_val;
     g_num_threads = num_threads_val;
     g_max_queue_size = max_queue_val;
+    g_fast_pool_percentage = fast_pool_val;
+    bool was_first_load = is_first_load;
     is_first_load = false;
     
     pthread_rwlock_unlock(&g_config_lock);
     
-    LOG_AUDIT("Configuration loaded/reloaded successfully.");
+    if (was_first_load) {
+        LOG_INFO("Configuration loaded successfully on startup.");
+    } else {
+        LOG_AUDIT("Configuration hot-reloaded successfully.");
+    }
 }
 
 void config_init(void) {
@@ -161,6 +179,13 @@ size_t config_get_num_threads(void) {
 size_t config_get_max_queue_size(void) {
     pthread_rwlock_rdlock(&g_config_lock);
     size_t val = g_max_queue_size;
+    pthread_rwlock_unlock(&g_config_lock);
+    return val;
+}
+
+size_t config_get_fast_pool_percentage(void) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    size_t val = g_fast_pool_percentage;
     pthread_rwlock_unlock(&g_config_lock);
     return val;
 }

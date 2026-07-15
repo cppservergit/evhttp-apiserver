@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdlib.h>
 
 static const char* level_strings[] = {
     "INFO", "WARN", "AUDIT", "ERROR", "FATAL", "DEBUG"
@@ -60,5 +61,9 @@ void logger_log(LogLevel level, const char* format, ...) {
         int to_write = len < (int)sizeof(out_buf) ? len : (int)sizeof(out_buf) - 1;
         // Atomic single syscall to stderr prevents interleaved outputs between threads
         if (write(STDERR_FILENO, out_buf, (size_t)to_write)) {}
+    }
+    
+    if (level == LOG_LEVEL_FATAL) {
+        exit(EXIT_FAILURE);
     }
 }

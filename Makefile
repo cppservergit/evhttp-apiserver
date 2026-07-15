@@ -33,4 +33,4 @@ obj/%.o: src/%.c
 
 clean:
 	rm -rf obj
-	rm -rf bin
+	rm -f bin/apiserver bin/test_asan bin/test_tsan
