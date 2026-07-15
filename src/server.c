@@ -400,7 +400,7 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
             evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
             evbuffer_free(task->response_text); // Fix memory leak
         } else {
-            send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error: Handler returned NULL."));
+            send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
         }
         
         if (task->parsed_body) json_object_put(task->parsed_body);

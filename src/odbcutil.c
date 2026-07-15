@@ -5,6 +5,16 @@
 #include "config.h"
 #include <string.h>
 
+static _Thread_local SQLHDBC tl_hdbc = SQL_NULL_HDBC;
+
+void odbcutil_reset_connection(void) {
+    if (tl_hdbc != SQL_NULL_HDBC) {
+        SQLDisconnect(tl_hdbc);
+        SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc);
+        tl_hdbc = SQL_NULL_HDBC;
+    }
+}
+
 void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
     SQLCHAR sqlState[6], msg[SQL_MAX_MESSAGE_LENGTH];
     SQLINTEGER nativeError;
@@ -12,34 +22,47 @@ void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* c
 
     if (SQLGetDiagRec(handle_type, handle, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen) == SQL_SUCCESS) {
         LOG_ERROR("%s | ODBC Error [%s]: %s", context_msg, sqlState, msg);
+        if (strncmp((char*)sqlState, "08S01", 5) == 0 || strncmp((char*)sqlState, "08003", 5) == 0) {
+            LOG_ERROR("Database connection lost. Resetting thread-local connection pool.");
+            odbcutil_reset_connection();
+        }
     } else {
         LOG_ERROR("%s | Unknown ODBC Error", context_msg);
     }
 }
 
 SQLHDBC odbcutil_connect(void) {
-    SQLHDBC hdbc = SQL_NULL_HDBC;
-    if (SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &hdbc) != SQL_SUCCESS) {
+    if (tl_hdbc != SQL_NULL_HDBC) {
+        SQLUINTEGER dead = SQL_CD_FALSE;
+        SQLGetConnectAttr(tl_hdbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, NULL);
+        if (dead == SQL_CD_FALSE) {
+            return tl_hdbc;
+        }
+        odbcutil_reset_connection();
+    }
+    
+    if (SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &tl_hdbc) != SQL_SUCCESS) {
         odbcutil_log_error(SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
         return SQL_NULL_HDBC;
     }
     
     // Set a 5-second login timeout
-    SQLSetConnectAttr(hdbc, SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
+    SQLSetConnectAttr(tl_hdbc, SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
     
     char conn_str[MAX_CONFIG_STR];
     config_get_odbc_conn_str(conn_str, sizeof(conn_str));
     
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
     SQLSMALLINT out_conn_len;
-    SQLRETURN ret = SQLDriverConnect(hdbc, NULL, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT);
+    SQLRETURN ret = SQLDriverConnect(tl_hdbc, NULL, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT);
     
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        odbcutil_log_error(SQL_HANDLE_DBC, hdbc, "Failed to connect to database");
-        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+        odbcutil_log_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");
+        SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc);
+        tl_hdbc = SQL_NULL_HDBC;
         return SQL_NULL_HDBC;
     }
-    return hdbc;
+    return tl_hdbc;
 }
 
 SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
@@ -60,12 +83,9 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
 }
 
 void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
+    (void)hdbc; // Connection remains pooled persistently in tl_hdbc
     if (hstmt != SQL_NULL_HSTMT) {
         SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
-    }
-    if (hdbc != SQL_NULL_HDBC) {
-        SQLDisconnect(hdbc);
-        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
     }
 }
 
