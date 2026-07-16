@@ -378,7 +378,13 @@ static void process_completed_task(http_task_t* task) {
     const char* client_ip = extract_client_ip(task->req);
     
     if (config_get_access_log()) {
-        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
+        struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+        const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+        if (req_id) {
+            LOG_INFO("clientIP=%s reqID=%s uri=%s elapsed_ms=%lld", client_ip, req_id, evhttp_request_get_uri(task->req), elapsed_ms);
+        } else {
+            LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
+        }
     }
     
     if (task->response_json) {

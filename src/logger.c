@@ -11,6 +11,15 @@ static const char* level_strings[] = {
 };
 
 static _Thread_local char tl_logger_tid[32] = {0};
+static _Thread_local const char* tl_request_id = NULL;
+
+void logger_set_request_id(const char* req_id) {
+    tl_request_id = req_id;
+}
+
+void logger_clear_request_id(void) {
+    tl_request_id = NULL;
+}
 
 // Stack-based JSON escaper (Zero Malloc, fully memory safe)
 static void escape_json_string(const char* src, char* dest, size_t dest_size) {
@@ -53,9 +62,16 @@ void logger_log(LogLevel level, const char* format, ...) {
     escape_json_string(msg_buf, escaped_msg, sizeof(escaped_msg));
 
     char out_buf[4096];
-    int len = snprintf(out_buf, sizeof(out_buf), 
-        "{\"level\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
-        level_strings[level], escaped_msg, tl_logger_tid);
+    int len;
+    if (tl_request_id) {
+        len = snprintf(out_buf, sizeof(out_buf), 
+            "{\"level\":\"%s\",\"reqID\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
+            level_strings[level], tl_request_id, escaped_msg, tl_logger_tid);
+    } else {
+        len = snprintf(out_buf, sizeof(out_buf), 
+            "{\"level\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
+            level_strings[level], escaped_msg, tl_logger_tid);
+    }
     
     if (len > 0) {
         int to_write = len < (int)sizeof(out_buf) ? len : (int)sizeof(out_buf) - 1;

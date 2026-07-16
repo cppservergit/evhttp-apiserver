@@ -46,11 +46,17 @@ static void* worker_thread_main(void* arg) {
         
         if (!atomic_load(&task->cancelled)) {
             const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
+            struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+            const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+            logger_set_request_id(req_id);
+            
             if (ctx && ctx->json_handler) {
                 task->response_json = ctx->json_handler(nullptr, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
             } else if (ctx && ctx->text_handler) {
                 task->response_text = ctx->text_handler(nullptr, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
             }
+            
+            logger_clear_request_id();
         }
         
         // Notify reactor

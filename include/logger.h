@@ -32,3 +32,14 @@ typedef enum {
  */
 __attribute__((format(printf, 2, 3)))
 void logger_log(LogLevel level, const char* format, ...);
+
+/**
+ * \brief Sets the thread-local request ID for distributed tracing (MDC).
+ * \param req_id Pointer to the request ID string (must remain valid while set, e.g. from libevent headers).
+ */
+void logger_set_request_id(const char* req_id);
+
+/**
+ * \brief Clears the thread-local request ID.
+ */
+void logger_clear_request_id(void);
