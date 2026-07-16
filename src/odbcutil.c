@@ -138,7 +138,7 @@ struct json_object* odbcutil_fetch_json(SQLHSTMT hstmt) {
 
 #define BATCH_SIZE 4
 
-struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt) {
+struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name) {
     struct json_object* result_json = nullptr;
     SQLRETURN ret;
     
@@ -173,7 +173,9 @@ struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt) {
     }
     
     if (ret != SQL_NO_DATA && ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "SQLFetchScroll failed while iterating rowset in batch mode");
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "SQLFetchScroll failed while iterating rowset in batch mode in %s", func_name);
+        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
     }
     
     if (!has_rows || !result_json) {
@@ -196,7 +198,7 @@ struct json_object* odbcutil_get_json(const char* sp_call, const char* func_name
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)sp_call, SQL_NTS);
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json = odbcutil_fetch_json_batch(hstmt);
+        result_json = odbcutil_fetch_json_batch(hstmt, func_name);
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);

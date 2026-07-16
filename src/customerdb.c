@@ -20,7 +20,7 @@ struct json_object* customerdb_get_data(const char* customer_id) {
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_customer_get(?)}", SQL_NTS);
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json =  odbcutil_fetch_json_batch(hstmt);
+        result_json = odbcutil_fetch_json_batch(hstmt, __func__);
     } else {
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute SQLExecDirect for sp_customer_get");
     }

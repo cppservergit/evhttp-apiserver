@@ -19,7 +19,7 @@ SQLHDBC odbcutil_connect(void);
 struct json_object* odbcutil_fetch_json(SQLHSTMT hstmt);
 
 /** \brief Extracts JSON data using batch fetching (4 rows at a time). \param hstmt The executed statement. \return A newly allocated json_object array. */
-struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt);
+struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name);
 
 /** \brief Extracts and logs ODBC diagnostic records. */
 void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
