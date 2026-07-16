@@ -1,6 +1,6 @@
 # EvHttp API Server
 
-**EvHttp API Server** is a high-performance, strictly-typed C23 web server and REST API gateway. Built on top of `libevent` and `json-c`, it utilizes a highly concurrent multithreaded reactor/worker-pool architecture to aggregate data from legacy ODBC SQL databases and external microservices. It is designed to be extremely fast, memory-safe, and capable of gracefully sustaining massive bursts of traffic.
+**EvHttp API Server** is a high-performance, strictly-typed C23 web server and REST API gateway. Built on top of `libevent` and `json-c`, it utilizes a highly concurrent multithreaded reactor/worker-pool architecture to aggregate data from ODBC SQL databases and external microservices. It is designed to be extremely fast, memory-safe, and capable of gracefully sustaining massive bursts of traffic.
 ### Internal Architecture
 ```mermaid
 flowchart TD
@@ -25,7 +25,8 @@ flowchart TD
 * **Zero-Downtime Hot Reload:** Send a `SIGHUP` signal to the process to hot-reload configurations (`apiserver.env`) without dropping active sockets.
 * **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
 * **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 1% of RAM under extreme stress loads (tested on an 8GB VM).
-* **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute legacy ODBC queries and orchestrate external downstream REST services.
+* **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute ODBC queries and orchestrate external downstream REST services.
+* **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error and row-wise data binding for bulk reading JSON datasets.
 
 ## Clean C Design
 
@@ -79,6 +80,7 @@ sudo apt-get install -y build-essential gcc make \
                         unixodbc-dev \
                         tdsodbc
 ```
+**Note:** The package `tdsodbc` installs SQLServer/Sybase open source drivers because the examples provided use an [SQL Server database](https://github.com/cppservergit/apiserver2/blob/main/docs/sqlserver.md), but APIServer only depends on `unixodbc`.
 
 ### 2. Clone the Repository
 ```bash
