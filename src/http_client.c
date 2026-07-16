@@ -56,21 +56,20 @@ static CURL* get_thread_curl(void) {
     return curl;
 }
 
-static struct json_object* do_http_request(const char* url, const char* body, const char** headers, int num_headers, long* out_http_code) {
+static CURL* setup_curl_request(const char* url, const char* body, const char** headers, int num_headers, struct curl_slist** out_headers, struct memory_struct* chunk) {
     CURL* curl = get_thread_curl();
     if (!curl) return nullptr;
 
-    struct memory_struct chunk;
-    chunk.memory = malloc(1);
-    if (!chunk.memory) {
+    chunk->memory = malloc(1);
+    if (!chunk->memory) {
         LOG_FATAL("Out of memory allocating initial chunk memory in do_http_request");
         return nullptr;
     }
-    chunk.size = 0;
-    chunk.memory[0] = '\0';
+    chunk->size = 0;
+    chunk->memory[0] = '\0';
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)chunk);
     
     if (body) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
@@ -87,6 +86,36 @@ static struct json_object* do_http_request(const char* url, const char* body, co
     if (chunk_headers) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk_headers);
     }
+    *out_headers = chunk_headers;
+    return curl;
+}
+
+static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const char* url, struct memory_struct* chunk, long* out_http_code) {
+    struct json_object* json_response = nullptr;
+    if (res == CURLE_OK) {
+        long http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        if (out_http_code) *out_http_code = http_code;
+        
+        if (http_code >= 400) {
+            LOG_ERROR("HTTP %ld from %s | Response: %s", http_code, url, chunk->memory ? chunk->memory : "<empty>");
+        }
+        
+        if (chunk->size > 0) {
+            json_response = json_tokener_parse(chunk->memory);
+        }
+    } else {
+        LOG_ERROR("libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
+        if (out_http_code) *out_http_code = 500;
+    }
+    return json_response;
+}
+
+static struct json_object* do_http_request(const char* url, const char* body, const char** headers, int num_headers, long* out_http_code) {
+    struct memory_struct chunk;
+    struct curl_slist* chunk_headers = nullptr;
+    CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
+    if (!curl) return nullptr;
 
     CURLcode res = curl_easy_perform(curl);
     
@@ -95,25 +124,7 @@ static struct json_object* do_http_request(const char* url, const char* body, co
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
     }
 
-    struct json_object* json_response = nullptr;
-
-    if (res == CURLE_OK) {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        if (out_http_code) *out_http_code = http_code;
-        
-        if (http_code >= 400) {
-            LOG_ERROR("HTTP %ld from %s | Response: %s", http_code, url, chunk.memory ? chunk.memory : "<empty>");
-        }
-        
-        if (chunk.size > 0) {
-            json_response = json_tokener_parse(chunk.memory);
-        }
-    } else {
-        LOG_ERROR("libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
-        if (out_http_code) *out_http_code = 500;
-    }
-
+    struct json_object* json_response = parse_curl_response(curl, res, url, &chunk, out_http_code);
     free(chunk.memory);
     return json_response;
 }

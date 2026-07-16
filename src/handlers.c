@@ -40,6 +40,8 @@ struct json_object* version_handler(struct evhttp_request* req, struct json_obje
         json_object_object_add(root, "version", json_object_new_string(get_server_version()));
         json_object_object_add(root, "compiler", json_object_new_string(__VERSION__));
         json_object_object_add(root, "compile_date", json_object_new_string(__DATE__ " " __TIME__));
+        json_object_object_add(root, "hostname", json_object_new_string(server_get_hostname()));
+        json_object_object_add(root, "os_version", json_object_new_string(server_get_os_version()));
     }
     return root;
 }
@@ -70,6 +72,8 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
         char pct_str[32];
         snprintf(pct_str, sizeof(pct_str), "%.2f", mem_usage_pct);
         json_object_object_add(root, "memory_usage_percentage", json_object_new_double_s(mem_usage_pct, pct_str));
+        
+        json_object_object_add(root, "hostname", json_object_new_string(server_get_hostname()));
     }
     return root;
 }

@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <sys/utsname.h>
 #include <curl/curl.h>
 #include "http_client.h"
 #include "customer.h"
@@ -48,10 +49,15 @@ typedef struct {
 static reactor_queue_t* g_reactor_queues = nullptr;
 static char g_hostname[256] = {0};
 static char g_start_time[32] = {0};
+static char g_os_version[256] = {0};
 static uint64_t g_total_ram_kb = 0;
 static long g_page_size = 0;
 
 const char* server_get_start_time(void) { return g_start_time; }
+
+const char* server_get_hostname(void) { return g_hostname; }
+
+const char* server_get_os_version(void) { return g_os_version; }
 
 struct worker_stats {
     _Atomic uint64_t total_requests;
@@ -81,6 +87,13 @@ int server_init_globals(size_t total_workers) {
     g_total_workers = total_workers;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
         snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
+    }
+    
+    struct utsname os_info;
+    if (uname(&os_info) == 0) {
+        snprintf(g_os_version, sizeof(g_os_version), "%s %s", os_info.sysname, os_info.release);
+    } else {
+        snprintf(g_os_version, sizeof(g_os_version), "unknown-os");
     }
     
     time_t now = time(nullptr);
@@ -259,18 +272,6 @@ static long long measure_elapsed_ms(const struct timespec* start, const struct t
     return (seconds * 1000LL) + (nanoseconds / 1000000LL);
 }
 
-static struct json_object* augment_payload_with_metadata(struct json_object* payload, long long elapsed_ms) {
-    struct json_object* root = payload;
-    if (json_object_get_type(payload) != json_type_object) {
-        root = json_object_new_object();
-        json_object_object_add(root, "data", payload);
-    }
-    json_object_object_add(root, "thread_id", json_object_new_string(tl_tid_str));
-    json_object_object_add(root, "elapsed_ms", json_object_new_int64(elapsed_ms));
-    json_object_object_add(root, "hostname", json_object_new_string(g_hostname));
-    return root;
-}
-
 static bool extract_json_body(struct evhttp_request* req, struct json_object** out_body) {
     *out_body = nullptr;
     if (evhttp_request_get_command(req) != EVHTTP_REQ_POST) {
@@ -343,6 +344,58 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
     atomic_store(&task->cancelled, true);
 }
 
+static const char* extract_client_ip(struct evhttp_request* req) {
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+    if (x_forwarded_for) {
+        return x_forwarded_for;
+    }
+    
+    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
+    char* peer_ip = nullptr;
+    uint16_t port = 0;
+    if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
+    if (peer_ip) return peer_ip;
+    
+    return "unknown";
+}
+
+static void cleanup_cancelled_task(http_task_t* task) {
+    if (task->response_json) json_object_put(task->response_json);
+    if (task->response_text) evbuffer_free(task->response_text);
+    if (task->parsed_body) json_object_put(task->parsed_body);
+    free(task);
+}
+
+static void process_completed_task(http_task_t* task) {
+    evhttp_request_set_on_complete_cb(task->req, nullptr, nullptr);
+    
+    struct timespec end_time;
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    long long elapsed_ms = measure_elapsed_ms(&task->start_time, &end_time);
+    server_record_request_stats(elapsed_ms);
+    
+    const char* client_ip = extract_client_ip(task->req);
+    
+    if (config_get_access_log()) {
+        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
+    }
+    
+    if (task->response_json) {
+        send_json_response(task->req, task->status_code, task->status_txt, task->response_json);
+    } else if (task->response_text) {
+        struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+        evhttp_add_header(headers, "Content-Type", "text/plain");
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
+        evbuffer_free(task->response_text);
+    } else {
+        send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
+    }
+    
+    if (task->parsed_body) json_object_put(task->parsed_body);
+    free(task);
+}
+
 static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     (void)events; (void)arg;
     uint64_t val;
@@ -358,49 +411,14 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     
     while (curr != nullptr) {
         http_task_t* task = curr;
-        http_task_t* next = curr->next;
+        curr = curr->next;
         
         if (atomic_load(&task->cancelled)) {
-            if (task->response_json) json_object_put(task->response_json);
-            if (task->response_text) evbuffer_free(task->response_text);
-            if (task->parsed_body) json_object_put(task->parsed_body);
-            free(task);
-            curr = next;
+            cleanup_cancelled_task(task);
             continue;
         }
         
-        evhttp_request_set_on_complete_cb(task->req, nullptr, nullptr);
-        
-        struct timespec end_time;
-        clock_gettime(CLOCK_MONOTONIC, &end_time);
-        long long elapsed = measure_elapsed_ms(&task->start_time, &end_time);
-        server_record_request_stats(elapsed);
-        
-        struct evhttp_connection* evcon = evhttp_request_get_connection(task->req);
-        char* client_ip = "unknown";
-        uint16_t port = 0;
-        if (evcon) evhttp_connection_get_peer(evcon, &client_ip, &port);
-        
-        if (config_get_access_log()) {
-            LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip ? client_ip : "unknown", evhttp_request_get_uri(task->req), elapsed);
-        }
-        
-        if (task->response_json) {
-            struct json_object* root = augment_payload_with_metadata(task->response_json, elapsed);
-            send_json_response(task->req, task->status_code, task->status_txt, root);
-        } else if (task->response_text) {
-            struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-            evhttp_add_header(headers, "Content-Type", "text/plain");
-            evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
-            evbuffer_free(task->response_text); // Fix memory leak
-        } else {
-            send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
-        }
-        
-        if (task->parsed_body) json_object_put(task->parsed_body);
-        free(task);
-        
-        curr = next;
+        process_completed_task(task);
     }
 }
 

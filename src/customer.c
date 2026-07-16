@@ -49,27 +49,8 @@ static struct jwt_cache* get_jwt_cache(void) {
     return cache;
 }
 
-static const char* login_and_get_token(void) {
-    time_t now = time(nullptr);
-    struct jwt_cache* cache = get_jwt_cache();
-    if (!cache) return nullptr;
-    
-    // Return cached token if valid
-    if (cache->token && now < cache->expires_at) {
-        return cache->token;
-    }
-    
-    LOG_WARN("[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
-    
-    if (cache->token) {
-        free(cache->token);
-        cache->token = nullptr;
-    }
-    
-    char api_user[MAX_CONFIG_STR];
-    char api_pass[MAX_CONFIG_STR];
-    char api_url[MAX_CONFIG_STR];
-    
+static struct json_object* execute_login_request(void) {
+    char api_user[MAX_CONFIG_STR], api_pass[MAX_CONFIG_STR], api_url[MAX_CONFIG_STR];
     config_get_api_user(api_user, sizeof(api_user));
     config_get_api_pass(api_pass, sizeof(api_pass));
     config_get_api_url(api_url, sizeof(api_url));
@@ -92,7 +73,10 @@ static const char* login_and_get_token(void) {
         if (login_response) json_object_put(login_response);
         return nullptr;
     }
-    
+    return login_response;
+}
+
+static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_response) {
     struct json_object* token_obj;
     if (json_object_object_get_ex(login_response, "id_token", &token_obj)) {
         const char* id_token = json_object_get_string(token_obj);
@@ -100,18 +84,36 @@ static const char* login_and_get_token(void) {
             cache->token = strdup(id_token);
             if (cache->token) {
                 time_t exp = jwt_get_expiration(id_token);
-                if (exp > 0) {
-                    cache->expires_at = exp;
-                } else {
-                    cache->expires_at = now + 180;
-                }
+                cache->expires_at = exp > 0 ? exp : time(nullptr) + 180;
             } else {
                 LOG_FATAL("Out of memory in strdup for id_token");
             }
         }
     }
+}
+
+static const char* login_and_get_token(void) {
+    time_t now = time(nullptr);
+    struct jwt_cache* cache = get_jwt_cache();
+    if (!cache) return nullptr;
     
+    if (cache->token && now < cache->expires_at) {
+        return cache->token;
+    }
+    
+    LOG_WARN("[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
+    
+    if (cache->token) {
+        free(cache->token);
+        cache->token = nullptr;
+    }
+    
+    struct json_object* login_response = execute_login_request();
+    if (!login_response) return nullptr;
+    
+    update_jwt_cache(cache, login_response);
     json_object_put(login_response);
+    
     return cache->token;
 }
 

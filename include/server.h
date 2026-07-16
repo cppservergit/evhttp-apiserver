@@ -60,3 +60,9 @@ void* worker_thread_logic(void* arg);
 
 /** \brief Retrieves the ISO-8601 startup timestamp of the server. */
 const char* server_get_start_time(void);
+
+/** \brief Retrieves the server hostname. */
+const char* server_get_hostname(void);
+
+/** \brief Retrieves the OS and Kernel version. */
+const char* server_get_os_version(void);
