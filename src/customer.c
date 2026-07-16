@@ -63,10 +63,7 @@ static struct json_object* execute_login_request(void) {
     const char* headers[] = {"Content-Type: application/json"};
     long http_code = 0;
     
-    char url[MAX_CONFIG_STR + 64];
-    snprintf(url, sizeof(url), "%s/api/login", api_url);
-    
-    struct json_object* login_response = http_client_post_json(url, body, headers, 1, &http_code);
+    struct json_object* login_response = http_client_post_json(api_url, "/api/login", body, headers, 1, &http_code);
     json_object_put(login_payload);
     
     if (http_code != 200 || !login_response) {
@@ -139,10 +136,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
     char api_url[MAX_CONFIG_STR];
     config_get_api_url(api_url, sizeof(api_url));
     
-    char url[MAX_CONFIG_STR + 64];
-    snprintf(url, sizeof(url), "%s/api/customer", api_url);
-    
-    struct json_object* remote_response = http_client_post_json(url, body, headers, 2, out_http_code);
+    struct json_object* remote_response = http_client_post_json(api_url, "/api/customer", body, headers, 2, out_http_code);
     json_object_put(req_payload);
     
     // Invalidate token cache on auth failure

@@ -8,6 +8,7 @@
 #include "shippers.h"
 #include "products.h"
 #include "validation.h"
+#include "config.h"
 #include <unistd.h>
 #include <time.h>
 #include <stdio.h>
@@ -142,8 +143,11 @@ struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_obj
         "Authorization: Bearer 6976f434-d9c1-11f0-93b8-5254000f64af"
     };
 
+    char api_url[256];
+    config_get_api_url(api_url, sizeof(api_url));
+
     long http_code = 0;
-    struct json_object* remote_json = http_client_get_json("https://cppserver.com/api/metrics", headers, 1, &http_code);
+    struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
 
     struct json_object* root = json_object_new_object();
     json_object_object_add(root, "remote_status", json_object_new_int((int32_t)http_code));

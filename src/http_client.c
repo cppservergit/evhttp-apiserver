@@ -111,7 +111,18 @@ static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const c
     return json_response;
 }
 
-static struct json_object* do_http_request(const char* url, const char* body, const char** headers, int num_headers, long* out_http_code) {
+static struct json_object* do_http_request(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
+    char url[1024];
+    if (base_url && uri) {
+        snprintf(url, sizeof(url), "%s%s", base_url, uri);
+    } else if (base_url) {
+        snprintf(url, sizeof(url), "%s", base_url);
+    } else if (uri) {
+        snprintf(url, sizeof(url), "%s", uri);
+    } else {
+        return nullptr;
+    }
+
     struct memory_struct chunk;
     struct curl_slist* chunk_headers = nullptr;
     CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
@@ -129,12 +140,12 @@ static struct json_object* do_http_request(const char* url, const char* body, co
     return json_response;
 }
 
-struct json_object* http_client_get_json(const char* url, const char** headers, int num_headers, long* out_http_code) {
-    return do_http_request(url, nullptr, headers, num_headers, out_http_code);
+struct json_object* http_client_get_json(const char* base_url, const char* uri, const char** headers, int num_headers, long* out_http_code) {
+    return do_http_request(base_url, uri, nullptr, headers, num_headers, out_http_code);
 }
 
-struct json_object* http_client_post_json(const char* url, const char* body, const char** headers, int num_headers, long* out_http_code) {
-    return do_http_request(url, body, headers, num_headers, out_http_code);
+struct json_object* http_client_post_json(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
+    return do_http_request(base_url, uri, body, headers, num_headers, out_http_code);
 }
 
 void http_client_init_thread(void) {
