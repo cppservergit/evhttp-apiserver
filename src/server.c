@@ -26,6 +26,7 @@
 #include <stdatomic.h>
 #include <event2/thread.h>
 #include "worker_pool.h"
+#include "task_pool.h"
 #include <sys/eventfd.h>
 
 constexpr size_t MAX_PAYLOAD_SIZE = 5 * 1024 * 1024;
@@ -113,6 +114,8 @@ int server_init_globals(size_t total_workers) {
     
     size_t configured_threads = config_get_num_threads();
     size_t num_workers = (configured_threads > 0) ? configured_threads : (total_workers * 2);
+    size_t q_size = config_get_max_queue_size();
+    task_pool_init(q_size == 0 ? 100000 : q_size);
     worker_pool_init(num_workers);
 
     g_worker_stats = calloc(g_total_workers, sizeof(struct worker_stats));
@@ -134,6 +137,7 @@ int server_init_globals(size_t total_workers) {
 
 static void server_free_globals(void) {
     worker_pool_shutdown();
+    task_pool_shutdown();
     if (g_worker_stats) {
         free(g_worker_stats);
         g_worker_stats = nullptr;
@@ -385,7 +389,7 @@ static void cleanup_cancelled_task(http_task_t* task) {
     if (task->response_json) json_object_put(task->response_json);
     if (task->response_text) evbuffer_free(task->response_text);
     if (task->parsed_body) json_object_put(task->parsed_body);
-    free(task);
+    task_pool_free(task);
 }
 
 static void process_completed_task(http_task_t* task) {
@@ -422,7 +426,7 @@ static void process_completed_task(http_task_t* task) {
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
-    free(task);
+    task_pool_free(task);
 }
 
 static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
@@ -479,7 +483,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         }
     }
     
-    http_task_t* task = calloc(1, sizeof(http_task_t));
+    http_task_t* task = task_pool_alloc();
     task->req = req;
     task->parsed_body = parsed_body;
     task->middleware_ctx = ctx;
@@ -494,7 +498,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         evhttp_request_set_on_complete_cb(req, nullptr, nullptr);
         send_json_response(req, HTTP_SERVUNAVAIL, "Service Unavailable", create_error_json("Server Too Busy"));
         if (parsed_body) json_object_put(parsed_body);
-        free(task);
+        task_pool_free(task);
         return;
     }
 }
