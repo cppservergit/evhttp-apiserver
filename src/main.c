@@ -84,7 +84,7 @@ static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_co
     }
 
     free(threads);
-    LOG_INFO("Microservice system halted safely. Network loops unlinked cleanly.");
+    LOG_INFO("APIServer system halted safely. Network loops unlinked cleanly.");
 }
 
 int main(void) {
