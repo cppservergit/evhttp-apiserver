@@ -60,8 +60,10 @@ const char* server_get_hostname(void) { return g_hostname; }
 const char* server_get_os_version(void) { return g_os_version; }
 
 struct worker_stats {
-    _Atomic uint64_t total_requests;
-    _Atomic uint64_t total_processing_time_ms;
+    _Atomic uint64_t total_requests_fast;
+    _Atomic uint64_t total_time_fast_ms;
+    _Atomic uint64_t total_requests_slow;
+    _Atomic uint64_t total_time_slow_ms;
 } __attribute__((aligned(64)));
 
 static struct worker_stats* g_worker_stats = nullptr;
@@ -160,25 +162,44 @@ void server_shutdown_workers(void) {
     }
 }
 
-void server_record_request_stats(long long elapsed_ms) {
+void server_record_request_stats(long long elapsed_ms, bool is_fast) {
     if (g_worker_stats) {
-        atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_processing_time_ms, elapsed_ms, memory_order_relaxed);
+        if (is_fast) {
+            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests_fast, 1, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_time_fast_ms, elapsed_ms, memory_order_relaxed);
+        } else {
+            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests_slow, 1, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_time_slow_ms, elapsed_ms, memory_order_relaxed);
+        }
     }
 }
 
-void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ms, uint64_t* avg_time_ms) {
-    uint64_t reqs = 0;
-    uint64_t time_ms = 0;
+void server_get_request_stats(server_request_stats_t* out_stats) {
+    if (!out_stats) return;
+    
+    uint64_t reqs_fast = 0;
+    uint64_t time_fast = 0;
+    uint64_t reqs_slow = 0;
+    uint64_t time_slow = 0;
     if (g_worker_stats) {
         for (size_t i = 0; i < g_total_workers; ++i) {
-            reqs += atomic_load_explicit(&g_worker_stats[i].total_requests, memory_order_relaxed);
-            time_ms += atomic_load_explicit(&g_worker_stats[i].total_processing_time_ms, memory_order_relaxed);
+            reqs_fast += atomic_load_explicit(&g_worker_stats[i].total_requests_fast, memory_order_relaxed);
+            time_fast += atomic_load_explicit(&g_worker_stats[i].total_time_fast_ms, memory_order_relaxed);
+            reqs_slow += atomic_load_explicit(&g_worker_stats[i].total_requests_slow, memory_order_relaxed);
+            time_slow += atomic_load_explicit(&g_worker_stats[i].total_time_slow_ms, memory_order_relaxed);
         }
     }
-    if (total_requests) *total_requests = reqs;
-    if (total_time_ms) *total_time_ms = time_ms;
-    if (avg_time_ms) *avg_time_ms = reqs > 0 ? time_ms / reqs : 0;
+    
+    out_stats->total_requests_fast = reqs_fast;
+    out_stats->total_requests_slow = reqs_slow;
+    out_stats->total_requests = reqs_fast + reqs_slow;
+    
+    out_stats->total_time_fast_ms = time_fast;
+    out_stats->total_time_slow_ms = time_slow;
+    out_stats->total_time_ms = time_fast + time_slow;
+    
+    out_stats->avg_time_fast_ms = reqs_fast ? time_fast / reqs_fast : 0;
+    out_stats->avg_time_slow_ms = reqs_slow ? time_slow / reqs_slow : 0;
 }
 
 void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
@@ -373,7 +394,9 @@ static void process_completed_task(http_task_t* task) {
     struct timespec end_time;
     clock_gettime(CLOCK_MONOTONIC, &end_time);
     long long elapsed_ms = measure_elapsed_ms(&task->start_time, &end_time);
-    server_record_request_stats(elapsed_ms);
+    const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
+    bool is_fast = ctx ? ctx->is_fast : false;
+    server_record_request_stats(elapsed_ms, is_fast);
     
     const char* client_ip = extract_client_ip(task->req);
     

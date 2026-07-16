@@ -46,11 +46,22 @@ const char* get_server_version(void);
 /** \brief Notifies the originating reactor that a task is complete. */
 void server_notify_task_done(void* task);
 
-/** \brief Records telemetry for a processed HTTP request. \param elapsed_ms Processing time in milliseconds. */
-void server_record_request_stats(long long elapsed_ms);
+/** \brief Records telemetry for a processed HTTP request. \param elapsed_ms Processing time in milliseconds. \param is_fast True if processed in fast pool. */
+void server_record_request_stats(long long elapsed_ms, bool is_fast);
+
+typedef struct {
+    uint64_t total_requests;
+    uint64_t total_requests_fast;
+    uint64_t total_requests_slow;
+    uint64_t total_time_ms;
+    uint64_t total_time_fast_ms;
+    uint64_t total_time_slow_ms;
+    uint64_t avg_time_fast_ms;
+    uint64_t avg_time_slow_ms;
+} server_request_stats_t;
 
 /** \brief Retrieves aggregated HTTP request performance metrics. */
-void server_get_request_stats(uint64_t* total_requests, uint64_t* total_time_ms, uint64_t* avg_time_ms);
+void server_get_request_stats(server_request_stats_t* out_stats);
 
 /** \brief Retrieves memory utilization metrics for the current process. */
 void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb);

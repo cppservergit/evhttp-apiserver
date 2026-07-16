@@ -52,9 +52,8 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    uint64_t total_requests = 0;
-    uint64_t avg_time_ms = 0;
-    server_get_request_stats(&total_requests, nullptr, &avg_time_ms);
+    server_request_stats_t stats = {0};
+    server_get_request_stats(&stats);
     
     uint64_t total_ram_kb = 0;
     uint64_t mem_usage_kb = 0;
@@ -64,8 +63,9 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     struct json_object* root = json_object_new_object();
     if (root != nullptr) {
         json_object_object_add(root, "start_time", json_object_new_string(server_get_start_time()));
-        json_object_object_add(root, "total_requests", json_object_new_int64((int64_t)total_requests));
-        json_object_object_add(root, "average_processing_time_ms", json_object_new_int64((int64_t)avg_time_ms));
+        json_object_object_add(root, "total_requests", json_object_new_int64((int64_t)stats.total_requests));
+        json_object_object_add(root, "average_processing_time_fast_ms", json_object_new_int64((int64_t)stats.avg_time_fast_ms));
+        json_object_object_add(root, "average_processing_time_slow_ms", json_object_new_int64((int64_t)stats.avg_time_slow_ms));
         json_object_object_add(root, "total_ram_kb", json_object_new_int64((int64_t)total_ram_kb));
         json_object_object_add(root, "memory_usage_kb", json_object_new_int64((int64_t)mem_usage_kb));
         
@@ -84,9 +84,8 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    uint64_t total_requests = 0;
-    uint64_t total_time_ms = 0;
-    server_get_request_stats(&total_requests, &total_time_ms, nullptr);
+    server_request_stats_t stats = {0};
+    server_get_request_stats(&stats);
     
     uint64_t total_ram_kb = 0;
     uint64_t mem_usage_kb = 0;
@@ -99,17 +98,33 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
         "# HELP microservice_requests_total Total number of processed requests\n"
         "# TYPE microservice_requests_total counter\n"
         "microservice_requests_total %lu\n\n"
+        "# HELP microservice_requests_fast_total Total number of processed requests in fast pool\n"
+        "# TYPE microservice_requests_fast_total counter\n"
+        "microservice_requests_fast_total %lu\n\n"
+        "# HELP microservice_requests_slow_total Total number of processed requests in slow pool\n"
+        "# TYPE microservice_requests_slow_total counter\n"
+        "microservice_requests_slow_total %lu\n\n"
         "# HELP microservice_processing_time_milliseconds_total Total processing time across all requests\n"
         "# TYPE microservice_processing_time_milliseconds_total counter\n"
         "microservice_processing_time_milliseconds_total %lu\n\n"
+        "# HELP microservice_processing_time_fast_milliseconds_total Total processing time for fast pool\n"
+        "# TYPE microservice_processing_time_fast_milliseconds_total counter\n"
+        "microservice_processing_time_fast_milliseconds_total %lu\n\n"
+        "# HELP microservice_processing_time_slow_milliseconds_total Total processing time for slow pool\n"
+        "# TYPE microservice_processing_time_slow_milliseconds_total counter\n"
+        "microservice_processing_time_slow_milliseconds_total %lu\n\n"
         "# HELP microservice_memory_usage_bytes Current resident memory size in bytes\n"
         "# TYPE microservice_memory_usage_bytes gauge\n"
         "microservice_memory_usage_bytes %lu\n\n"
         "# HELP microservice_memory_total_bytes Total physical memory in bytes\n"
         "# TYPE microservice_memory_total_bytes gauge\n"
         "microservice_memory_total_bytes %lu\n",
-        total_requests,
-        total_time_ms,
+        stats.total_requests,
+        stats.total_requests_fast,
+        stats.total_requests_slow,
+        stats.total_time_ms,
+        stats.total_time_fast_ms,
+        stats.total_time_slow_ms,
         mem_usage_kb * 1024,
         total_ram_kb * 1024
     );
