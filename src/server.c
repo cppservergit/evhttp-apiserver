@@ -17,12 +17,12 @@
 #include "shippers.h"
 #include "products.h"
 #include "config.h"
+#include "login.h"
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sodium.h>
 #include <sql.h>
 #include <sqlext.h>
-#include "login.h"
 #include "logger.h"
 #include <time.h>
 #include <string.h>
@@ -247,6 +247,7 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = uuid_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .json_handler = login_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = getqr_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
@@ -410,7 +411,9 @@ static void process_completed_task(http_task_t* task) {
         send_json_response(task->req, task->status_code, task->status_txt, task->response_json);
     } else if (task->response_text) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-        evhttp_add_header(headers, "Content-Type", "text/plain");
+        if (!evhttp_find_header(headers, "Content-Type")) {
+            evhttp_add_header(headers, "Content-Type", "text/plain");
+        }
         evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
         evbuffer_free(task->response_text);
     } else {

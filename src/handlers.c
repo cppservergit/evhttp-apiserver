@@ -10,6 +10,7 @@
 #include "validation.h"
 #include "config.h"
 #include "login.h"
+#include "totp.h"
 #include "logger.h"
 #include "jwt.h"
 #include <unistd.h>
@@ -282,6 +283,26 @@ struct json_object* sales_handler(
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     return sales_service_get_data(start_date, end_date);
+}
+
+// --- TOTP QR Handler ---
+
+struct evbuffer* getqr_handler(
+    struct evhttp_request* req, 
+    [[maybe_unused]] struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt
+) {
+    const char* user = get_user(req);
+    
+    struct evbuffer* buf = totp_generate_svg(user, out_status, out_status_txt);
+    if (buf) {
+        struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
+        evhttp_add_header(headers, "Content-Type", "image/svg+xml");
+    }
+    
+    return buf;
 }
 
 struct json_object* shippers_handler(

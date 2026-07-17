@@ -56,3 +56,6 @@ struct json_object* products_handler(struct evhttp_request* req, struct json_obj
 
 /** \brief Handles /metrics requests. Returns plain text Prometheus format instead of JSON. */
 struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+
+/** \brief Handles /getqr requests for TOTP registration. */
+struct evbuffer* getqr_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
