@@ -51,9 +51,9 @@ static void* worker_thread_main(void* arg) {
             logger_set_request_id(req_id);
             
             if (ctx && ctx->json_handler) {
-                task->response_json = ctx->json_handler(nullptr, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+                task->response_json = ctx->json_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
             } else if (ctx && ctx->text_handler) {
-                task->response_text = ctx->text_handler(nullptr, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+                task->response_text = ctx->text_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
             }
             
             logger_clear_request_id();

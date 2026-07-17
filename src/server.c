@@ -18,8 +18,11 @@
 #include "products.h"
 #include "config.h"
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <sodium.h>
 #include <sql.h>
 #include <sqlext.h>
+#include "login.h"
 #include "logger.h"
 #include <time.h>
 #include <string.h>
@@ -102,6 +105,11 @@ int server_init_globals(size_t total_workers) {
     time_t now = time(nullptr);
     struct tm* tm_info = localtime(&now);
     strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", tm_info);
+    
+    if (sodium_init() < 0) {
+        LOG_FATAL("Failed to initialize libsodium");
+        return -1;
+    }
     
     curl_global_init(CURL_GLOBAL_ALL);
     SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &g_odbc_env);
@@ -237,6 +245,8 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = uuid_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .json_handler = login_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
@@ -369,22 +379,6 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
     atomic_store(&task->cancelled, true);
 }
 
-static const char* extract_client_ip(struct evhttp_request* req) {
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
-    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-    if (x_forwarded_for) {
-        return x_forwarded_for;
-    }
-    
-    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
-    char* peer_ip = nullptr;
-    uint16_t port = 0;
-    if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
-    if (peer_ip) return peer_ip;
-    
-    return "unknown";
-}
-
 static void cleanup_cancelled_task(http_task_t* task) {
     if (task->response_json) json_object_put(task->response_json);
     if (task->response_text) evbuffer_free(task->response_text);
@@ -404,14 +398,12 @@ static void process_completed_task(http_task_t* task) {
     
     const char* client_ip = extract_client_ip(task->req);
     
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+    const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+    logger_set_request_id(req_id);
+    
     if (config_get_access_log()) {
-        struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
-        const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
-        if (req_id) {
-            LOG_INFO("clientIP=%s reqID=%s uri=%s elapsed_ms=%lld", client_ip, req_id, evhttp_request_get_uri(task->req), elapsed_ms);
-        } else {
-            LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
-        }
+        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
     }
     
     if (task->response_json) {
@@ -426,6 +418,7 @@ static void process_completed_task(http_task_t* task) {
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
+    logger_clear_request_id();
     task_pool_free(task);
 }
 

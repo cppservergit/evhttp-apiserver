@@ -15,6 +15,11 @@ static char g_odbc_conn_str[MAX_CONFIG_STR] = {0};
 static char g_api_url[MAX_CONFIG_STR] = {0};
 static char g_api_user[MAX_CONFIG_STR] = {0};
 static char g_api_pass[MAX_CONFIG_STR] = {0};
+static char g_login_provider[MAX_CONFIG_STR] = {0};
+static char g_login_uri[MAX_CONFIG_STR] = {0};
+static char g_login_payload[MAX_CONFIG_STR] = {0};
+static char g_jwt_secret[MAX_CONFIG_STR] = {0};
+static long g_jwt_timeout_seconds = 3600;
 static bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
@@ -76,6 +81,16 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
     snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
     snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
+    
+    if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
+    if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
+    if (getenv("LOGIN_PAYLOAD")) snprintf(g_login_payload, sizeof(g_login_payload), "%s", getenv("LOGIN_PAYLOAD"));
+    if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+    
+    if (getenv("JWT_TIMEOUT_SECONDS")) {
+        g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), NULL, 10);
+    }
+
     
     static bool is_first_load = true;
     if (!is_first_load && g_num_threads != num_threads && (g_num_threads != 0 || num_threads != 0)) {
@@ -147,6 +162,37 @@ void config_get_api_pass(char* out, size_t max_len) {
     pthread_rwlock_rdlock(&g_config_lock);
     snprintf(out, max_len, "%s", g_api_pass);
     pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_login_provider(char* out, size_t max_len) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    snprintf(out, max_len, "%s", g_login_provider);
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_login_uri(char* out, size_t max_len) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    snprintf(out, max_len, "%s", g_login_uri);
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_login_payload(char* out, size_t max_len) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    snprintf(out, max_len, "%s", g_login_payload);
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_jwt_secret(char* out, size_t max_len) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    snprintf(out, max_len, "%s", g_jwt_secret);
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+long config_get_jwt_timeout_seconds(void) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    long val = g_jwt_timeout_seconds;
+    pthread_rwlock_unlock(&g_config_lock);
+    return val;
 }
 
 bool config_get_access_log(void) {

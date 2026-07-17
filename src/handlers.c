@@ -9,6 +9,9 @@
 #include "products.h"
 #include "validation.h"
 #include "config.h"
+#include "login.h"
+#include "logger.h"
+#include "jwt.h"
 #include <unistd.h>
 #include <time.h>
 #include <stdio.h>
@@ -304,3 +307,137 @@ struct json_object* products_handler(
     *out_status_txt = "OK";
     return products_get_data();
 }
+
+struct json_object* uuid_handler(
+    [[maybe_unused]] struct evhttp_request* req, 
+    [[maybe_unused]] struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt
+) {
+    *out_status = HTTP_OK;
+    *out_status_txt = "OK";
+    
+    char uuid_str[37];
+    generate_uuidv4(uuid_str);
+    
+    struct json_object* root = json_object_new_object();
+    json_object_object_add(root, "uuid", json_object_new_string(uuid_str));
+    return root;
+}
+
+// --- Shared Utilities ---
+
+const char* extract_client_ip(struct evhttp_request* req) {
+    if (!req) return "unknown";
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+    if (x_forwarded_for) {
+        return x_forwarded_for;
+    }
+    
+    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
+    char* peer_ip = nullptr;
+    uint16_t port = 0;
+    if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
+    if (peer_ip) return peer_ip;
+    
+    return "unknown";
+}
+
+// --- Login Handler & Schema ---
+
+static const FieldValidator LoginSchema[] = {
+    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .custom_validator = NULL},
+    {.field_name = "password", .type = TYPE_STRING, .is_required = true, .custom_validator = NULL}
+};
+
+static bool login_global_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *root, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char* username = json_get_string(root, "username");
+    const char* password = json_get_string(root, "password");
+    
+    if (username && strlen(username) > 32) {
+        snprintf(err_buf, err_len, "username exceeds 32 characters");
+        return false;
+    }
+
+    if (password && strlen(password) > 32) {
+        snprintf(err_buf, err_len, "password exceeds 32 characters");
+        return false;
+    }
+    return true;
+}
+
+const ValidationContext LoginContext = {
+    .schema = LoginSchema,
+    .schema_count = sizeof(LoginSchema) / sizeof(LoginSchema[0]),
+    .global_validator = login_global_validator
+};
+
+struct json_object* login_handler(
+    struct evhttp_request* req, 
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt
+) {
+    const char* username = json_get_string(body, "username");
+    const char* password = json_get_string(body, "password");
+
+    const char* remote_ip = extract_client_ip(req);
+
+    long http_code = 0;
+    struct json_object* remote_response = login_service_authenticate(username, password, &http_code);
+
+    if (http_code == 200) {
+        *out_status = HTTP_OK;
+        *out_status_txt = "OK";
+        
+        char session_id[37];
+        generate_uuidv4(session_id);
+
+        char jwt_secret[MAX_CONFIG_STR];
+        config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+        long jwt_timeout = config_get_jwt_timeout_seconds();
+
+        char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
+
+        struct json_object* root = json_object_new_object();
+        if (ticket) {
+            json_object_object_add(root, "token", json_object_new_string(ticket));
+            LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
+            free(ticket);
+        } else {
+            json_object_object_add(root, "error", json_object_new_string("Failed to generate ticket"));
+            *out_status = HTTP_INTERNAL;
+            *out_status_txt = "Internal Server Error";
+            LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
+        }
+
+        if (remote_response) json_object_put(remote_response);
+        return root;
+    } else {
+        *out_status = (int)http_code;
+        *out_status_txt = "Unauthorized";
+        if (http_code == 0) {
+            *out_status = HTTP_INTERNAL;
+            *out_status_txt = "Internal Server Error";
+        }
+
+        LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
+
+        if (!remote_response) {
+            remote_response = json_object_new_object();
+            json_object_object_add(remote_response, "error", json_object_new_string("Provider unreachable"));
+        }
+        return remote_response;
+    }
+}
+
+

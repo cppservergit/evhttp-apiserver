@@ -23,6 +23,16 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
 /** \brief Handles /rsysinfo requests. */
 struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
 
+/** \brief Handler to test UUIDv4 generation */
+struct json_object* uuid_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+
+/** \brief Handles /login requests. */
+struct json_object* login_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+extern const ValidationContext LoginContext;
+
+/** \brief Extracts the client IP from the request, favoring X-Forwarded-For if present. */
+const char* extract_client_ip(struct evhttp_request* req);
+
 /** \brief Handles /customer requests (external REST integration). */
 struct json_object* customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
 

@@ -55,3 +55,10 @@ void config_get_api_user(char* out, size_t max_len);
  * \param max_len Size of the buffer.
  */
 void config_get_api_pass(char* out, size_t max_len);
+
+void config_get_login_provider(char* out, size_t max_len);
+void config_get_login_uri(char* out, size_t max_len);
+void config_get_login_payload(char* out, size_t max_len);
+void config_get_jwt_secret(char* out, size_t max_len);
+long config_get_jwt_timeout_seconds(void);
+

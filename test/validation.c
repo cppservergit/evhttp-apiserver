@@ -335,6 +335,8 @@ int main(void) {
     // Tests if a massive payload with hundreds of unused keys stresses the linear validation loop.
     process_json_input("{\"start_date\":\"1994-01-01\",\"end_date\":\"1996-12-31\",\"amount\":10.0,\"extra1\":1,\"extra2\":2,\"junk\":\"data\"}");
 
+    process_json_input("{\"start_date\":\"1994-01-01\",\"end_date\":\"\",\"amount\":18446744073709551615}");
+
     process_json_input("");
     process_json_input("42");
     process_json_input(nullptr);

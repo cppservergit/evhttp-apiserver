@@ -11,6 +11,7 @@ URL_CUSTOMER="http://localhost:8080/customer"
 URL_CUSTOMER_GET="http://localhost:8080/customer/get"
 URL_SHIPPERS="http://localhost:8080/shippers"
 URL_PRODUCTS="http://localhost:8080/products"
+URL_UUID="http://localhost:8080/uuid"
 
 # Number of concurrent requests to fire
 NUM_THREADS=80
@@ -29,6 +30,7 @@ for i in $(seq 1 $NUM_THREADS); do
     curl -s -w "Thread $i - customer_get: %{http_code}\n" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"id":"ALFKI"}' "$URL_CUSTOMER_GET" &
     curl -s -w "Thread $i - shippers: %{http_code}\n" -o /dev/null "$URL_SHIPPERS" &
     curl -s -w "Thread $i - products: %{http_code}\n" -o /dev/null "$URL_PRODUCTS" &
+    curl -s -w "Thread $i - uuid: %{http_code}\n" -o /dev/null "$URL_UUID" &
 done
 
 # Wait for all background jobs to finish
