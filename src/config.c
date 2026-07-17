@@ -19,6 +19,7 @@ static char g_login_provider[MAX_CONFIG_STR] = {0};
 static char g_login_uri[MAX_CONFIG_STR] = {0};
 static char g_login_payload[MAX_CONFIG_STR] = {0};
 static char g_jwt_secret[MAX_CONFIG_STR] = {0};
+static char g_remote_api_key[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
 static char g_trust_proxy_ip[MAX_CONFIG_STR] = {0};
 static bool g_access_log = true;
@@ -87,6 +88,8 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
     if (getenv("LOGIN_PAYLOAD")) snprintf(g_login_payload, sizeof(g_login_payload), "%s", getenv("LOGIN_PAYLOAD"));
     if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+    if (getenv("REMOTE_API_KEY")) snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
+    else g_remote_api_key[0] = '\0';
     
     if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
     else g_trust_proxy_ip[0] = '\0';
@@ -186,10 +189,19 @@ void config_get_login_payload(char* out, size_t max_len) {
     pthread_rwlock_unlock(&g_config_lock);
 }
 
-void config_get_jwt_secret(char* buf, size_t max_len) {
+void config_get_jwt_secret(char* out, size_t max_len) {
+    if (!out || max_len == 0) return;
     pthread_rwlock_rdlock(&g_config_lock);
-    strncpy(buf, g_jwt_secret, max_len - 1);
-    buf[max_len - 1] = '\0';
+    strncpy(out, g_jwt_secret, max_len - 1);
+    out[max_len - 1] = '\0';
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_remote_api_key(char* out, size_t max_len) {
+    if (!out || max_len == 0) return;
+    pthread_rwlock_rdlock(&g_config_lock);
+    strncpy(out, g_remote_api_key, max_len - 1);
+    out[max_len - 1] = '\0';
     pthread_rwlock_unlock(&g_config_lock);
 }
 
@@ -202,9 +214,9 @@ void config_get_trust_proxy_ip(char* buf, size_t max_len) {
 
 long config_get_jwt_timeout_seconds(void) {
     pthread_rwlock_rdlock(&g_config_lock);
-    long val = g_jwt_timeout_seconds;
+    long res = g_jwt_timeout_seconds;
     pthread_rwlock_unlock(&g_config_lock);
-    return val;
+    return res;
 }
 
 bool config_get_access_log(void) {

@@ -143,8 +143,13 @@ struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_obj
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
 
+    char api_key[256] = {0};
+    config_get_remote_api_key(api_key, sizeof(api_key));
+    char auth_header[512];
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
+
     const char* headers[] = {
-        "Authorization: Bearer 6976f434-d9c1-11f0-93b8-5254000f64af"
+        auth_header
     };
 
     char api_url[256];
