@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "config.h"
 #include "jwt.h"
+#include "handlers.h"
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,8 +82,7 @@ static void* worker_thread_main(void* arg) {
                         task->response_json = create_error_json("Invalid token signature or format");
                         is_authorized = false;
                     } else {
-                        evhttp_add_header(in_headers, "X-Internal-Username", username);
-                        evhttp_add_header(in_headers, "X-Internal-SessionId", session_id);
+                        handlers_set_identity(username, session_id);
                     }
                 }
             }
@@ -95,7 +95,9 @@ static void* worker_thread_main(void* arg) {
                 }
             }
             
+            
             logger_clear_request_id();
+            handlers_clear_identity();
         }
         
         // Notify reactor

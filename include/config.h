@@ -62,3 +62,5 @@ void config_get_login_payload(char* out, size_t max_len);
 void config_get_jwt_secret(char* out, size_t max_len);
 long config_get_jwt_timeout_seconds(void);
 
+/** \brief Retrieves the trusted proxy IP for X-Forwarded-For processing. */
+void config_get_trust_proxy_ip(char* buf, size_t max_len);

@@ -39,6 +39,12 @@ const char* get_user(struct evhttp_request* req);
 /** \brief Retrieves the internal JWT-authenticated session ID, if present. */
 const char* get_session_id(struct evhttp_request* req);
 
+/** \brief Sets the authenticated identity for the current thread context. */
+void handlers_set_identity(const char* user, const char* session);
+
+/** \brief Clears the authenticated identity from the current thread context. */
+void handlers_clear_identity(void);
+
 /** \brief Handles /customer requests (external REST integration). */
 struct json_object* customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
 

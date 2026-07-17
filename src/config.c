@@ -20,6 +20,7 @@ static char g_login_uri[MAX_CONFIG_STR] = {0};
 static char g_login_payload[MAX_CONFIG_STR] = {0};
 static char g_jwt_secret[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
+static char g_trust_proxy_ip[MAX_CONFIG_STR] = {0};
 static bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
@@ -86,6 +87,9 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
     if (getenv("LOGIN_PAYLOAD")) snprintf(g_login_payload, sizeof(g_login_payload), "%s", getenv("LOGIN_PAYLOAD"));
     if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+    
+    if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
+    else g_trust_proxy_ip[0] = '\0';
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
         g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), NULL, 10);
@@ -182,9 +186,17 @@ void config_get_login_payload(char* out, size_t max_len) {
     pthread_rwlock_unlock(&g_config_lock);
 }
 
-void config_get_jwt_secret(char* out, size_t max_len) {
+void config_get_jwt_secret(char* buf, size_t max_len) {
     pthread_rwlock_rdlock(&g_config_lock);
-    snprintf(out, max_len, "%s", g_jwt_secret);
+    strncpy(buf, g_jwt_secret, max_len - 1);
+    buf[max_len - 1] = '\0';
+    pthread_rwlock_unlock(&g_config_lock);
+}
+
+void config_get_trust_proxy_ip(char* buf, size_t max_len) {
+    pthread_rwlock_rdlock(&g_config_lock);
+    strncpy(buf, g_trust_proxy_ip, max_len - 1);
+    buf[max_len - 1] = '\0';
     pthread_rwlock_unlock(&g_config_lock);
 }
 

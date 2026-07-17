@@ -314,13 +314,12 @@ struct json_object* shippers_handler(
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    
-    /*
+        
     const char* user = get_user(req);
     const char* session = get_session_id(req);
     LOG_AUDIT("shippers_handler accessed by User: %s, SessionID: %s", 
               user ? user : "unknown", 
-              session ? session : "unknown");*/
+              session ? session : "unknown");
               
     return shippers_get_data();
 }
@@ -359,31 +358,65 @@ struct json_object* uuid_handler(
 
 const char* extract_client_ip(struct evhttp_request* req) {
     if (!req) return "unknown";
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
-    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-    if (x_forwarded_for) {
-        return x_forwarded_for;
-    }
     
     struct evhttp_connection* evcon = evhttp_request_get_connection(req);
     char* peer_ip = nullptr;
     uint16_t port = 0;
     if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
+
+    char trust_proxy_ip[MAX_CONFIG_STR] = {0};
+    config_get_trust_proxy_ip(trust_proxy_ip, sizeof(trust_proxy_ip));
+
+    if (peer_ip && trust_proxy_ip[0] != '\0' && strcmp(peer_ip, trust_proxy_ip) == 0) {
+        struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+        const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+        if (x_forwarded_for) {
+            static _Thread_local char client_ip_buf[128];
+            strncpy(client_ip_buf, x_forwarded_for, sizeof(client_ip_buf) - 1);
+            client_ip_buf[sizeof(client_ip_buf) - 1] = '\0';
+            
+            // Take the first IP in the comma-separated list
+            char *comma = strchr(client_ip_buf, ',');
+            if (comma) *comma = '\0';
+            
+            // Trim right whitespace if any
+            int len = strlen(client_ip_buf);
+            while (len > 0 && isspace((unsigned char)client_ip_buf[len - 1])) {
+                client_ip_buf[--len] = '\0';
+            }
+            return client_ip_buf;
+        }
+    }
+    
     if (peer_ip) return peer_ip;
     
     return "unknown";
 }
 
+static _Thread_local char tl_username[33] = {0};
+static _Thread_local char tl_session_id[37] = {0};
+
+void handlers_set_identity(const char* user, const char* session) {
+    if (user) strncpy(tl_username, user, sizeof(tl_username) - 1);
+    else tl_username[0] = '\0';
+    
+    if (session) strncpy(tl_session_id, session, sizeof(tl_session_id) - 1);
+    else tl_session_id[0] = '\0';
+}
+
+void handlers_clear_identity(void) {
+    tl_username[0] = '\0';
+    tl_session_id[0] = '\0';
+}
+
 const char* get_user(struct evhttp_request* req) {
-    if (!req) return NULL;
-    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
-    return evhttp_find_header(headers, "X-Internal-Username");
+    (void)req;
+    return tl_username[0] != '\0' ? tl_username : NULL;
 }
 
 const char* get_session_id(struct evhttp_request* req) {
-    if (!req) return NULL;
-    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
-    return evhttp_find_header(headers, "X-Internal-SessionId");
+    (void)req;
+    return tl_session_id[0] != '\0' ? tl_session_id : NULL;
 }
 
 // --- Login Handler & Schema ---
