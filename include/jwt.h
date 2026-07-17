@@ -32,3 +32,13 @@ void generate_uuidv4(char out[37]);
  * \return A newly allocated string containing the JWT, or NULL on failure. Caller must free.
  */
 char* jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds);
+
+#define JWT_OK 0
+#define JWT_ERR_EXPIRED 1
+#define JWT_ERR_INVALID 2
+
+/**
+ * \brief Verifies a JWT token signature and expiration, and extracts claims.
+ * \return JWT_OK (0) if valid, JWT_ERR_EXPIRED if expired, JWT_ERR_INVALID if missing/bad signature.
+ */
+int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size);

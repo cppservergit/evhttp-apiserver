@@ -285,14 +285,21 @@ struct json_object* sales_handler(
 }
 
 struct json_object* shippers_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
+    struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt
+    int* out_status, 
+    const char** out_status_txt
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
+    
+    const char* user = get_user(req);
+    const char* session = get_session_id(req);
+    LOG_AUDIT("shippers_handler accessed by User: %s, SessionID: %s", 
+              user ? user : "unknown", 
+              session ? session : "unknown");
+              
     return shippers_get_data();
 }
 
@@ -343,6 +350,18 @@ const char* extract_client_ip(struct evhttp_request* req) {
     if (peer_ip) return peer_ip;
     
     return "unknown";
+}
+
+const char* get_user(struct evhttp_request* req) {
+    if (!req) return NULL;
+    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    return evhttp_find_header(headers, "X-Internal-Username");
+}
+
+const char* get_session_id(struct evhttp_request* req) {
+    if (!req) return NULL;
+    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    return evhttp_find_header(headers, "X-Internal-SessionId");
 }
 
 // --- Login Handler & Schema ---

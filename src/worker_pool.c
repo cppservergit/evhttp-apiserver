@@ -3,10 +3,13 @@
 #include "http_client.h"
 #include "logger.h"
 #include "config.h"
+#include "jwt.h"
 #include <pthread.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <sodium.h>
 
 typedef struct {
     http_task_t* head;
@@ -50,10 +53,46 @@ static void* worker_thread_main(void* arg) {
             const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
             logger_set_request_id(req_id);
             
-            if (ctx && ctx->json_handler) {
-                task->response_json = ctx->json_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
-            } else if (ctx && ctx->text_handler) {
-                task->response_text = ctx->text_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+            bool is_authorized = true;
+            if (ctx && ctx->is_secure) {
+                const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
+                if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
+                    task->status_code = 403;
+                    task->status_txt = "Forbidden";
+                    task->response_json = create_error_json("Missing or invalid Authorization header");
+                    is_authorized = false;
+                } else {
+                    char jwt_secret[128];
+                    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+                    char username[33] = {0};
+                    char session_id[37] = {0};
+                    
+                    int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, username, sizeof(username), session_id, sizeof(session_id));
+                    sodium_memzero(jwt_secret, sizeof(jwt_secret));
+                    
+                    if (jwt_res == JWT_ERR_EXPIRED) {
+                        task->status_code = 401;
+                        task->status_txt = "Unauthorized";
+                        task->response_json = create_error_json("Token has expired");
+                        is_authorized = false;
+                    } else if (jwt_res != JWT_OK) {
+                        task->status_code = 403;
+                        task->status_txt = "Forbidden";
+                        task->response_json = create_error_json("Invalid token signature or format");
+                        is_authorized = false;
+                    } else {
+                        evhttp_add_header(in_headers, "X-Internal-Username", username);
+                        evhttp_add_header(in_headers, "X-Internal-SessionId", session_id);
+                    }
+                }
+            }
+            
+            if (is_authorized) {
+                if (ctx && ctx->json_handler) {
+                    task->response_json = ctx->json_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+                } else if (ctx && ctx->text_handler) {
+                    task->response_text = ctx->text_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+                }
             }
             
             logger_clear_request_id();

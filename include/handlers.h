@@ -33,6 +33,12 @@ extern const ValidationContext LoginContext;
 /** \brief Extracts the client IP from the request, favoring X-Forwarded-For if present. */
 const char* extract_client_ip(struct evhttp_request* req);
 
+/** \brief Retrieves the internal JWT-authenticated username, if present. */
+const char* get_user(struct evhttp_request* req);
+
+/** \brief Retrieves the internal JWT-authenticated session ID, if present. */
+const char* get_session_id(struct evhttp_request* req);
+
 /** \brief Handles /customer requests (external REST integration). */
 struct json_object* customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
 

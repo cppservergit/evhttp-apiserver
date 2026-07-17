@@ -243,7 +243,7 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
     { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_get_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
     { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = uuid_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .json_handler = login_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
@@ -251,7 +251,7 @@ static const middleware_ctx_t g_routes[] = {
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
-static struct json_object* create_error_json(const char* error_msg) {
+struct json_object* create_error_json(const char* error_msg) {
     struct json_object* err_root = json_object_new_object();
     if (err_root != nullptr) {
         json_object_object_add(err_root, "error", json_object_new_string(error_msg));

@@ -155,3 +155,64 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     sodium_memzero(secret_bytes, sizeof(secret_bytes));
     return jwt;
 }
+
+int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
+    if (!token || !secret_hex) return JWT_ERR_INVALID;
+
+    const char* dot1 = strchr(token, '.');
+    if (!dot1) return JWT_ERR_INVALID;
+    const char* dot2 = strchr(dot1 + 1, '.');
+    if (!dot2) return JWT_ERR_INVALID;
+
+    size_t msg_len = (size_t)(dot2 - token);
+    
+    unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
+    size_t secret_bin_len = 0;
+    if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), NULL, &secret_bin_len, NULL) != 0) {
+        return JWT_ERR_INVALID; 
+    }
+
+    unsigned char mac[crypto_auth_hmacsha256_BYTES];
+    crypto_auth_hmacsha256(mac, (const unsigned char*)token, msg_len, secret_bytes);
+    sodium_memzero(secret_bytes, sizeof(secret_bytes));
+
+    size_t mac_b64_max = sodium_base64_ENCODED_LEN(sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    char mac_b64[128];
+    sodium_bin2base64(mac_b64, mac_b64_max, mac, sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+
+    const char* signature = dot2 + 1;
+    if (strlen(signature) != strlen(mac_b64) || sodium_memcmp(signature, mac_b64, strlen(mac_b64)) != 0) {
+        return JWT_ERR_INVALID;
+    }
+
+    char* payload_json = jwt_decode_payload(token);
+    if (!payload_json) return JWT_ERR_INVALID;
+
+    int ret = JWT_ERR_INVALID;
+    struct json_object* jwt_obj = json_tokener_parse(payload_json);
+    if (jwt_obj) {
+        struct json_object* exp_obj;
+        if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
+            time_t exp = (time_t)json_object_get_int64(exp_obj);
+            if (time(NULL) > exp) {
+                ret = JWT_ERR_EXPIRED;
+            } else {
+                ret = JWT_OK;
+            }
+        }
+        
+        if (ret == JWT_OK) {
+            struct json_object* sub_obj;
+            if (json_object_object_get_ex(jwt_obj, "username", &sub_obj) && out_username) {
+                snprintf(out_username, out_uname_size, "%s", json_object_get_string(sub_obj));
+            }
+            struct json_object* jti_obj;
+            if (json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj) && out_session_id) {
+                snprintf(out_session_id, out_sess_size, "%s", json_object_get_string(jti_obj));
+            }
+        }
+        json_object_put(jwt_obj);
+    }
+    free(payload_json);
+    return ret;
+}

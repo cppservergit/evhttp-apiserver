@@ -38,6 +38,7 @@ typedef struct {
     text_handler_fn text_handler;
     void* user_arg;
     bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
+    bool is_secure; /**< \brief If true, requires and validates a JWT token in the Authorization header. */
 } middleware_ctx_t;
 
 /** \brief Retrieves the hardcoded server version string. */
@@ -77,3 +78,6 @@ const char* server_get_hostname(void);
 
 /** \brief Retrieves the OS and Kernel version. */
 const char* server_get_os_version(void);
+
+/** \brief Helper to create standard JSON error payloads */
+struct json_object* create_error_json(const char* error_msg);
