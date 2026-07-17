@@ -55,8 +55,17 @@ void logger_log(LogLevel level, const char* format, ...) {
     char msg_buf[2048];
     va_list args;
     va_start(args, format);
-    vsnprintf(msg_buf, sizeof(msg_buf), format, args);
+    int written = vsnprintf(msg_buf, sizeof(msg_buf), format, args);
     va_end(args);
+    
+    if (written < 0 || written >= (int)sizeof(msg_buf)) {
+        // Handle truncation explicitly
+        const char trunc_msg[] = "... [TRUNCATED]";
+        size_t trunc_len = sizeof(trunc_msg) - 1;
+        if (sizeof(msg_buf) > trunc_len) {
+            memcpy(msg_buf + sizeof(msg_buf) - trunc_len - 1, trunc_msg, trunc_len + 1);
+        }
+    }
 
     char escaped_msg[3072];
     escape_json_string(msg_buf, escaped_msg, sizeof(escaped_msg));

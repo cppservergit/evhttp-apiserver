@@ -306,7 +306,7 @@ struct evbuffer* getqr_handler(
 }
 
 struct json_object* shippers_handler(
-    struct evhttp_request* req, 
+    [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
@@ -315,11 +315,12 @@ struct json_object* shippers_handler(
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
+    /*
     const char* user = get_user(req);
     const char* session = get_session_id(req);
     LOG_AUDIT("shippers_handler accessed by User: %s, SessionID: %s", 
               user ? user : "unknown", 
-              session ? session : "unknown");
+              session ? session : "unknown");*/
               
     return shippers_get_data();
 }

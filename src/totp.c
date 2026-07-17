@@ -8,12 +8,12 @@
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLHDBC hdbc = odbcutil_connect();
-    if (hdbc == SQL_NULL_HDBC) return 500;
+    if (hdbc == SQL_NULL_HDBC) return HTTP_INTERNAL;
     
     SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
     if (!hstmt) {
         odbcutil_disconnect(hdbc, NULL);
-        return 500;
+        return HTTP_INTERNAL;
     }
     
     SQLLEN cbUser = SQL_NTS;
@@ -21,19 +21,19 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL cpp_get_secret(?)}", SQL_NTS);
     
-    int status = 404;
+    int status = HTTP_NOTFOUND;
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         if (SQLFetch(hstmt) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
             SQLLEN len = 0;
             SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, max_len, &len);
             if (len != SQL_NULL_DATA && len > 0) {
-                status = 200;
+                status = HTTP_OK;
             }
         }
     } else {
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
-        status = 500;
+        status = HTTP_INTERNAL;
     }
     
     odbcutil_disconnect(hdbc, hstmt);
@@ -42,7 +42,7 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
 
 struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char** out_status_txt) {
     if (!user) {
-        *out_status = 400;
+        *out_status = HTTP_BADREQUEST;
         *out_status_txt = "Bad Request";
         return NULL;
     }
@@ -50,18 +50,23 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
     char secret[128] = {0};
     int db_status = get_secret(user, secret, sizeof(secret));
     
-    if (db_status != 200) {
+    if (db_status != HTTP_OK) {
         *out_status = db_status;
-        *out_status_txt = (db_status == 404) ? "Not Found" : "Internal Server Error";
+        *out_status_txt = (db_status == HTTP_NOTFOUND) ? "Not Found" : "Internal Server Error";
         return NULL;
     }
 
     char uri[1024];
-    snprintf(uri, sizeof(uri), "otpauth://totp/APIServer2:%s?secret=%s&issuer=APIServer2", user, secret);
+    int written = snprintf(uri, sizeof(uri), "otpauth://totp/APIServer2:%s?secret=%s&issuer=APIServer2", user, secret);
+    if (written < 0 || written >= (int)sizeof(uri)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+        return NULL;
+    }
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     if (!qrcode) {
-        *out_status = 500;
+        *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
         return NULL;
     }
@@ -86,7 +91,7 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
 
     QRcode_free(qrcode);
 
-    *out_status = 200;
+    *out_status = HTTP_OK;
     *out_status_txt = "OK";
     return buf;
 }

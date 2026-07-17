@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <event2/http.h>
 #include "logger.h"
 
 static pthread_key_t g_curl_tls_key;
@@ -18,7 +19,11 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
     struct memory_struct* mem = (struct memory_struct*)userp;
 
     char* ptr = realloc(mem->memory, mem->size + realsize + 1);
-    if (!ptr) return 0; // Out of memory
+    if (!ptr) {
+        free(mem->memory);
+        mem->memory = NULL;
+        return 0; // Out of memory
+    }
 
     mem->memory = ptr;
     memcpy(&(mem->memory[mem->size]), contents, realsize);
@@ -106,20 +111,27 @@ static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const c
         }
     } else {
         LOG_ERROR("libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
-        if (out_http_code) *out_http_code = 500;
+        if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
     }
     return json_response;
 }
 
 static struct json_object* do_http_request(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
     char url[1024];
+    int written = 0;
     if (base_url && uri) {
-        snprintf(url, sizeof(url), "%s%s", base_url, uri);
+        written = snprintf(url, sizeof(url), "%s%s", base_url, uri);
     } else if (base_url) {
-        snprintf(url, sizeof(url), "%s", base_url);
+        written = snprintf(url, sizeof(url), "%s", base_url);
     } else if (uri) {
-        snprintf(url, sizeof(url), "%s", uri);
+        written = snprintf(url, sizeof(url), "%s", uri);
     } else {
+        return nullptr;
+    }
+    
+    if (written < 0 || written >= (int)sizeof(url)) {
+        LOG_ERROR("URL truncation error");
+        if (out_http_code) *out_http_code = HTTP_INTERNAL;
         return nullptr;
     }
 

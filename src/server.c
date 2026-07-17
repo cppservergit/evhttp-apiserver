@@ -23,6 +23,7 @@
 #include <sodium.h>
 #include <sql.h>
 #include <sqlext.h>
+#include <errno.h>
 #include "logger.h"
 #include <time.h>
 #include <string.h>
@@ -243,11 +244,11 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
     { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_get_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = false },
     { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = uuid_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
     { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .json_handler = login_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
-    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = getqr_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
@@ -365,11 +366,12 @@ void server_notify_task_done(void* arg) {
     }
     pthread_mutex_unlock(&g_reactor_queues[rid].lock);
     
-    // Event Coalescing pattern: only signal the reactor if it was asleep/empty
     if (was_empty) {
         uint64_t one = 1;
-        if (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
-            LOG_ERROR("Failed to write to reactor eventfd");
+        while (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
+            if (errno == EINTR) continue;
+            LOG_ERROR("Failed to write to reactor eventfd: %s", strerror(errno));
+            break;
         }
     }
 }
