@@ -45,13 +45,13 @@ for i in $(seq 1 $NUM_REQUESTS); do
         curl -s -o /dev/null -X POST "$API_URL/customer" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
-            -d '{"customer_id": "ALFKI", "company_name": "Alfreds", "contact_name": "Maria", "contact_title": "Sales", "address": "Obere Str. 57", "city": "Berlin", "country": "Germany"}'
+            -d '{"id": "ALFKI", "company_name": "Alfreds", "contact_name": "Maria", "contact_title": "Sales", "address": "Obere Str. 57", "city": "Berlin", "country": "Germany"}'
             
         # Request to /customer/get
         curl -s -o /dev/null -X POST "$API_URL/customer/get" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
-            -d '{"customer_id": "ALFKI"}'
+            -d '{"id": "ALFKI"}'
 
         # Request to /sales
         curl -s -o /dev/null -X POST "$API_URL/sales" \
