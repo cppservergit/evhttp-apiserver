@@ -45,6 +45,9 @@ void handlers_set_identity(const char* user, const char* session);
 /** \brief Clears the authenticated identity from the current thread context. */
 void handlers_clear_identity(void);
 
+/** \brief Checks if the request comes from a trusted proxy and optionally returns the peer IP. */
+bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip);
+
 /** \brief Handles /customer requests (external REST integration). */
 struct json_object* customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
 

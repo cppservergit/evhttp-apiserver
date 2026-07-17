@@ -356,18 +356,28 @@ struct json_object* uuid_handler(
 
 // --- Shared Utilities ---
 
-const char* extract_client_ip(struct evhttp_request* req) {
-    if (!req) return "unknown";
-    
+bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip) {
     struct evhttp_connection* evcon = evhttp_request_get_connection(req);
     char* peer_ip = nullptr;
     uint16_t port = 0;
     if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
 
+    if (out_peer_ip) *out_peer_ip = peer_ip;
+
     char trust_proxy_ip[MAX_CONFIG_STR] = {0};
     config_get_trust_proxy_ip(trust_proxy_ip, sizeof(trust_proxy_ip));
 
     if (peer_ip && trust_proxy_ip[0] != '\0' && strcmp(peer_ip, trust_proxy_ip) == 0) {
+        return true;
+    }
+    return false;
+}
+
+const char* extract_client_ip(struct evhttp_request* req) {
+    if (!req) return "unknown";
+    
+    const char* peer_ip = nullptr;
+    if (is_trusted_proxy(req, &peer_ip)) {
         struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
         const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
         if (x_forwarded_for) {

@@ -55,6 +55,9 @@ static void* worker_thread_main(void* arg) {
             logger_set_request_id(req_id);
             
             bool is_authorized = true;
+            char username[33] = {0};
+            char session_id[37] = {0};
+
             if (ctx && ctx->is_secure) {
                 const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
                 if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
@@ -65,8 +68,6 @@ static void* worker_thread_main(void* arg) {
                 } else {
                     char jwt_secret[128];
                     config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
-                    char username[33] = {0};
-                    char session_id[37] = {0};
                     
                     int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, username, sizeof(username), session_id, sizeof(session_id));
                     sodium_memzero(jwt_secret, sizeof(jwt_secret));
@@ -83,6 +84,20 @@ static void* worker_thread_main(void* arg) {
                         is_authorized = false;
                     } else {
                         handlers_set_identity(username, session_id);
+                    }
+                }
+            }
+            
+            const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+            if (x_forwarded_for) {
+                const char* peer_ip = nullptr;
+                if (!is_trusted_proxy(task->req, &peer_ip)) {
+                    if (ctx && ctx->is_secure && is_authorized) {
+                        LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s (User: %s, Session: %s)",
+                                 x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(task->req), username, session_id);
+                    } else {
+                        LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
+                                 x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(task->req));
                     }
                 }
             }
