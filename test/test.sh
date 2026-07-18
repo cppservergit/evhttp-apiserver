@@ -1,39 +1,89 @@
 #!/bin/bash
+set -e
 
-# Define the endpoints
-URL_SYSINFO="http://localhost:8080/sysinfo"
-URL_VERSION="http://localhost:8080/version"
-URL_PING="http://localhost:8080/ping"
-URL_METRICS="http://localhost:8080/metrics"
-URL_RSYSINFO="http://localhost:8080/rsysinfo"
-URL_SALES="http://localhost:8080/sales"
-URL_CUSTOMER="http://localhost:8080/customer"
-URL_CUSTOMER_GET="http://localhost:8080/customer/get"
-URL_SHIPPERS="http://localhost:8080/shippers"
-URL_PRODUCTS="http://localhost:8080/products"
-URL_UUID="http://localhost:8080/uuid"
+API_URL="http://127.0.0.1:8080"
+USERNAME="mcordova"
+PASSWORD="basica"
 
-# Number of concurrent requests to fire
-NUM_THREADS=80
+# Extract TELEMETRY_API_KEY from bin/apiserver.env
+TELEMETRY_API_KEY=$(grep '^TELEMETRY_API_KEY=' bin/apiserver.env | cut -d '=' -f2 | tr -d '\r')
 
-echo "Starting stress test: $NUM_THREADS concurrent threads for each endpoint..."
+echo "Attempting to login with username: $USERNAME"
 
-# Loop to spawn background threads
-for i in $(seq 1 $NUM_THREADS); do
-    curl -s -w "Thread $i - sysinfo: %{http_code}\n" -o /dev/null "$URL_SYSINFO" &
-    curl -s -w "Thread $i - version: %{http_code}\n" -o /dev/null "$URL_VERSION" &
-    curl -s -w "Thread $i - ping: %{http_code}\n" -o /dev/null "$URL_PING" &
-    curl -s -w "Thread $i - metrics: %{http_code}\n" -o /dev/null "$URL_METRICS" &
-    curl -s -w "Thread $i - rsysinfo: %{http_code}\n" -o /dev/null "$URL_RSYSINFO" &
-    curl -s -w "Thread $i - sales: %{http_code}\n" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"start_date":"1996-01-01","end_date":"1996-12-31"}' "$URL_SALES" &
-    curl -s -w "Thread $i - customer: %{http_code}\n" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"id":"ALFKI"}' "$URL_CUSTOMER" &
-    curl -s -w "Thread $i - customer_get: %{http_code}\n" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"id":"ALFKI"}' "$URL_CUSTOMER_GET" &
-    curl -s -w "Thread $i - shippers: %{http_code}\n" -o /dev/null "$URL_SHIPPERS" &
-    curl -s -w "Thread $i - products: %{http_code}\n" -o /dev/null "$URL_PRODUCTS" &
-    curl -s -w "Thread $i - uuid: %{http_code}\n" -o /dev/null "$URL_UUID" &
+LOGIN_RESPONSE=$(curl -s -X POST "$API_URL/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\": \"$USERNAME\", \"password\": \"$PASSWORD\"}")
+
+# Use jq to extract the token
+TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token')
+
+if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+    echo "Login failed. Response was:"
+    echo "$LOGIN_RESPONSE"
+    exit 1
+fi
+
+echo "Login successful!"
+echo "Extracted Token: ${TOKEN:0:20}... (truncated for display)"
+echo "Telemetry API Key: $TELEMETRY_API_KEY"
+
+NUM_REQUESTS=100
+echo "Running stress test with $NUM_REQUESTS requests to ALL endpoints..."
+
+# Running background jobs to simulate concurrency stress test
+for i in $(seq 1 $NUM_REQUESTS); do
+    (
+        # Request to /ping (No security required)
+        curl -s -o /dev/null -X GET "$API_URL/ping"
+        
+        # Request to /version (Telemetry API Key)
+        curl -s -o /dev/null -X GET "$API_URL/version" -H "Authorization: Bearer $TELEMETRY_API_KEY"
+
+        # Request to /sysinfo (Telemetry API Key)
+        curl -s -o /dev/null -X GET "$API_URL/sysinfo" -H "Authorization: Bearer $TELEMETRY_API_KEY"
+        
+        # Request to /rsysinfo (JWT)
+        curl -s -o /dev/null -X GET "$API_URL/rsysinfo" -H "Authorization: Bearer $TOKEN"
+        
+        # Request to /customer (JWT)
+        curl -s -o /dev/null -X POST "$API_URL/customer" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "ALFKI"}'
+            
+        # Request to /customer/get (JWT)
+        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "ALFKI"}'
+
+        # Request to /sales (JWT)
+        curl -s -o /dev/null -X POST "$API_URL/sales" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"start_date": "2024-01-01", "end_date": "2024-01-31"}'
+
+        # Request to /shippers (JWT)
+        curl -s -o /dev/null -X GET "$API_URL/shippers" -H "Authorization: Bearer $TOKEN"
+
+        # Request to /products (JWT)
+        curl -s -o /dev/null -X GET "$API_URL/products" -H "Authorization: Bearer $TOKEN"
+
+        # Request to /uuid (No security required)
+        curl -s -o /dev/null -X GET "$API_URL/uuid"
+        
+        # Request to /getqr (JWT)
+        curl -s -o /dev/null -X GET "$API_URL/getqr" -H "Authorization: Bearer $TOKEN"
+
+        # Request to /metrics (Telemetry API Key)
+        curl -s -o /dev/null -X GET "$API_URL/metrics" -H "Authorization: Bearer $TELEMETRY_API_KEY"
+    ) &
+    
+    if [ $((i % 20)) -eq 0 ]; then
+        echo "Dispatched $i request batches..."
+    fi
 done
 
-# Wait for all background jobs to finish
+echo "Waiting for all background requests to finish..."
 wait
-
-echo "Stress test completed."
+echo "Stress test finished!"

@@ -15,3 +15,9 @@ apiserver
 *~
 .DS_Store
 claude.md
+
+# Test directory artifacts
+test/*
+!test/Makefile
+!test/validation-test.c
+!test/test.sh

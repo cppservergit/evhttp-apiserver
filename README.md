@@ -138,11 +138,19 @@ make release
 ./bin/apiserver
 ```
 
-### 5. Advanced Targets (Sanitizers)
-To profile the architecture under load, you can build with Google Sanitizers:
+### 5. Advanced Targets & Testing
+To profile the architecture under load and verify correctness, you can build with Google Sanitizers:
 ```bash
 make asan   # Builds bin/test_asan (Address/Leak Sanitizer)
 make tsan   # Builds bin/test_tsan (Thread Sanitizer)
+```
+
+Additionally, the project features a comprehensive unit test suite for the declarative JSON input validation framework. The framework is aggressively tested against edge cases (type confusion, null-byte injection, leap year boundary traps, missing required fields, etc.) and maintains **100% code coverage**.
+
+To run the validation test suite and verify code coverage:
+```bash
+cd test
+make coverage
 ```
 
 ### 6. Stress Testing

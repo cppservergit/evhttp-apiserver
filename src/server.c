@@ -429,7 +429,11 @@ static void process_completed_task(http_task_t* task) {
         evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
         evbuffer_free(task->response_text);
     } else {
-        send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
+        if (task->status_code >= 400 && task->status_code != HTTP_INTERNAL) {
+            send_json_response(task->req, task->status_code, task->status_txt, create_error_json(task->status_txt ? task->status_txt : "Error"));
+        } else {
+            send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
+        }
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
