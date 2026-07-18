@@ -54,13 +54,35 @@ sudo nano apiserver.env
 
 Ensure `apiserver.env` contains the required keys:
 ```env
-ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=sa;PWD=Basica2024;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+# database access
+ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=sa;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+
+# remote backend API configuration
 API_URL=https://cppserver.com
-API_USER=mcordova
-API_PASS=basica
+API_USER=your_api_user
+API_PASS=your_api_pass
+REMOTE_API_KEY=your_api_key
+
+# enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
+
+# server configuration - any change requires service restart
 NUM_THREADS=80
 MAX_QUEUE_SIZE=10000
+FAST_POOL_PERCENTAGE=25
+
+# remote login provider
+LOGIN_PROVIDER=http://demodb.mshome.net:8080
+LOGIN_URI=/login
+
+# jwt configuration
+
+# generated with: openssl rand -hex 32
+JWT_SECRET=your_jwt_secret
+JWT_TIMEOUT_SECONDS=300
+
+# trust haproxy IP for accepting X-Forwarded-For header
+TRUST_PROXY_IP=127.0.0.1
 ```
 
 ## 4. Install the Systemd Service
