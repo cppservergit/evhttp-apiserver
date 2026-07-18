@@ -17,7 +17,6 @@ static char g_api_user[MAX_CONFIG_STR] = {0};
 static char g_api_pass[MAX_CONFIG_STR] = {0};
 static char g_login_provider[MAX_CONFIG_STR] = {0};
 static char g_login_uri[MAX_CONFIG_STR] = {0};
-static char g_login_payload[MAX_CONFIG_STR] = {0};
 static char g_jwt_secret[MAX_CONFIG_STR] = {0};
 static char g_remote_api_key[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
@@ -86,7 +85,6 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     
     if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
     if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
-    if (getenv("LOGIN_PAYLOAD")) snprintf(g_login_payload, sizeof(g_login_payload), "%s", getenv("LOGIN_PAYLOAD"));
     if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
     if (getenv("REMOTE_API_KEY")) snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
     else g_remote_api_key[0] = '\0';
@@ -183,11 +181,6 @@ void config_get_login_uri(char* out, size_t max_len) {
     pthread_rwlock_unlock(&g_config_lock);
 }
 
-void config_get_login_payload(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    snprintf(out, max_len, "%s", g_login_payload);
-    pthread_rwlock_unlock(&g_config_lock);
-}
 
 void config_get_jwt_secret(char* out, size_t max_len) {
     if (!out || max_len == 0) return;

@@ -125,8 +125,6 @@ int server_init_globals(size_t total_workers) {
     size_t num_workers = (configured_threads > 0) ? configured_threads : (total_workers * 2);
     size_t q_size = config_get_max_queue_size();
     task_pool_init(q_size == 0 ? 100000 : q_size);
-    worker_pool_init(num_workers);
-
     g_worker_stats = calloc(g_total_workers, sizeof(struct worker_stats));
     g_worker_bases = calloc(g_total_workers, sizeof(_Atomic(struct event_base*)));
     g_reactor_queues = calloc(g_total_workers, sizeof(reactor_queue_t));
@@ -138,7 +136,16 @@ int server_init_globals(size_t total_workers) {
     
     for (size_t i = 0; i < g_total_workers; ++i) {
         pthread_mutex_init(&g_reactor_queues[i].lock, nullptr);
+        int efd = eventfd(0, EFD_NONBLOCK);
+        if (efd < 0) {
+            LOG_FATAL("Failed to create eventfd for Worker %zu", i);
+            server_free_globals();
+            return -1;
+        }
+        g_reactor_queues[i].eventfd = efd;
     }
+
+    worker_pool_init(num_workers);
     
     atexit(server_free_globals);
     return 0;
@@ -573,12 +580,7 @@ void* worker_thread_logic(void* arg) {
     
     atomic_store_explicit(&g_worker_bases[worker_id], base, memory_order_release);
 
-    int efd = eventfd(0, EFD_NONBLOCK);
-    if (efd < 0) {
-        LOG_FATAL("Failed to create eventfd for Worker %zu", worker_id);
-        return nullptr;
-    }
-    g_reactor_queues[worker_id].eventfd = efd;
+    int efd = g_reactor_queues[worker_id].eventfd;
     
     struct event* efd_ev = event_new(base, efd, EV_READ | EV_PERSIST, reactor_eventfd_cb, nullptr);
     event_add(efd_ev, nullptr);
