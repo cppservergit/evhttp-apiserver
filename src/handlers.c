@@ -37,7 +37,10 @@ struct json_object* ping_handler(struct evhttp_request* req, struct json_object*
 static bool validate_telemetry_api_key(struct evhttp_request* req) {
     char expected_key[MAX_CONFIG_STR];
     config_get_telemetry_api_key(expected_key, sizeof(expected_key));
-    if (expected_key[0] == '\0') return false;
+    if (expected_key[0] == '\0') {
+        LOG_WARN("TELEMETRY_API_KEY is not configured!");
+        return false;
+    }
     
     struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
     const char* auth_header = evhttp_find_header(headers, "X-API-Key");
@@ -53,8 +56,8 @@ struct json_object* version_handler(struct evhttp_request* req, struct json_obje
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
-        *out_status = 401;
-        *out_status_txt = "Unauthorized";
+        *out_status = 403;
+        *out_status_txt = "Access Denied";
         return nullptr;
     }
     
@@ -76,8 +79,8 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
-        *out_status = 401;
-        *out_status_txt = "Unauthorized";
+        *out_status = 403;
+        *out_status_txt = "Access Denied";
         return nullptr;
     }
     
@@ -114,8 +117,8 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
-        *out_status = 401;
-        *out_status_txt = "Unauthorized";
+        *out_status = 403;
+        *out_status_txt = "Access Denied";
         return nullptr;
     }
     
