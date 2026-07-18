@@ -25,7 +25,7 @@ typedef struct {
 
 static pool_t g_fast_pool = {0};
 static pool_t g_slow_pool = {0};
-static size_t g_total_workers = 0;
+
 
 static void* worker_thread_main(void* arg) {
     pool_t* pool = (pool_t*)arg;
@@ -124,7 +124,7 @@ static void* worker_thread_main(void* arg) {
 }
 
 int worker_pool_init(size_t num_workers) {
-    g_total_workers = num_workers;
+    // Calculate sizes (fast vs slow)
     
     // Allocate dynamic percentage of workers to the fast pool (minimum 1)
     size_t pct = config_get_fast_pool_percentage();
@@ -222,5 +222,5 @@ bool worker_pool_enqueue(http_task_t* task) {
 }
 
 size_t worker_pool_get_size(void) {
-    return g_total_workers;
+    return g_fast_pool.num_workers + g_slow_pool.num_workers;
 }

@@ -5,7 +5,6 @@
 #include <pthread.h>
 #include <json-c/json.h>
 #include "http_client.h"
-#include "http_client.h"
 #include "customer.h"
 #include "logger.h"
 #include "config.h"
