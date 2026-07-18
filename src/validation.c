@@ -74,7 +74,7 @@ static bool validate_date_string_fast(const char *date_str) {
     int month = (date_str[5] - '0') * 10   + (date_str[6] - '0');
     int day   = (date_str[8] - '0') * 10   + (date_str[9] - '0');
 
-    if (month < 1 || month > 12 || day < 1 || year < 0) return false;
+    if (month < 1 || month > 12 || day < 1 || year < 1900 || year > 2199) return false;
 
     static const int days_in_month[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     int max_days = days_in_month[month];
