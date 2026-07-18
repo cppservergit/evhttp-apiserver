@@ -78,10 +78,10 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
 static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
     pthread_rwlock_wrlock(&g_config_lock);
     
-    snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
-    snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
-    snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
-    snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
+    if (getenv("ODBC_CONN_STR")) snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
+    if (getenv("API_URL")) snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
+    if (getenv("API_USER")) snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
+    if (getenv("API_PASS")) snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
     
     if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
     if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
