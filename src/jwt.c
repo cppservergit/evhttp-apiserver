@@ -44,8 +44,8 @@ char* jwt_decode_payload(const char* jwt) {
     if (!dot2) return NULL;
     
     size_t len = (size_t)(dot2 - payload_start);
-    size_t out_len = (len * 3) / 4 + 1;
-    char* out = malloc(out_len);
+    size_t out_maxlen = (len * 3) / 4 + 3;
+    char* out = malloc(out_maxlen);
     if (!out) return NULL;
     
     size_t i = 0, j = 0;
@@ -55,16 +55,21 @@ char* jwt_decode_payload(const char* jwt) {
         for (int k = 0; k < 4; ++k) {
             n <<= 6;
             if (i < len && payload_start[i] != '=') {
-                n |= b64_lookup((unsigned char)payload_start[i]);
+                unsigned char val = b64_lookup((unsigned char)payload_start[i]);
+                if (val == 255) {
+                    free(out);
+                    return NULL;
+                }
+                n |= val;
                 chars++;
                 i++;
             } else if (i < len && payload_start[i] == '=') {
                 i++; // Skip padding to prevent infinite loop
             }
         }
-        if (chars > 1) out[j++] = (char)((n >> 16) & 0xFF);
-        if (chars > 2) out[j++] = (char)((n >> 8) & 0xFF);
-        if (chars > 3) out[j++] = (char)(n & 0xFF);
+        if (chars > 1 && j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
+        if (chars > 2 && j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
+        if (chars > 3 && j < out_maxlen - 1) out[j++] = (char)(n & 0xFF);
     }
     out[j] = '\0';
     return out;
