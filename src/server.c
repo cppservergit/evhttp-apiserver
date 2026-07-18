@@ -145,7 +145,10 @@ int server_init_globals(size_t total_workers) {
         g_reactor_queues[i].eventfd = efd;
     }
 
-    worker_pool_init(num_workers);
+    if (worker_pool_init(num_workers) != 0) {
+        server_free_globals();
+        return -1;
+    }
     
     atexit(server_free_globals);
     return 0;

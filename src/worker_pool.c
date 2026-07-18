@@ -140,8 +140,10 @@ int worker_pool_init(size_t num_workers) {
     g_fast_pool.workers = calloc(fast_workers, sizeof(pthread_t));
     for (size_t i = 0; i < fast_workers; ++i) {
         if (pthread_create(&g_fast_pool.workers[i], nullptr, worker_thread_main, &g_fast_pool) != 0) {
-            LOG_FATAL("Failed to create fast pool worker thread %zu", i);
-            exit(1);
+            LOG_ERROR("Failed to create fast pool worker thread %zu", i);
+            g_fast_pool.num_workers = i;
+            worker_pool_shutdown();
+            return -1;
         }
     }
     
@@ -151,8 +153,10 @@ int worker_pool_init(size_t num_workers) {
     g_slow_pool.workers = calloc(slow_workers, sizeof(pthread_t));
     for (size_t i = 0; i < slow_workers; ++i) {
         if (pthread_create(&g_slow_pool.workers[i], nullptr, worker_thread_main, &g_slow_pool) != 0) {
-            LOG_FATAL("Failed to create slow pool worker thread %zu", i);
-            exit(1);
+            LOG_ERROR("Failed to create slow pool worker thread %zu", i);
+            g_slow_pool.num_workers = i;
+            worker_pool_shutdown();
+            return -1;
         }
     }
     
