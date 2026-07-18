@@ -327,7 +327,9 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     
     struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* ctype = evhttp_find_header(in_headers, "Content-Type");
-    if (ctype == nullptr || strncmp(ctype, "application/json", 16) != 0) {
+    if (ctype == nullptr || 
+        strncmp(ctype, "application/json", 16) != 0 || 
+        (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
         send_json_response(req, HTTP_BADREQUEST, "Bad Request", create_error_json("Invalid Content-Type. Expected application/json."));
         return false;
     }
