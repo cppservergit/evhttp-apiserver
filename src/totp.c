@@ -24,11 +24,16 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     int status = HTTP_NOTFOUND;
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        if (SQLFetch(hstmt) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+        SQLRETURN fetch_ret = SQLFetch(hstmt);
+        if (fetch_ret == SQL_SUCCESS || fetch_ret == SQL_SUCCESS_WITH_INFO) {
             SQLLEN len = 0;
-            SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, max_len, &len);
-            if (len != SQL_NULL_DATA && len > 0) {
-                status = HTTP_OK;
+            SQLRETURN get_ret = SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, max_len, &len);
+            if (get_ret == SQL_SUCCESS) {
+                if (len != SQL_NULL_DATA && len > 0) {
+                    status = HTTP_OK;
+                }
+            } else if (get_ret == SQL_SUCCESS_WITH_INFO) {
+                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
             }
         }
     } else {

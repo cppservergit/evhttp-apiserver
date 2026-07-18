@@ -71,8 +71,7 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
         char context_msg[256];
         snprintf(context_msg, sizeof(context_msg), "Failed to allocate ODBC statement handle in %s", func_name);
         odbcutil_log_error(SQL_HANDLE_DBC, hdbc, context_msg);
-        SQLDisconnect(hdbc);
-        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+        odbcutil_reset_connection();
         return SQL_NULL_HSTMT;
     }
     
@@ -111,6 +110,9 @@ struct json_object* odbcutil_fetch_json(SQLHSTMT hstmt) {
                         // Stream chunk directly into the JSON state machine, no intermediate buffers
                         struct json_object* parsed_obj = json_tokener_parse_ex(tok, chunk, (int)strlen(chunk));
                         if (parsed_obj) {
+                            if (result_json) {
+                                json_object_put(result_json);
+                            }
                             result_json = parsed_obj;
                         }
                         has_more_chunks = (ret == SQL_SUCCESS_WITH_INFO);
@@ -165,6 +167,9 @@ struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_n
                 if (indicators[i] != SQL_NULL_DATA) {
                     struct json_object* parsed_obj = json_tokener_parse_ex(tok, chunks[i], (int)strlen(chunks[i]));
                     if (parsed_obj) {
+                        if (result_json) {
+                            json_object_put(result_json);
+                        }
                         result_json = parsed_obj;
                     }
                 }
