@@ -34,10 +34,10 @@ flowchart TD
 Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas:
 ```c
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .is_fast = true },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .is_fast = true },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .is_fast = false },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .text_handler = metrics_handler, .is_fast = true }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .is_fast = true, is_secure = true },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .is_fast = true, is_secure = true },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .is_fast = false, is_secure = true },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .text_handler = metrics_handler, .is_fast = true, is_secure = true }
 };
 ```
 
@@ -95,13 +95,14 @@ The server requires an `apiserver.env` configuration file in the `bin/` director
 mkdir -p bin
 cat <<EOF > bin/apiserver.env
 # database access
-ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=sa;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
 
 # remote backend API configuration
 API_URL=https://cppserver.com
 API_USER=your_api_user
 API_PASS=your_api_pass
 REMOTE_API_KEY=your_api_key
+TELEMETRY_API_KEY=your_telemetry_key
 
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
@@ -152,7 +153,7 @@ cd test
 ```
 
 ## Production Deployment
-For production environments, the server is designed to run securely as a persistent `systemd` daemon with automatic restart, logging, and hot-reload capabilities. 
+For production environments, the server is designed to run as a persistent `systemd` daemon with automatic restart, logging, and hot-reload capabilities. 
 
 Please see the [Systemd Installation Guide](systemd/install.md) for full instructions on deploying the binary and configuring the service.
 
@@ -194,16 +195,27 @@ The service layer safely binds the parameters and streams the SQL rowset directl
 ```c
 struct json_object* sales_service_get_data(const char* start_date, const char* end_date) {
     SQLHDBC hdbc = odbcutil_connect();
+    if (hdbc == SQL_NULL_HDBC) return nullptr;
+    
     SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
+    if (!hstmt) return nullptr;
+    
+    struct json_object* result_json = nullptr;
     
     SQLLEN cbStart = SQL_NTS, cbEnd = SQL_NTS;
     SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)start_date, 0, &cbStart);
     SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)end_date, 0, &cbEnd);
     
-    SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_sales_by_category(?,?)}", SQL_NTS);
-    struct json_object* result_json = odbcutil_fetch_json(hstmt);
+    SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_sales_by_category(?,?)}", SQL_NTS);
+    
+    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+        result_json = odbcutil_fetch_json_batch(hstmt, __func__);
+    } else {
+        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute SQLExecDirect for sp_sales_by_category");
+    }
     
     odbcutil_disconnect(hdbc, hstmt);
+    
     return result_json;
 }
 ```

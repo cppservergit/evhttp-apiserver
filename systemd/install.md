@@ -55,13 +55,14 @@ sudo nano apiserver.env
 Ensure `apiserver.env` contains the required keys:
 ```env
 # database access
-ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=sa;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
 
 # remote backend API configuration
 API_URL=https://cppserver.com
 API_USER=your_api_user
 API_PASS=your_api_pass
 REMOTE_API_KEY=your_api_key
+TELEMETRY_API_KEY=your_telemetry_key
 
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true

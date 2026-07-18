@@ -34,8 +34,29 @@ struct json_object* ping_handler(struct evhttp_request* req, struct json_object*
     return root;
 }
 
+static bool validate_telemetry_api_key(struct evhttp_request* req) {
+    char expected_key[MAX_CONFIG_STR];
+    config_get_telemetry_api_key(expected_key, sizeof(expected_key));
+    if (expected_key[0] == '\0') return false;
+    
+    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    const char* auth_header = evhttp_find_header(headers, "X-API-Key");
+    if (auth_header && strcmp(auth_header, expected_key) == 0) return true;
+    
+    const char* bearer = evhttp_find_header(headers, "Authorization");
+    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strcmp(bearer + 7, expected_key) == 0) return true;
+    
+    return false;
+}
+
 struct json_object* version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
     (void)req; (void)body; (void)arg;
+    
+    if (!validate_telemetry_api_key(req)) {
+        *out_status = 401;
+        *out_status_txt = "Unauthorized";
+        return nullptr;
+    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -53,6 +74,12 @@ struct json_object* version_handler(struct evhttp_request* req, struct json_obje
 
 struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
     (void)req; (void)body; (void)arg;
+    
+    if (!validate_telemetry_api_key(req)) {
+        *out_status = 401;
+        *out_status_txt = "Unauthorized";
+        return nullptr;
+    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -85,6 +112,12 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
 
 struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
     (void)req; (void)body; (void)arg;
+    
+    if (!validate_telemetry_api_key(req)) {
+        *out_status = 401;
+        *out_status_txt = "Unauthorized";
+        return nullptr;
+    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
