@@ -41,8 +41,8 @@ const char* get_server_version(void) {
     return SERVER_VERSION;
 }
 
-static _Atomic(struct event_base*) *g_worker_bases = nullptr;
-static size_t g_total_workers = 0;
+static _Atomic(struct event_base*) *g_reactor_bases = nullptr;
+static size_t g_num_reactors = 0;
 
 typedef struct {
     http_task_t* head;
@@ -64,15 +64,15 @@ const char* server_get_hostname(void) { return g_hostname; }
 
 const char* server_get_os_version(void) { return g_os_version; }
 
-struct worker_stats {
+struct reactor_stats {
     _Atomic uint64_t total_requests_fast;
     _Atomic uint64_t total_time_fast_ms;
     _Atomic uint64_t total_requests_slow;
     _Atomic uint64_t total_time_slow_ms;
 } __attribute__((aligned(64)));
 
-static struct worker_stats* g_worker_stats = nullptr;
-static _Thread_local size_t tl_worker_id = 0;
+static struct reactor_stats* g_reactor_stats = nullptr;
+static _Thread_local size_t tl_reactor_id = 0;
 static _Thread_local char tl_tid_str[32] = {0};
 
 static void server_free_globals(void);
@@ -90,8 +90,8 @@ static void odbc_cleanup(void) {
     }
 }
 
-int server_init_globals(size_t total_workers) {
-    g_total_workers = total_workers;
+int server_init_globals(size_t num_reactors) {
+    g_num_reactors = num_reactors;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
         snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
     }
@@ -122,19 +122,19 @@ int server_init_globals(size_t total_workers) {
     g_total_ram_kb = (uint64_t)((pages * g_page_size) / 1024);
     
     size_t configured_threads = config_get_num_threads();
-    size_t num_workers = (configured_threads > 0) ? configured_threads : (total_workers * 2);
+    size_t bg_workers_count = (configured_threads > 0) ? configured_threads : (num_reactors * 2);
     size_t q_size = config_get_max_queue_size();
     task_pool_init(q_size == 0 ? 100000 : q_size);
-    g_worker_stats = calloc(g_total_workers, sizeof(struct worker_stats));
-    g_worker_bases = calloc(g_total_workers, sizeof(_Atomic(struct event_base*)));
-    g_reactor_queues = calloc(g_total_workers, sizeof(reactor_queue_t));
+    g_reactor_stats = calloc(g_num_reactors, sizeof(struct reactor_stats));
+    g_reactor_bases = calloc(g_num_reactors, sizeof(_Atomic(struct event_base*)));
+    g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
     
-    if (g_worker_stats == nullptr || g_worker_bases == nullptr || g_reactor_queues == nullptr) {
+    if (g_reactor_stats == nullptr || g_reactor_bases == nullptr || g_reactor_queues == nullptr) {
         server_free_globals();
         return -1;
     }
     
-    for (size_t i = 0; i < g_total_workers; ++i) {
+    for (size_t i = 0; i < g_num_reactors; ++i) {
         pthread_mutex_init(&g_reactor_queues[i].lock, nullptr);
         int efd = eventfd(0, EFD_NONBLOCK);
         if (efd < 0) {
@@ -145,7 +145,7 @@ int server_init_globals(size_t total_workers) {
         g_reactor_queues[i].eventfd = efd;
     }
 
-    if (worker_pool_init(num_workers) != 0) {
+    if (worker_pool_init(bg_workers_count) != 0) {
         server_free_globals();
         return -1;
     }
@@ -157,17 +157,17 @@ int server_init_globals(size_t total_workers) {
 static void server_free_globals(void) {
     worker_pool_shutdown();
     task_pool_shutdown();
-    if (g_worker_stats) {
-        free(g_worker_stats);
-        g_worker_stats = nullptr;
+    if (g_reactor_stats) {
+        free(g_reactor_stats);
+        g_reactor_stats = nullptr;
     }
     curl_global_cleanup();
-    if (g_worker_bases) {
-        free(g_worker_bases);
-        g_worker_bases = nullptr;
+    if (g_reactor_bases) {
+        free(g_reactor_bases);
+        g_reactor_bases = nullptr;
     }
     if (g_reactor_queues) {
-        for (size_t i = 0; i < g_total_workers; ++i) {
+        for (size_t i = 0; i < g_num_reactors; ++i) {
             pthread_mutex_destroy(&g_reactor_queues[i].lock);
         }
         free(g_reactor_queues);
@@ -176,9 +176,9 @@ static void server_free_globals(void) {
 }
 
 void server_shutdown_workers(void) {
-    if (!g_worker_bases) return;
-    for (size_t i = 0; i < g_total_workers; ++i) {
-        struct event_base* base = atomic_load_explicit(&g_worker_bases[i], memory_order_acquire);
+    if (!g_reactor_bases) return;
+    for (size_t i = 0; i < g_num_reactors; ++i) {
+        struct event_base* base = atomic_load_explicit(&g_reactor_bases[i], memory_order_acquire);
         if (base != nullptr) {
             event_base_loopbreak(base);
         }
@@ -186,13 +186,13 @@ void server_shutdown_workers(void) {
 }
 
 void server_record_request_stats(long long elapsed_ms, bool is_fast) {
-    if (g_worker_stats) {
+    if (g_reactor_stats) {
         if (is_fast) {
-            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests_fast, 1, memory_order_relaxed);
-            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_time_fast_ms, elapsed_ms, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_reactor_stats[tl_reactor_id].total_requests_fast, 1, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_reactor_stats[tl_reactor_id].total_time_fast_ms, elapsed_ms, memory_order_relaxed);
         } else {
-            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_requests_slow, 1, memory_order_relaxed);
-            atomic_fetch_add_explicit(&g_worker_stats[tl_worker_id].total_time_slow_ms, elapsed_ms, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_reactor_stats[tl_reactor_id].total_requests_slow, 1, memory_order_relaxed);
+            atomic_fetch_add_explicit(&g_reactor_stats[tl_reactor_id].total_time_slow_ms, elapsed_ms, memory_order_relaxed);
         }
     }
 }
@@ -204,12 +204,12 @@ void server_get_request_stats(server_request_stats_t* out_stats) {
     uint64_t time_fast = 0;
     uint64_t reqs_slow = 0;
     uint64_t time_slow = 0;
-    if (g_worker_stats) {
-        for (size_t i = 0; i < g_total_workers; ++i) {
-            reqs_fast += atomic_load_explicit(&g_worker_stats[i].total_requests_fast, memory_order_relaxed);
-            time_fast += atomic_load_explicit(&g_worker_stats[i].total_time_fast_ms, memory_order_relaxed);
-            reqs_slow += atomic_load_explicit(&g_worker_stats[i].total_requests_slow, memory_order_relaxed);
-            time_slow += atomic_load_explicit(&g_worker_stats[i].total_time_slow_ms, memory_order_relaxed);
+    if (g_reactor_stats) {
+        for (size_t i = 0; i < g_num_reactors; ++i) {
+            reqs_fast += atomic_load_explicit(&g_reactor_stats[i].total_requests_fast, memory_order_relaxed);
+            time_fast += atomic_load_explicit(&g_reactor_stats[i].total_time_fast_ms, memory_order_relaxed);
+            reqs_slow += atomic_load_explicit(&g_reactor_stats[i].total_requests_slow, memory_order_relaxed);
+            time_slow += atomic_load_explicit(&g_reactor_stats[i].total_time_slow_ms, memory_order_relaxed);
         }
     }
     
@@ -362,7 +362,7 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
 void server_notify_task_done(void* arg) {
     http_task_t* task = (http_task_t*)arg;
     size_t rid = task->reactor_id;
-    if (rid >= g_total_workers) return;
+    if (rid >= g_num_reactors) return;
     
     task->next = nullptr;
     
@@ -443,7 +443,7 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     // Drain eventfd counter
     while (read(fd, &val, sizeof(val)) == sizeof(val)) {}
     
-    size_t rid = tl_worker_id;
+    size_t rid = tl_reactor_id;
     
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
     http_task_t* curr = g_reactor_queues[rid].head;
@@ -496,7 +496,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     task->parsed_body = parsed_body;
     task->middleware_ctx = ctx;
     task->start_time = start_time;
-    task->reactor_id = tl_worker_id;
+    task->reactor_id = tl_reactor_id;
     atomic_init(&task->cancelled, false);
     
     evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);
@@ -574,14 +574,14 @@ static struct evhttp* configure_http_server(struct event_base* base, evutil_sock
     return http;
 }
 
-void* worker_thread_logic(void* arg) {
+void* reactor_thread_logic(void* arg) {
     size_t worker_id = (size_t)arg;
-    tl_worker_id = worker_id;
+    tl_reactor_id = worker_id;
     
     raii_event_base base = create_optimized_event_base();
     if (base == nullptr) return nullptr;
     
-    atomic_store_explicit(&g_worker_bases[worker_id], base, memory_order_release);
+    atomic_store_explicit(&g_reactor_bases[worker_id], base, memory_order_release);
 
     int efd = g_reactor_queues[worker_id].eventfd;
     

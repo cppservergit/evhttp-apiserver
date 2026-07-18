@@ -50,8 +50,8 @@ static int spawn_worker_threads(pthread_t* threads, long num_cores) {
         CPU_SET((long)i % num_cores, &cpuset);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
-        if (pthread_create(&threads[i], &attr, worker_thread_logic, (void*)i) != 0) {
-            LOG_FATAL("Could not bootstrap worker thread %zu", i);
+        if (pthread_create(&threads[i], &attr, reactor_thread_logic, (void*)i) != 0) {
+            LOG_FATAL("Could not bootstrap reactor thread %zu", i);
             pthread_attr_destroy(&attr);
             return -1;
         }

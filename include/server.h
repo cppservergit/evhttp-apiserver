@@ -22,7 +22,7 @@ constexpr char SERVER_ADDR[] = "0.0.0.0";
 #define MAX_ERR_MSG_LEN 256
 
 /** \brief Initializes the global server state and ODBC environment. */
-int server_init_globals(size_t total_workers);
+int server_init_globals(size_t num_reactors);
 
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
@@ -68,7 +68,7 @@ void server_get_request_stats(server_request_stats_t* out_stats);
 void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb);
 
 /** \brief Entry point logic for libevent worker threads. */
-void* worker_thread_logic(void* arg);
+void* reactor_thread_logic(void* arg);
 
 /** \brief Retrieves the ISO-8601 startup timestamp of the server. */
 const char* server_get_start_time(void);
