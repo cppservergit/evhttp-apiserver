@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "logger.h"
 
 // Slab must never be realloc'd to preserve pointer range checks in task_pool_free.
 static http_task_t* g_task_slab = nullptr;
@@ -20,6 +21,11 @@ void task_pool_init(size_t pool_size) {
     g_free_stack = malloc(pool_size * sizeof(http_task_t*));
     g_is_free_flag = calloc(pool_size, sizeof(bool));
     
+    if (!g_task_slab || !g_free_stack || !g_is_free_flag) {
+        LOG_FATAL("Out of memory in task_pool_init");
+        exit(1);
+    }
+
     for (size_t i = 0; i < pool_size; i++) {
         g_free_stack[i] = &g_task_slab[i];
         g_is_free_flag[i] = true;
