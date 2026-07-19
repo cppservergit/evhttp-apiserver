@@ -342,7 +342,6 @@ struct evbuffer* getqr_handler(
     if (buf) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
         evhttp_add_header(headers, "Content-Type", "image/svg+xml");
-        evhttp_add_header(headers, "Cache-Control", "no-store");
     }
     
     return buf;

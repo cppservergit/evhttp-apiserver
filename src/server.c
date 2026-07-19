@@ -469,7 +469,18 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     }
 }
 
+static void inject_security_headers(struct evhttp_request* req) {
+    struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
+    evhttp_add_header(headers, "X-Content-Type-Options", "nosniff");
+    evhttp_add_header(headers, "X-Frame-Options", "DENY");
+    evhttp_add_header(headers, "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    evhttp_add_header(headers, "Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    evhttp_add_header(headers, "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+}
+
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
+    inject_security_headers(req);
+
     const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;
     if (ctx == nullptr || (ctx->json_handler == nullptr && ctx->text_handler == nullptr)) {
         evhttp_send_error(req, HTTP_INTERNAL, "Middleware Routing Fault");
