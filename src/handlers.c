@@ -559,11 +559,27 @@ struct json_object* login_handler(
 
         LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
 
-        if (!remote_response) {
-            remote_response = json_object_new_object();
-            json_object_object_add(remote_response, "error", json_object_new_string("Provider unreachable"));
+        struct json_object* safe_response = json_object_new_object();
+        if (remote_response) {
+            const char* error_msg = json_get_string(remote_response, "error");
+            if (error_msg) {
+                json_object_object_add(safe_response, "error", json_object_new_string(error_msg));
+            } else {
+                json_object_object_add(safe_response, "error", json_object_new_string("Unknown provider error"));
+            }
+
+            if (http_code == 401) {
+                const char* desc = json_get_string(remote_response, "description");
+                if (desc) {
+                    json_object_object_add(safe_response, "description", json_object_new_string(desc));
+                }
+            }
+            json_object_put(remote_response);
+        } else {
+            json_object_object_add(safe_response, "error", json_object_new_string("Provider unreachable"));
         }
-        return remote_response;
+        
+        return safe_response;
     }
 }
 
