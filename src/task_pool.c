@@ -6,9 +6,9 @@
 #include <stdbool.h>
 
 // Slab must never be realloc'd to preserve pointer range checks in task_pool_free.
-static http_task_t* g_task_slab = NULL;
-static http_task_t** g_free_stack = NULL;
-static bool* g_is_free_flag = NULL;
+static http_task_t* g_task_slab = nullptr;
+static http_task_t** g_free_stack = nullptr;
+static bool* g_is_free_flag = nullptr;
 static size_t g_stack_top = 0;
 static size_t g_pool_size = 0;
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -31,9 +31,9 @@ void task_pool_shutdown(void) {
     free(g_free_stack);
     free(g_task_slab);
     free(g_is_free_flag);
-    g_free_stack = NULL;
-    g_task_slab = NULL;
-    g_is_free_flag = NULL;
+    g_free_stack = nullptr;
+    g_task_slab = nullptr;
+    g_is_free_flag = nullptr;
 }
 
 http_task_t* task_pool_alloc(void) {

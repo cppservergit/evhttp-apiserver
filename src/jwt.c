@@ -38,15 +38,15 @@ void generate_uuidv4(char out[37]) {
 
 char* jwt_decode_payload(const char* jwt) {
     const char* dot1 = strchr(jwt, '.');
-    if (!dot1) return NULL;
+    if (!dot1) return nullptr;
     const char* payload_start = dot1 + 1;
     const char* dot2 = strchr(payload_start, '.');
-    if (!dot2) return NULL;
+    if (!dot2) return nullptr;
     
     size_t len = (size_t)(dot2 - payload_start);
     size_t out_maxlen = (len * 3) / 4 + 3;
     char* out = malloc(out_maxlen);
-    if (!out) return NULL;
+    if (!out) return nullptr;
     
     size_t i = 0, j = 0;
     while (i < len) {
@@ -58,7 +58,7 @@ char* jwt_decode_payload(const char* jwt) {
                 unsigned char val = b64_lookup((unsigned char)payload_start[i]);
                 if (val == 255) {
                     free(out);
-                    return NULL;
+                    return nullptr;
                 }
                 n |= val;
                 chars++;
@@ -93,12 +93,12 @@ time_t jwt_get_expiration(const char* jwt) {
 }
 
 char* jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds) {
-    if (!username || !session_id || !secret_hex) return NULL;
+    if (!username || !session_id || !secret_hex) return nullptr;
     
     unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
     size_t secret_bin_len = 0;
-    if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), NULL, &secret_bin_len, NULL) != 0) {
-        return NULL; // Invalid hex or wrong length
+    if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
+        return nullptr; // Invalid hex or wrong length
     }
     
     const char* header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
@@ -106,7 +106,7 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     struct json_object* payload_obj = json_object_new_object();
     json_object_object_add(payload_obj, "username", json_object_new_string(username));
     json_object_object_add(payload_obj, "sessionId", json_object_new_string(session_id));
-    json_object_object_add(payload_obj, "exp", json_object_new_int64((int64_t)(time(NULL) + timeout_seconds)));
+    json_object_object_add(payload_obj, "exp", json_object_new_int64((int64_t)(time(nullptr) + timeout_seconds)));
     const char* payload = json_object_to_json_string_ext(payload_obj, JSON_C_TO_STRING_PLAIN);
     
     size_t header_b64_max = sodium_base64_ENCODED_LEN(strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
@@ -118,7 +118,7 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     if (!header_b64 || !payload_b64) {
         free(header_b64); free(payload_b64); json_object_put(payload_obj); 
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
-        return NULL;
+        return nullptr;
     }
     
     sodium_bin2base64(header_b64, header_b64_max, (const unsigned char*)header, strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
@@ -129,7 +129,7 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     if (!msg) {
         free(header_b64); free(payload_b64); json_object_put(payload_obj); 
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
-        return NULL;
+        return nullptr;
     }
     snprintf(msg, msg_len, "%s.%s", header_b64, payload_b64);
     
@@ -141,7 +141,7 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     if (!mac_b64) {
         free(header_b64); free(payload_b64); free(msg); json_object_put(payload_obj); 
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
-        return NULL;
+        return nullptr;
     }
     sodium_bin2base64(mac_b64, mac_b64_max, mac, sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
     
@@ -173,7 +173,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     
     unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
     size_t secret_bin_len = 0;
-    if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), NULL, &secret_bin_len, NULL) != 0) {
+    if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
         return JWT_ERR_INVALID; 
     }
 
@@ -199,7 +199,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
         struct json_object* exp_obj;
         if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
             time_t exp = (time_t)json_object_get_int64(exp_obj);
-            if (time(NULL) > exp) {
+            if (time(nullptr) > exp) {
                 ret = JWT_ERR_EXPIRED;
             } else {
                 ret = JWT_OK;

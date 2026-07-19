@@ -12,7 +12,7 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     
     SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
     if (!hstmt) {
-        odbcutil_disconnect(hdbc, NULL);
+        odbcutil_disconnect(hdbc, nullptr);
         return HTTP_INTERNAL;
     }
     
@@ -49,7 +49,7 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
     if (!user) {
         *out_status = HTTP_BADREQUEST;
         *out_status_txt = "Bad Request";
-        return NULL;
+        return nullptr;
     }
 
     char secret[128] = {0};
@@ -58,7 +58,7 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
     if (db_status != HTTP_OK) {
         *out_status = db_status;
         *out_status_txt = (db_status == HTTP_NOTFOUND) ? "Not Found" : "Internal Server Error";
-        return NULL;
+        return nullptr;
     }
 
     char uri[1024];
@@ -66,14 +66,14 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
     if (written < 0 || written >= (int)sizeof(uri)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
-        return NULL;
+        return nullptr;
     }
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     if (!qrcode) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
-        return NULL;
+        return nullptr;
     }
 
     struct evbuffer* buf = evbuffer_new();

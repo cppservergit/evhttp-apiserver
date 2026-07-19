@@ -21,7 +21,7 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
     char* ptr = realloc(mem->memory, mem->size + realsize + 1);
     if (!ptr) {
         free(mem->memory);
-        mem->memory = NULL;
+        mem->memory = nullptr;
         return 0; // Out of memory
     }
 

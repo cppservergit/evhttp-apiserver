@@ -16,10 +16,10 @@ void http_client_cleanup_thread(void);
  * \brief Performs an HTTP GET request and parses the response as JSON.
  * \param base_url The base URL (e.g. from config).
  * \param uri The URI to append to the base URL.
- * \param headers Array of HTTP headers, or NULL.
+ * \param headers Array of HTTP headers, or nullptr.
  * \param num_headers Number of headers in the array.
  * \param out_http_code Pointer to store the HTTP status code.
- * \return A newly allocated json_object, or NULL on failure.
+ * \return A newly allocated json_object, or nullptr on failure.
  */
 struct json_object* http_client_get_json(const char* base_url, const char* uri, const char** headers, int num_headers, long* out_http_code);
 
@@ -28,9 +28,9 @@ struct json_object* http_client_get_json(const char* base_url, const char* uri, 
  * \param base_url The base URL (e.g. from config).
  * \param uri The URI to append to the base URL.
  * \param body The POST payload body.
- * \param headers Array of HTTP headers, or NULL.
+ * \param headers Array of HTTP headers, or nullptr.
  * \param num_headers Number of headers in the array.
  * \param out_http_code Pointer to store the HTTP status code.
- * \return A newly allocated json_object, or NULL on failure.
+ * \return A newly allocated json_object, or nullptr on failure.
  */
 struct json_object* http_client_post_json(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code);

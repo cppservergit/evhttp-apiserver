@@ -234,7 +234,7 @@ static const FieldValidator CustomerSchema[] = {
 const ValidationContext CustomerContext = {
     .schema = CustomerSchema,
     .schema_count = sizeof(CustomerSchema) / sizeof(CustomerSchema[0]),
-    .global_validator = NULL
+    .global_validator = nullptr
 };
 
 struct json_object* customer_handler(
@@ -302,8 +302,8 @@ static bool validate_start_before_end(
 }
 
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = NULL},
-    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = NULL}
+    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr},
+    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr}
 };
 
 const ValidationContext SalesContext = {
@@ -463,19 +463,19 @@ void handlers_clear_identity(void) {
 
 const char* get_user(struct evhttp_request* req) {
     (void)req;
-    return tl_username[0] != '\0' ? tl_username : NULL;
+    return tl_username[0] != '\0' ? tl_username : nullptr;
 }
 
 const char* get_session_id(struct evhttp_request* req) {
     (void)req;
-    return tl_session_id[0] != '\0' ? tl_session_id : NULL;
+    return tl_session_id[0] != '\0' ? tl_session_id : nullptr;
 }
 
 // --- Login Handler & Schema ---
 
 static const FieldValidator LoginSchema[] = {
-    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .custom_validator = NULL},
-    {.field_name = "password", .type = TYPE_STRING, .is_required = true, .custom_validator = NULL}
+    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr},
+    {.field_name = "password", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr}
 };
 
 static bool login_global_validator(
@@ -506,6 +506,79 @@ const ValidationContext LoginContext = {
     .global_validator = login_global_validator
 };
 
+static struct json_object* handle_login_success(
+    const char* username, 
+    const char* remote_ip, 
+    int* out_status, 
+    const char** out_status_txt
+) {
+    *out_status = HTTP_OK;
+    *out_status_txt = "OK";
+    
+    char session_id[37];
+    generate_uuidv4(session_id);
+
+    char jwt_secret[MAX_CONFIG_STR];
+    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+    long jwt_timeout = config_get_jwt_timeout_seconds();
+
+    char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
+
+    struct json_object* root = json_object_new_object();
+    if (ticket) {
+        json_object_object_add(root, "token", json_object_new_string(ticket));
+        LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
+        free(ticket);
+    } else {
+        json_object_object_add(root, "error", json_object_new_string("Failed to generate ticket"));
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+        LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
+    }
+
+    return root;
+}
+
+static struct json_object* handle_login_failure(
+    const char* username, 
+    const char* remote_ip, 
+    long http_code, 
+    struct json_object* remote_response,
+    int* out_status, 
+    const char** out_status_txt
+) {
+    *out_status = (int)http_code;
+    *out_status_txt = "Unauthorized";
+    if (http_code == 0) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
+
+    LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
+
+    struct json_object* safe_response = json_object_new_object();
+    if (remote_response) {
+        const char* final_error = nullptr;
+        const char* desc = json_get_string(remote_response, "description");
+        const char* err_msg = json_get_string(remote_response, "error");
+        
+        if (desc) {
+            final_error = desc;
+        } else if (err_msg) {
+            final_error = err_msg;
+        } else {
+            final_error = "Unknown provider error";
+        }
+        
+        json_object_object_add(safe_response, "error", json_object_new_string(final_error));
+        json_object_put(remote_response);
+    } else {
+        json_object_object_add(safe_response, "error", json_object_new_string("Provider unreachable"));
+    }
+    
+    return safe_response;
+}
+
 struct json_object* login_handler(
     struct evhttp_request* req, 
     struct json_object* body, 
@@ -522,63 +595,10 @@ struct json_object* login_handler(
     struct json_object* remote_response = login_service_authenticate(username, password, &http_code);
 
     if (http_code == 200) {
-        *out_status = HTTP_OK;
-        *out_status_txt = "OK";
-        
-        char session_id[37];
-        generate_uuidv4(session_id);
-
-        char jwt_secret[MAX_CONFIG_STR];
-        config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
-        long jwt_timeout = config_get_jwt_timeout_seconds();
-
-        char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
-
-        struct json_object* root = json_object_new_object();
-        if (ticket) {
-            json_object_object_add(root, "token", json_object_new_string(ticket));
-            LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
-            free(ticket);
-        } else {
-            json_object_object_add(root, "error", json_object_new_string("Failed to generate ticket"));
-            *out_status = HTTP_INTERNAL;
-            *out_status_txt = "Internal Server Error";
-            LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
-        }
-
         if (remote_response) json_object_put(remote_response);
-        return root;
+        return handle_login_success(username, remote_ip, out_status, out_status_txt);
     } else {
-        *out_status = (int)http_code;
-        *out_status_txt = "Unauthorized";
-        if (http_code == 0) {
-            *out_status = HTTP_INTERNAL;
-            *out_status_txt = "Internal Server Error";
-        }
-
-        LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
-
-        struct json_object* safe_response = json_object_new_object();
-        if (remote_response) {
-            const char* final_error = NULL;
-            const char* desc = json_get_string(remote_response, "description");
-            const char* err_msg = json_get_string(remote_response, "error");
-            
-            if (desc) {
-                final_error = desc;
-            } else if (err_msg) {
-                final_error = err_msg;
-            } else {
-                final_error = "Unknown provider error";
-            }
-            
-            json_object_object_add(safe_response, "error", json_object_new_string(final_error));
-            json_object_put(remote_response);
-        } else {
-            json_object_object_add(safe_response, "error", json_object_new_string("Provider unreachable"));
-        }
-        
-        return safe_response;
+        return handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_status_txt);
     }
 }
 

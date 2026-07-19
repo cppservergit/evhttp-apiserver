@@ -17,27 +17,27 @@ static bool validate_positive_amount(const ValidationContext *ctx, const json_ob
 
 static bool validate_start_before_end(const ValidationContext *ctx, const json_object *root, const char *name, char *err_buf, size_t err_len) {
     (void)ctx; (void)name;
-    struct json_object *start_obj = NULL;
-    struct json_object *end_obj = NULL;
+    struct json_object *start_obj = nullptr;
+    struct json_object *end_obj = nullptr;
 
     json_object_object_get_ex((struct json_object*)root, "start_date", &start_obj);
     json_object_object_get_ex((struct json_object*)root, "end_date", &end_obj);
 
     if (start_obj && end_obj) {
         if (strcmp(json_object_get_string(start_obj), json_object_get_string(end_obj)) >= 0) {
-            return emit_error(err_buf, err_len, ERR_START_AFTER_END, NULL);
+            return emit_error(err_buf, err_len, ERR_START_AFTER_END, nullptr);
         }
     }
     return true;
 }
 
 static const FieldValidator TestSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE,   .is_required = true,  .custom_validator = NULL},
-    {.field_name = "end_date",   .type = TYPE_DATE,   .is_required = true,  .custom_validator = NULL},
+    {.field_name = "start_date", .type = TYPE_DATE,   .is_required = true,  .custom_validator = nullptr},
+    {.field_name = "end_date",   .type = TYPE_DATE,   .is_required = true,  .custom_validator = nullptr},
     {.field_name = "amount",     .type = TYPE_DOUBLE, .is_required = true,  .custom_validator = validate_positive_amount},
-    {.field_name = "count",      .type = TYPE_INT,    .is_required = false, .custom_validator = NULL},
-    {.field_name = "name",       .type = TYPE_STRING, .is_required = true,  .custom_validator = NULL},
-    {.field_name = "opt_string", .type = TYPE_STRING, .is_required = false, .custom_validator = NULL},
+    {.field_name = "count",      .type = TYPE_INT,    .is_required = false, .custom_validator = nullptr},
+    {.field_name = "name",       .type = TYPE_STRING, .is_required = true,  .custom_validator = nullptr},
+    {.field_name = "opt_string", .type = TYPE_STRING, .is_required = false, .custom_validator = nullptr},
 };
 
 static const ValidationContext TestContext = {
@@ -50,7 +50,7 @@ static void test_coverage(void) {
     char err_buf[256];
     
     // Test emit_error null safety
-    assert(emit_error(NULL, 100, ERR_REQUIRED, "x") == false);
+    assert(emit_error(nullptr, 100, ERR_REQUIRED, "x") == false);
     assert(emit_error(err_buf, 0, ERR_REQUIRED, "x") == false);
     
     // Test emit_error unknown code
@@ -58,7 +58,7 @@ static void test_coverage(void) {
     assert(emit_error(err_buf, sizeof(err_buf), (ErrorCode)999, "x") == false);
 
     // Test validate_json null safety
-    assert(validate_json(NULL, NULL, NULL, 0) == false);
+    assert(validate_json(nullptr, nullptr, nullptr, 0) == false);
     struct json_object* empty_obj = json_object_new_object();
     assert(validate_json(&TestContext, empty_obj, err_buf, sizeof(err_buf)) == false);
 
@@ -74,7 +74,7 @@ static void test_coverage(void) {
     json_object_object_add(root, "d", json_object_new_double(3.14));
     
     assert(strcmp(json_get_string(root, "str"), "hello") == 0);
-    assert(json_get_string(root, "missing") == NULL);
+    assert(json_get_string(root, "missing") == nullptr);
     
     assert(json_get_int(root, "i") == 42);
     assert(json_get_int(root, "missing") == 0);
@@ -209,12 +209,12 @@ static void test_coverage(void) {
 
     // Test unknown type schema definition (trigger ERR_UNKNOWN_TYPE)
     FieldValidator bad_schema[] = {
-        {.field_name = "start_date", .type = (FieldType)999, .is_required = true, .custom_validator = NULL}
+        {.field_name = "start_date", .type = (FieldType)999, .is_required = true, .custom_validator = nullptr}
     };
     ValidationContext bad_ctx = {
         .schema = bad_schema,
         .schema_count = 1,
-        .global_validator = NULL
+        .global_validator = nullptr
     };
     root = json_tokener_parse("{\"start_date\":\"2000-01-01\"}");
     assert(validate_json(&bad_ctx, root, err_buf, sizeof(err_buf)) == false);

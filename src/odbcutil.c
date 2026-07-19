@@ -34,7 +34,7 @@ void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* c
 SQLHDBC odbcutil_connect(void) {
     if (tl_hdbc != SQL_NULL_HDBC) {
         SQLUINTEGER dead = SQL_CD_FALSE;
-        SQLGetConnectAttr(tl_hdbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, NULL);
+        SQLGetConnectAttr(tl_hdbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, nullptr);
         if (dead == SQL_CD_FALSE) {
             return tl_hdbc;
         }
@@ -54,7 +54,7 @@ SQLHDBC odbcutil_connect(void) {
     
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
     SQLSMALLINT out_conn_len;
-    SQLRETURN ret = SQLDriverConnect(tl_hdbc, NULL, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT);
+    SQLRETURN ret = SQLDriverConnect(tl_hdbc, nullptr, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT);
     
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         odbcutil_log_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");

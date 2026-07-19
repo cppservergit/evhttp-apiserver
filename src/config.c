@@ -97,7 +97,7 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     else g_trust_proxy_ip[0] = '\0';
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
-        g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), NULL, 10);
+        g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), nullptr, 10);
     }
 
     

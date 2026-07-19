@@ -9,7 +9,7 @@
 /** 
  * \brief Decodes the base64 payload from a JWT token.
  * \param jwt The raw JWT string.
- * \return A malloc'd string containing the payload (must be freed), or NULL on failure.
+ * \return A malloc'd string containing the payload (must be freed), or nullptr on failure.
  */
 char* jwt_decode_payload(const char* jwt);
 
@@ -29,7 +29,7 @@ void generate_uuidv4(char out[37]);
  * \param session_id The session ID to include in the payload.
  * \param secret_hex The 64-character hex-encoded secret key.
  * \param timeout_seconds The number of seconds until the token expires.
- * \return A newly allocated string containing the JWT, or NULL on failure. Caller must free.
+ * \return A newly allocated string containing the JWT, or nullptr on failure. Caller must free.
  */
 char* jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds);
 

@@ -141,7 +141,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
 
     for (size_t i = 0; i < ctx->schema_count; i++) {
         const FieldValidator *field = &ctx->schema[i];
-        json_object *field_obj = NULL;
+        json_object *field_obj = nullptr;
 
         bool exists = json_object_object_get_ex(root, field->field_name, &field_obj);
 
@@ -171,7 +171,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
         }
 
         if (field->type >= TYPE_MAX_TYPES || !TYPE_VALIDATOR_MAP[field->type]) {
-            return emit_error(err_buf, err_len, ERR_UNKNOWN_TYPE, NULL);
+            return emit_error(err_buf, err_len, ERR_UNKNOWN_TYPE, nullptr);
         }
 
         if (!TYPE_VALIDATOR_MAP[field->type](field_obj, field->field_name, err_buf, err_len)) {
@@ -183,7 +183,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
         }
     }
 
-    if (ctx->global_validator && !ctx->global_validator(ctx, root, NULL, err_buf, err_len)) {
+    if (ctx->global_validator && !ctx->global_validator(ctx, root, nullptr, err_buf, err_len)) {
         return false;
     }
 

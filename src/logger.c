@@ -11,14 +11,14 @@ static const char* level_strings[] = {
 };
 
 static _Thread_local char tl_logger_tid[32] = {0};
-static _Thread_local const char* tl_request_id = NULL;
+static _Thread_local const char* tl_request_id = nullptr;
 
 void logger_set_request_id(const char* req_id) {
     tl_request_id = req_id;
 }
 
 void logger_clear_request_id(void) {
-    tl_request_id = NULL;
+    tl_request_id = nullptr;
 }
 
 // Stack-based JSON escaper (Zero Malloc, fully memory safe)
