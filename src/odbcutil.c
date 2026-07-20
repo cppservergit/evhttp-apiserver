@@ -111,8 +111,19 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
         for (SQLULEN i = 0; i < rows_fetched; ++i) {
             if (row_status[i] != SQL_ROW_DELETED && row_status[i] != SQL_ROW_ERROR) {
                 if (indicators[i] != SQL_NULL_DATA) {
-                    size_t len = (indicators[i] == SQL_NTS) ? strlen(chunks[i]) : (size_t)indicators[i];
-                    if (len > sizeof(chunks[i])) len = strlen(chunks[i]);
+                    size_t len;
+                    if (indicators[i] == SQL_NTS) {
+                        len = strnlen(chunks[i], sizeof(chunks[i]) - 1);
+                    } else {
+                        len = (size_t)indicators[i];
+                    }
+                    
+                    if (len > sizeof(chunks[i]) - 1) {
+                        len = sizeof(chunks[i]) - 1;
+                        LOG_WARN("ODBC fetch truncated row in %s. Expected: %zu, Max Buffer: %zu", 
+                                 func_name, (size_t)indicators[i], sizeof(chunks[i]));
+                    }
+                    
                     evbuffer_add(out_buf, chunks[i], len);
                 }
             }
