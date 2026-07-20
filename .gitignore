@@ -22,3 +22,4 @@ test/*
 !test/Makefile
 !test/validation-test.c
 !test/test.sh
+concurrency_analysis.md

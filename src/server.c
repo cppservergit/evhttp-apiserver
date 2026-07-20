@@ -357,6 +357,9 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
 }
 
 static void cleanup_cancelled_task(http_task_t* task) {
+    if (task->req) {
+        evhttp_request_free(task->req);
+    }
     if (task->parsed_body) json_object_put(task->parsed_body);
     task_pool_free(task);
 }
@@ -522,6 +525,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     task->reactor_id = tl_reactor_id;
     atomic_init(&task->cancelled, false);
     
+    evhttp_request_own(req);
     evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);
     
     if (!worker_pool_enqueue(task)) {

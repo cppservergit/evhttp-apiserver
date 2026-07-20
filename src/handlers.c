@@ -17,6 +17,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sodium.h>
+#include "json_util.h"
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
@@ -68,14 +69,21 @@ void version_handler(struct evhttp_request* req, struct json_object* body, void*
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    char buf[512];
+    char esc_version[64], esc_compiler[256], esc_date[128], esc_hostname[256], esc_os[256];
+    json_encode_string(get_server_version(), esc_version, sizeof(esc_version));
+    json_encode_string(__VERSION__, esc_compiler, sizeof(esc_compiler));
+    json_encode_string(__DATE__ " " __TIME__, esc_date, sizeof(esc_date));
+    json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
+    json_encode_string(server_get_os_version(), esc_os, sizeof(esc_os));
+
+    char buf[1024];
     int len = snprintf(buf, sizeof(buf),
         "{\"version\":\"%s\",\"compiler\":\"%s\",\"compile_date\":\"%s\",\"hostname\":\"%s\",\"os_version\":\"%s\"}",
-        get_server_version(),
-        __VERSION__,
-        __DATE__ " " __TIME__,
-        server_get_hostname(),
-        server_get_os_version()
+        esc_version,
+        esc_compiler,
+        esc_date,
+        esc_hostname,
+        esc_os
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
@@ -100,6 +108,10 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
     
+    char esc_start[128], esc_hostname[256];
+    json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
+    json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
+
     char buf[1024];
     int len = snprintf(buf, sizeof(buf),
         "{"
@@ -112,14 +124,14 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
         "\"memory_usage_percentage\":%.2f,"
         "\"hostname\":\"%s\""
         "}",
-        server_get_start_time(),
+        esc_start,
         (uint64_t)stats.total_requests,
         (uint64_t)stats.avg_time_fast_ms,
         (uint64_t)stats.avg_time_slow_ms,
         total_ram_kb,
         mem_usage_kb,
         mem_usage_pct,
-        server_get_hostname()
+        esc_hostname
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
