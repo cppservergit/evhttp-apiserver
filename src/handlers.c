@@ -503,16 +503,21 @@ const char* extract_client_ip(struct evhttp_request* req) {
             strncpy(client_ip_buf, x_forwarded_for, sizeof(client_ip_buf) - 1);
             client_ip_buf[sizeof(client_ip_buf) - 1] = '\0';
             
-            // Take the first IP in the comma-separated list
-            char *comma = strchr(client_ip_buf, ',');
-            if (comma) *comma = '\0';
+            // Take the LAST IP in the comma-separated list (the one appended by our trusted proxy)
+            char *comma = strrchr(client_ip_buf, ',');
+            char *ip_start = comma ? (comma + 1) : client_ip_buf;
+            
+            // Trim left whitespace
+            while (isspace((unsigned char)*ip_start)) {
+                ip_start++;
+            }
             
             // Trim right whitespace if any
-            int len = strlen(client_ip_buf);
-            while (len > 0 && isspace((unsigned char)client_ip_buf[len - 1])) {
-                client_ip_buf[--len] = '\0';
+            int len = strlen(ip_start);
+            while (len > 0 && isspace((unsigned char)ip_start[len - 1])) {
+                ip_start[--len] = '\0';
             }
-            return client_ip_buf;
+            return ip_start;
         }
     }
     
