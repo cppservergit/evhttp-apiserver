@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "json_util.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -21,31 +22,7 @@ void logger_clear_request_id(void) {
     tl_request_id = nullptr;
 }
 
-// Stack-based JSON escaper (Zero Malloc, fully memory safe)
-static void escape_json_string(const char* src, char* dest, size_t dest_size) {
-    size_t i = 0, j = 0;
-    while (src[i] && j < dest_size - 7) { 
-        switch (src[i]) {
-            case '"':  dest[j++] = '\\'; dest[j++] = '"'; break;
-            case '\\': dest[j++] = '\\'; dest[j++] = '\\'; break;
-            case '\n': dest[j++] = '\\'; dest[j++] = 'n'; break;
-            case '\r': dest[j++] = '\\'; dest[j++] = 'r'; break;
-            case '\t': dest[j++] = '\\'; dest[j++] = 't'; break;
-            default:
-                if ((unsigned char)src[i] < 0x20) {
-                    int written = snprintf(&dest[j], dest_size - j, "\\u%04x", (unsigned char)src[i]);
-                    if (written > 0 && written < (int)(dest_size - j)) {
-                        j += (size_t)written;
-                    }
-                } else {
-                    dest[j++] = src[i];
-                }
-                break;
-        }
-        i++;
-    }
-    dest[j] = '\0';
-}
+
 
 void logger_log(LogLevel level, const char* format, ...) {
     if (tl_logger_tid[0] == '\0') {
@@ -70,7 +47,7 @@ void logger_log(LogLevel level, const char* format, ...) {
     // Worst-case JSON escape expansion is 6x (\uXXXX for every char). 
     // msg_buf is 2048 bytes, so we need 2048 * 6 = 12288 bytes.
     char escaped_msg[12288];
-    escape_json_string(msg_buf, escaped_msg, sizeof(escaped_msg));
+    json_encode_string(msg_buf, escaped_msg, sizeof(escaped_msg));
 
     char out_buf[12800];
     int len;
