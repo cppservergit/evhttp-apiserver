@@ -361,6 +361,7 @@ static void cleanup_cancelled_task(http_task_t* task) {
         evhttp_request_free(task->req);
     }
     if (task->parsed_body) json_object_put(task->parsed_body);
+    if (task->worker_buf) evbuffer_free(task->worker_buf);
     task_pool_free(task);
 }
 
@@ -385,6 +386,10 @@ static void process_completed_task(http_task_t* task) {
     }
     
     struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
+    
+    if (task->worker_buf && evbuffer_get_length(task->worker_buf) > 0) {
+        evbuffer_add_buffer(out_buf, task->worker_buf);
+    }
     
     if (evbuffer_get_length(out_buf) > 0) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
@@ -415,6 +420,7 @@ static void process_completed_task(http_task_t* task) {
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
+    if (task->worker_buf) evbuffer_free(task->worker_buf);
     logger_clear_request_id();
     task_pool_free(task);
 }
@@ -518,6 +524,15 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     }
     
     http_task_t* task = task_pool_alloc();
+    if (!task) {
+        // Backpressure limit reached, task pool is exhausted.
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Server Too Busy\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
+        if (parsed_body) json_object_put(parsed_body);
+        return;
+    }
     task->req = req;
     task->parsed_body = parsed_body;
     task->middleware_ctx = ctx;

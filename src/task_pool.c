@@ -55,8 +55,8 @@ http_task_t* task_pool_alloc(void) {
     }
     pthread_mutex_unlock(&g_pool_mutex);
     
-    // Fallback allocation if pool is exhausted
-    return calloc(1, sizeof(http_task_t));
+    // Strict backpressure: return nullptr if pool is exhausted
+    return nullptr;
 }
 
 void task_pool_free(http_task_t* task) {
