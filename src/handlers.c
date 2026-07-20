@@ -230,7 +230,14 @@ void rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void
 
 // --- Customer Handler & Schema ---
 
-static bool validate_alpha_id(
+/**
+ * customer_id_validator: Custom field validator for customer IDs.
+ * 
+ * Enforces business logic requiring customer IDs to be exactly 5 alphabetical 
+ * characters long (e.g. "ALFKI"). This guarantees database query safety and 
+ * data integrity before invoking the stored procedure.
+ */
+static bool customer_id_validator(
     [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
     [[maybe_unused]] const char *name, 
@@ -250,7 +257,7 @@ static bool validate_alpha_id(
 }
 
 static const FieldValidator CustomerSchema[] = {
-    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = validate_alpha_id}
+    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
 };
 
 const ValidationContext CustomerContext = {

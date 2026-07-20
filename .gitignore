@@ -14,12 +14,11 @@ apiserver
 *.bak
 *~
 .DS_Store
-claude.md
-code_review_findings.md
+c*.md
+C*.md
 
 # Test directory artifacts
 test/*
 !test/Makefile
 !test/validation-test.c
 !test/test.sh
-concurrency_analysis.md
