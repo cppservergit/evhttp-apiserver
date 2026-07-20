@@ -8,8 +8,7 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <linux/limits.h>
-
-static pthread_rwlock_t g_config_lock = PTHREAD_RWLOCK_INITIALIZER;
+#include <stdatomic.h>
 
 static char g_odbc_conn_str[MAX_CONFIG_STR] = {0};
 static char g_api_url[MAX_CONFIG_STR] = {0};
@@ -23,7 +22,7 @@ static char g_telemetry_api_key[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
 static char g_trust_proxy_ip[MAX_CONFIG_STR] = {0};
 static char g_allowed_origin[MAX_CONFIG_STR] = {0};
-static bool g_access_log = true;
+static _Atomic bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
@@ -78,49 +77,49 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
 }
 
 static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
-    pthread_rwlock_wrlock(&g_config_lock);
-    
-    if (getenv("ODBC_CONN_STR")) snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
-    if (getenv("API_URL")) snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
-    if (getenv("API_USER")) snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
-    if (getenv("API_PASS")) snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
-    
-    if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
-    if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
-    if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
-    if (getenv("REMOTE_API_KEY")) snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
-    else g_remote_api_key[0] = '\0';
-    
-    if (getenv("TELEMETRY_API_KEY")) snprintf(g_telemetry_api_key, sizeof(g_telemetry_api_key), "%s", getenv("TELEMETRY_API_KEY"));
-    else g_telemetry_api_key[0] = '\0';
-    
-    if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
-    else g_trust_proxy_ip[0] = '\0';
-    
-    if (getenv("CORS_ALLOWED_ORIGINS")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
-    else g_allowed_origin[0] = '\0';
-    
-    if (getenv("JWT_TIMEOUT_SECONDS")) {
-        g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), nullptr, 10);
-    }
-
-    
     static bool is_first_load = true;
-    if (!is_first_load && g_num_threads != num_threads && (g_num_threads != 0 || num_threads != 0)) {
-        LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
-    }
 
-    g_access_log = access_log;
-    g_num_threads = num_threads;
-    g_max_queue_size = max_queue;
-    g_fast_pool_percentage = fast_pool;
-    
-    bool was_first = is_first_load;
-    is_first_load = false;
-    pthread_rwlock_unlock(&g_config_lock);
-    
-    if (was_first) LOG_INFO("Configuration loaded successfully on startup.");
-    else LOG_AUDIT("Configuration hot-reloaded successfully.");
+    if (is_first_load) {
+        if (getenv("ODBC_CONN_STR")) snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
+        if (getenv("API_URL")) snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
+        if (getenv("API_USER")) snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
+        if (getenv("API_PASS")) snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
+        
+        if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
+        if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
+        if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+        if (getenv("REMOTE_API_KEY")) snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
+        else g_remote_api_key[0] = '\0';
+        
+        if (getenv("TELEMETRY_API_KEY")) snprintf(g_telemetry_api_key, sizeof(g_telemetry_api_key), "%s", getenv("TELEMETRY_API_KEY"));
+        else g_telemetry_api_key[0] = '\0';
+        
+        if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
+        else g_trust_proxy_ip[0] = '\0';
+        
+        if (getenv("CORS_ALLOWED_ORIGINS")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
+        else g_allowed_origin[0] = '\0';
+        
+        if (getenv("JWT_TIMEOUT_SECONDS")) {
+            g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), nullptr, 10);
+        }
+
+        g_num_threads = num_threads;
+        g_max_queue_size = max_queue;
+        g_fast_pool_percentage = fast_pool;
+        
+        atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
+        
+        is_first_load = false;
+        LOG_INFO("Configuration loaded successfully on startup.");
+    } else {
+        if (g_num_threads != num_threads && (g_num_threads != 0 || num_threads != 0)) {
+            LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
+        }
+        
+        atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
+        LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG was updated.");
+    }
 }
 
 void config_reload(void) {
@@ -213,7 +212,7 @@ long config_get_jwt_timeout_seconds(void) {
 }
 
 bool config_get_access_log(void) {
-    return g_access_log;
+    return atomic_load_explicit(&g_access_log, memory_order_relaxed);
 }
 
 size_t config_get_num_threads(void) {
