@@ -81,7 +81,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
 
     chunk->memory = malloc(1);
     if (!chunk->memory) {
-        LOG_FATAL("Out of memory allocating initial chunk memory in do_http_request");
+        LOG_ERROR("Out of memory allocating initial chunk memory in do_http_request");
         return nullptr;
     }
     chunk->size = 0;

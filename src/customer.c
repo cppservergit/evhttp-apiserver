@@ -39,7 +39,7 @@ static struct jwt_cache* get_jwt_cache(void) {
 #pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
         cache = calloc(1, sizeof(struct jwt_cache));
         if (!cache) {
-            LOG_FATAL("Out of memory allocating jwt_cache");
+            LOG_ERROR("Out of memory allocating jwt_cache");
             return nullptr;
         }
         pthread_setspecific(g_jwt_tls_key, cache);
@@ -82,7 +82,7 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
                 time_t exp = jwt_get_expiration(id_token);
                 cache->expires_at = exp > 0 ? exp : time(nullptr) + 180;
             } else {
-                LOG_FATAL("Out of memory in strdup for id_token");
+                LOG_ERROR("Out of memory in strdup for id_token");
             }
         }
     }
