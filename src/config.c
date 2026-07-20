@@ -234,23 +234,20 @@ size_t config_get_fast_pool_percentage(void) {
 }
 
 bool config_is_origin_allowed(const char* origin) {
-    if (!origin) return false;
+    if (!origin || g_allowed_origin[0] == '\0') return false;
+    
     bool allowed = false;
-    if (g_allowed_origin[0] == '\0' || strcmp(g_allowed_origin, "*") == 0) {
-        allowed = true;
-    } else {
-        char copy[MAX_CONFIG_STR];
-        snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
-        char* saveptr = nullptr;
-        char* token = strtok_r(copy, ",", &saveptr);
-        while (token != nullptr) {
-            while (*token == ' ') token++;
-            if (strcmp(token, origin) == 0) {
-                allowed = true;
-                break;
-            }
-            token = strtok_r(nullptr, ",", &saveptr);
+    char copy[MAX_CONFIG_STR];
+    snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
+    char* saveptr = nullptr;
+    char* token = strtok_r(copy, ",", &saveptr);
+    while (token != nullptr) {
+        while (*token == ' ') token++;
+        if (strcmp(token, origin) == 0) {
+            allowed = true;
+            break;
         }
+        token = strtok_r(nullptr, ",", &saveptr);
     }
     return allowed;
 }

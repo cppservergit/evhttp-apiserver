@@ -104,6 +104,11 @@ API_PASS=your_api_pass
 REMOTE_API_KEY=your_api_key
 TELEMETRY_API_KEY=your_telemetry_key
 
+# security & cors
+# Wildcard '*' is not allowed. You must explicitly list origins separated by comma.
+# If omitted, all cross-origin requests are rejected.
+CORS_ALLOWED_ORIGINS=https://myapp.com,https://dev.myapp.com
+
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
 
