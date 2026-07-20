@@ -22,6 +22,7 @@ typedef struct http_task_s {
     // Output fields
     int status_code;
     const char* status_txt;
+    struct evbuffer* worker_buf;
 
     // Intrusive queue pointer (Zero-allocation queues)
     struct http_task_s* next;

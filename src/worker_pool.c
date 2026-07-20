@@ -108,8 +108,8 @@ static void* worker_thread_main(void* arg) {
             
             if (is_authorized) {
                 if (ctx && ctx->handler) {
-                    struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
-                    ctx->handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, out_buf);
+                    task->worker_buf = evbuffer_new();
+                    ctx->handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
                 }
             }
             
