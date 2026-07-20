@@ -23,6 +23,10 @@ typedef struct http_task_s {
     int status_code;
     const char* status_txt;
     struct evbuffer* worker_buf;
+    
+    // Authenticated identity
+    char username[33];
+    char session_id[37];
 
     // Intrusive queue pointer (Zero-allocation queues)
     struct http_task_s* next;
