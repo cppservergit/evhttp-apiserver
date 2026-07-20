@@ -20,7 +20,6 @@ typedef struct http_task_s {
     _Atomic bool cancelled;
     
     // Output fields
-    struct evbuffer* response_buf;
     int status_code;
     const char* status_txt;
 

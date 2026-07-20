@@ -5,4 +5,4 @@
 #include <json-c/json.h>
 
 /** \brief Generates an SVG QR code for TOTP authenticator registration. */
-struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char** out_status_txt);
+void totp_generate_svg(const char* user, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);

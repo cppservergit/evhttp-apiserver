@@ -45,11 +45,11 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     return status;
 }
 
-struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char** out_status_txt) {
+void totp_generate_svg(const char* user, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     if (!user) {
         *out_status = HTTP_BADREQUEST;
         *out_status_txt = "Bad Request";
-        return nullptr;
+        return;
     }
 
     char secret[128] = {0};
@@ -58,45 +58,44 @@ struct evbuffer* totp_generate_svg(const char* user, int* out_status, const char
     if (db_status != HTTP_OK) {
         *out_status = db_status;
         *out_status_txt = (db_status == HTTP_NOTFOUND) ? "Not Found" : "Internal Server Error";
-        return nullptr;
+        return;
     }
 
-    char uri[1024];
-    int written = snprintf(uri, sizeof(uri), "otpauth://totp/APIServer2:%s?secret=%s&issuer=APIServer2", user, secret);
-    if (written < 0 || written >= (int)sizeof(uri)) {
-        *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
-        return nullptr;
-    }
+    char uri[256];
+    snprintf(uri, sizeof(uri), "otpauth://totp/Basica:%s?secret=%s&issuer=Basica", user, secret);
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     if (!qrcode) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
-        return nullptr;
+        return;
     }
 
-    struct evbuffer* buf = evbuffer_new();
+    char svg_start[256];
+    int len = snprintf(svg_start, sizeof(svg_start), 
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 %d %d\">\n"
+        "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n"
+        "<path d=\"", 
+        qrcode->width + 2, qrcode->width + 2,
+        qrcode->width + 2, qrcode->width + 2);
+    evbuffer_add(out_buf, svg_start, len < (int)sizeof(svg_start) ? (size_t)len : sizeof(svg_start) - 1);
     
-    evbuffer_add_printf(buf, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    evbuffer_add_printf(buf, "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 %d %d\">\n", qrcode->width + 2, qrcode->width + 2);
-    evbuffer_add_printf(buf, "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", qrcode->width + 2, qrcode->width + 2);
-    evbuffer_add_printf(buf, "<path d=\"");
-    
+    char path_buf[128];
     for (int y = 0; y < qrcode->width; y++) {
         for (int x = 0; x < qrcode->width; x++) {
             if (qrcode->data[y * qrcode->width + x] & 1) {
-                evbuffer_add_printf(buf, "M%d,%dh1v1h-1z ", x + 1, y + 1);
+                len = snprintf(path_buf, sizeof(path_buf), "M%d,%dh1v1h-1z ", x + 1, y + 1);
+                evbuffer_add(out_buf, path_buf, len < (int)sizeof(path_buf) ? (size_t)len : sizeof(path_buf) - 1);
             }
         }
     }
     
-    evbuffer_add_printf(buf, "\" fill=\"black\"/>\n");
-    evbuffer_add_printf(buf, "</svg>\n");
+    const char* svg_end = "\" fill=\"black\"/>\n</svg>\n";
+    evbuffer_add(out_buf, svg_end, strlen(svg_end));
 
     QRcode_free(qrcode);
 
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    return buf;
 }

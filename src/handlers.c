@@ -25,7 +25,8 @@ void ping_handler(struct evhttp_request* req, struct json_object* body, void* ar
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    evbuffer_add_printf(out_buf, "{\"status\":\"OK\"}");
+    const char* msg = "{\"status\":\"OK\"}";
+    evbuffer_add(out_buf, msg, strlen(msg));
 }
 
 static bool validate_telemetry_api_key(struct evhttp_request* req) {
@@ -58,7 +59,8 @@ void version_handler(struct evhttp_request* req, struct json_object* body, void*
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    evbuffer_add_printf(out_buf,
+    char buf[512];
+    int len = snprintf(buf, sizeof(buf),
         "{\"version\":\"%s\",\"compiler\":\"%s\",\"compile_date\":\"%s\",\"hostname\":\"%s\",\"os_version\":\"%s\"}",
         get_server_version(),
         __VERSION__,
@@ -66,6 +68,7 @@ void version_handler(struct evhttp_request* req, struct json_object* body, void*
         server_get_hostname(),
         server_get_os_version()
     );
+    evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
 void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
@@ -88,7 +91,8 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
     
-    evbuffer_add_printf(out_buf,
+    char buf[1024];
+    int len = snprintf(buf, sizeof(buf),
         "{"
         "\"start_time\":\"%s\","
         "\"total_requests\":%" PRIu64 ","
@@ -108,6 +112,7 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
         mem_usage_pct,
         server_get_hostname()
     );
+    evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
 void metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
@@ -129,7 +134,8 @@ void metrics_handler(struct evhttp_request* req, struct json_object* body, void*
     uint64_t mem_usage_kb = 0;
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     
-    evbuffer_add_printf(out_buf,
+    char buf[2048];
+    int len = snprintf(buf, sizeof(buf),
         "# HELP microservice_requests_total Total number of processed requests\n"
         "# TYPE microservice_requests_total counter\n"
         "microservice_requests_total %lu\n\n"
@@ -163,6 +169,7 @@ void metrics_handler(struct evhttp_request* req, struct json_object* body, void*
         mem_usage_kb * 1024,
         total_ram_kb * 1024
     );
+    evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
     
 }
 
@@ -187,7 +194,9 @@ void rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void
     long http_code = 0;
     struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
 
-    evbuffer_add_printf(out_buf, "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    char prefix[128];
+    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
     if (remote_json) {
         const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
         evbuffer_add(out_buf, json_str, strlen(json_str));
@@ -253,7 +262,9 @@ void customer_handler(
     long http_code = 0;
     struct json_object* remote_json = customer_service_get_info(customer_id, &http_code);
     
-    evbuffer_add_printf(out_buf, "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    char prefix[128];
+    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
     if (remote_json) {
         const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
         evbuffer_add(out_buf, json_str, strlen(json_str));
@@ -363,12 +374,10 @@ void getqr_handler(
 ) {
     const char* user = get_user(req);
     
-    struct evbuffer* buf = totp_generate_svg(user, out_status, out_status_txt);
-    if (buf) {
+    totp_generate_svg(user, out_status, out_status_txt, out_buf);
+    if (*out_status == HTTP_OK) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
         evhttp_add_header(headers, "Content-Type", "image/svg+xml");
-        evbuffer_add_buffer(out_buf, buf);
-        evbuffer_free(buf);
     }
 }
 
@@ -422,7 +431,9 @@ void uuid_handler(
     char uuid_str[37];
     generate_uuidv4(uuid_str);
     
-    evbuffer_add_printf(out_buf, "{\"uuid\":\"%s\"}", uuid_str);
+    char buf[128];
+    int len = snprintf(buf, sizeof(buf), "{\"uuid\":\"%s\"}", uuid_str);
+    evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
 // --- Shared Utilities ---
@@ -555,11 +566,14 @@ static void handle_login_success(
     char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
 
     if (ticket) {
-        evbuffer_add_printf(out_buf, "{\"token\":\"%s\"}", ticket);
+        char buf[512];
+        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", ticket);
+        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
         free(ticket);
     } else {
-        evbuffer_add_printf(out_buf, "{\"error\":\"Failed to generate ticket\"}");
+        const char* msg = "{\"error\":\"Failed to generate ticket\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
         LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
@@ -597,10 +611,13 @@ static void handle_login_failure(
             final_error = "Unknown provider error";
         }
         
-        evbuffer_add_printf(out_buf, "{\"error\":\"%s\"}", final_error);
+        char buf[256];
+        int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", final_error);
+        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         json_object_put(remote_response);
     } else {
-        evbuffer_add_printf(out_buf, "{\"error\":\"Provider unreachable\"}");
+        const char* msg = "{\"error\":\"Provider unreachable\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
     }
 }
 

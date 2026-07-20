@@ -357,7 +357,6 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
 }
 
 static void cleanup_cancelled_task(http_task_t* task) {
-    if (task->response_buf) evbuffer_free(task->response_buf);
     if (task->parsed_body) json_object_put(task->parsed_body);
     task_pool_free(task);
 }
@@ -382,30 +381,34 @@ static void process_completed_task(http_task_t* task) {
         LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
     }
     
-    if (task->response_buf && evbuffer_get_length(task->response_buf) > 0) {
+    struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
+    
+    if (evbuffer_get_length(out_buf) > 0) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
         if (!evhttp_find_header(headers, "Content-Type")) {
             evhttp_add_header(headers, "Content-Type", "application/json");
         }
-        evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_buf);
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
     } else {
         if (task->status_code >= 400) {
-            struct evbuffer* err_buf = evbuffer_new();
-            if (task->status_code != HTTP_INTERNAL) {
-                if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
-                evhttp_send_reply(task->req, task->status_code, task->status_txt, err_buf);
-            } else {
-                if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Internal Server Error\"}");
-                evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", err_buf);
+            struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+            if (!evhttp_find_header(headers, "Content-Type")) {
+                evhttp_add_header(headers, "Content-Type", "application/json");
             }
-            if (err_buf) evbuffer_free(err_buf);
+            
+            char err_str[256];
+            if (task->status_code != HTTP_INTERNAL) {
+                int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
+                evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
+                evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+            } else {
+                int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"Internal Server Error\"}");
+                evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
+                evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", nullptr);
+            }
         } else {
             evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
         }
-    }
-    
-    if (task->response_buf) {
-        evbuffer_free(task->response_buf);
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
