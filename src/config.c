@@ -97,7 +97,7 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
     else g_trust_proxy_ip[0] = '\0';
     
-    if (getenv("ALLOWED_ORIGIN")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("ALLOWED_ORIGIN"));
+    if (getenv("CORS_ALLOWED_ORIGINS")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
     else g_allowed_origin[0] = '\0';
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
@@ -260,12 +260,21 @@ bool config_is_origin_allowed(const char* origin) {
     if (!origin) return false;
     pthread_rwlock_rdlock(&g_config_lock);
     bool allowed = false;
-    if (g_allowed_origin[0] == '\0') {
-        allowed = true; // If not configured, allow all by default, or strictly reject? Let's assume allow all for backward compatibility or matching '*'
-    } else if (strcmp(g_allowed_origin, "*") == 0) {
+    if (g_allowed_origin[0] == '\0' || strcmp(g_allowed_origin, "*") == 0) {
         allowed = true;
-    } else if (strcmp(g_allowed_origin, origin) == 0) {
-        allowed = true;
+    } else {
+        char copy[MAX_CONFIG_STR];
+        snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
+        char* saveptr = nullptr;
+        char* token = strtok_r(copy, ",", &saveptr);
+        while (token != nullptr) {
+            while (*token == ' ') token++;
+            if (strcmp(token, origin) == 0) {
+                allowed = true;
+                break;
+            }
+            token = strtok_r(nullptr, ",", &saveptr);
+        }
     }
     pthread_rwlock_unlock(&g_config_lock);
     return allowed;
