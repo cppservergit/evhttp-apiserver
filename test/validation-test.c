@@ -138,8 +138,13 @@ static void test_coverage(void) {
     assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
     json_object_put(root);
 
-    // Test global validator failure
+    // Test global validator failure (start > end)
     root = json_tokener_parse("{\"start_date\":\"2024-12-31\", \"end_date\":\"2024-01-01\", \"amount\": 100.0, \"count\": 10, \"name\": \"test\"}");
+    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    json_object_put(root);
+
+    // Test global validator failure (start == end, must be strictly before)
+    root = json_tokener_parse("{\"start_date\":\"2024-06-15\", \"end_date\":\"2024-06-15\", \"amount\": 100.0, \"count\": 10, \"name\": \"test\"}");
     assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
     json_object_put(root);
 

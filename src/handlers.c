@@ -354,6 +354,11 @@ static bool sales_invariant_validator(
         return emit_error(err_buf, err_len, ERR_REQUIRED, "start_date/end_date");
     }
 
+    // NOTE: This relies exclusively on the TYPE_DATE field validators (in SalesSchema)
+    // guaranteeing that the strings are strictly formatted as zero-padded ISO-8601 (YYYY-MM-DD).
+    // Because of this fixed-width ISO-8601 format invariant, lexical string order is mathematically 
+    // identical to chronological order, making strcmp highly optimized and perfectly safe here.
+    // (Also note that >= 0 correctly rejects identical dates, forcing start to be strictly before end).
     if (strcmp(start_str, end_str) >= 0) {
         return emit_error(err_buf, err_len, ERR_START_AFTER_END, nullptr);
     }
