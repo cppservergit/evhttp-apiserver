@@ -154,111 +154,82 @@ void config_init(void) {
 }
 
 void config_get_odbc_conn_str(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_odbc_conn_str);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_api_url(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_api_url);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_api_user(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_api_user);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_api_pass(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_api_pass);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_login_provider(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_login_provider);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_login_uri(char* out, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!out || max_len == 0) return;
     snprintf(out, max_len, "%s", g_login_uri);
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 
 void config_get_jwt_secret(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    pthread_rwlock_rdlock(&g_config_lock);
     strncpy(out, g_jwt_secret, max_len - 1);
     out[max_len - 1] = '\0';
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_remote_api_key(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    pthread_rwlock_rdlock(&g_config_lock);
     strncpy(out, g_remote_api_key, max_len - 1);
     out[max_len - 1] = '\0';
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_telemetry_api_key(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    pthread_rwlock_rdlock(&g_config_lock);
     strncpy(out, g_telemetry_api_key, max_len - 1);
     out[max_len - 1] = '\0';
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 void config_get_trust_proxy_ip(char* buf, size_t max_len) {
-    pthread_rwlock_rdlock(&g_config_lock);
+    if (!buf || max_len == 0) return;
     strncpy(buf, g_trust_proxy_ip, max_len - 1);
     buf[max_len - 1] = '\0';
-    pthread_rwlock_unlock(&g_config_lock);
 }
 
 long config_get_jwt_timeout_seconds(void) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    long res = g_jwt_timeout_seconds;
-    pthread_rwlock_unlock(&g_config_lock);
-    return res;
+    return g_jwt_timeout_seconds;
 }
 
 bool config_get_access_log(void) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    bool val = g_access_log;
-    pthread_rwlock_unlock(&g_config_lock);
-    return val;
+    return g_access_log;
 }
 
 size_t config_get_num_threads(void) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    size_t val = g_num_threads;
-    pthread_rwlock_unlock(&g_config_lock);
-    return val;
+    return g_num_threads;
 }
 
 size_t config_get_max_queue_size(void) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    size_t val = g_max_queue_size;
-    pthread_rwlock_unlock(&g_config_lock);
-    return val;
+    return g_max_queue_size;
 }
 
 size_t config_get_fast_pool_percentage(void) {
-    pthread_rwlock_rdlock(&g_config_lock);
-    size_t val = g_fast_pool_percentage;
-    pthread_rwlock_unlock(&g_config_lock);
-    return val;
+    return g_fast_pool_percentage;
 }
 
 bool config_is_origin_allowed(const char* origin) {
     if (!origin) return false;
-    pthread_rwlock_rdlock(&g_config_lock);
     bool allowed = false;
     if (g_allowed_origin[0] == '\0' || strcmp(g_allowed_origin, "*") == 0) {
         allowed = true;
@@ -276,6 +247,5 @@ bool config_is_origin_allowed(const char* origin) {
             token = strtok_r(nullptr, ",", &saveptr);
         }
     }
-    pthread_rwlock_unlock(&g_config_lock);
     return allowed;
 }
