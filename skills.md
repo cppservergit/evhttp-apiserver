@@ -11,13 +11,33 @@ The core philosophy of this server relies on **Zero-Allocation Data Streaming**.
 To securely accept JSON input, define a strict schema using `FieldValidator` arrays. This guarantees that malformed requests are rejected with a `400 Bad Request` before they ever reach your handler logic.
 
 ```c
-// 1. Define the expected fields and their types
+// 1. Define custom validators for complex business logic (Optional)
+static bool customer_id_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *id = json_object_get_string((json_object *)obj);
+    if (!id || strlen(id) != 5) {
+        return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id ? id : "null");
+    }
+    for (int i = 0; i < 5; ++i) {
+        if (!isalpha((unsigned char)id[i])) {
+            return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id);
+        }
+    }
+    return true;
+}
+
+// 2. Define the expected fields and their types
 static const FieldValidator CustomerSchema[] = {
     // We use a custom validator to enforce the ID is exactly 5 alphabetical chars
     {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
 };
 
-// 2. Wrap it in a ValidationContext
+// 3. Wrap it in a ValidationContext
 const ValidationContext CustomerContext = {
     .schema = CustomerSchema,
     .schema_count = sizeof(CustomerSchema) / sizeof(CustomerSchema[0]),
@@ -147,3 +167,4 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
 1. **Never use `json-c` for API Responses:** Building dynamic JSON responses using `json_object_new_*` taxes the heap memory severely. Rely on the database (`FOR JSON`) and `evbuffer` instead.
 2. **Lock-Free by Design:** The hot-path architecture has been deliberately designed to avoid Read/Write locks. Do not introduce global state mutexes in your handlers.
 3. **Implicit Cleanup:** Connections are tied to the worker thread's lifetime, and the HTTP request lifecycle is managed by `libevent`. Your handler simply returns, and all state (including the parsed input body) is automatically freed by the router.
+4. **100% SQL Injection Protection:** By exclusively using ODBC Prepared Statements (`SQLBindParameter`) to map JSON inputs to Stored Procedure variables, the API is natively immune to all SQL Injection attacks. Input values are never concatenated into the query string.
