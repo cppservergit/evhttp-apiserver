@@ -280,29 +280,29 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     if (ctype == nullptr || 
         strncmp(ctype, "application/json", 16) != 0 || 
         (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Invalid Content-Type. Expected application/json.\"}");
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
         return false;
     }
     
     struct evbuffer* in_buf = evhttp_request_get_input_buffer(req);
     size_t len = evbuffer_get_length(in_buf);
     if (len == 0) {
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Empty request body.\"}");
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Empty request body.\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
         return false;
     }
     
     unsigned char* data = evbuffer_pullup(in_buf, -1);
     if (!data) {
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Failed to pull up request body buffer.\"}");
-        evhttp_send_reply(req, HTTP_INTERNAL, "Internal Server Error", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Failed to pull up request body buffer.\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_INTERNAL, "Internal Server Error", nullptr);
         return false;
     }
     
@@ -312,10 +312,10 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     
     if (!req_body || jerr != json_tokener_success || !json_object_is_type(req_body, json_type_object)) {
         if (req_body) json_object_put(req_body);
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Invalid JSON payload or not a JSON object.\"}");
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Invalid JSON payload or not a JSON object.\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
         return false;
     }
     
@@ -473,12 +473,10 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         } else {
             const char* client_ip = extract_client_ip(req);
             LOG_WARN("CORS validation failed for Origin: '%s' from IP: %s accessing URI: %s", origin, client_ip, evhttp_request_get_uri(req));
-            struct evbuffer* err_buf = evbuffer_new();
-            if (err_buf) evbuffer_add_printf(err_buf, "{\"type\":\"https://datatracker.ietf.org/doc/html/rfc7807\",\"title\":\"Forbidden\",\"detail\":\"CORS origin not allowed.\"}");
-            struct evkeyvalq* out_headers = evhttp_request_get_output_headers(req);
-            evhttp_add_header(out_headers, "Content-Type", "application/problem+json");
-            evhttp_send_reply(req, 403, "Forbidden", err_buf);
-            if (err_buf) evbuffer_free(err_buf);
+            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+            const char* msg = "{\"error\":\"CORS origin not allowed.\"}";
+            evbuffer_add(out_buf, msg, strlen(msg));
+            evhttp_send_reply(req, 403, "Forbidden", nullptr);
             return;
         }
     }
@@ -492,10 +490,10 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     clock_gettime(CLOCK_MONOTONIC, &start_time);
 
     if (evhttp_request_get_command(req) != ctx->allowed_method) {
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Method not permitted.\"}");
-        evhttp_send_reply(req, HTTP_BADMETHOD, "Method Not Allowed", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Method not permitted.\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_BADMETHOD, "Method Not Allowed", nullptr);
         return;
     }
     
@@ -506,10 +504,11 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     if (ctx->validation_ctx != nullptr && parsed_body != nullptr) {
         char err_buf[MAX_ERR_MSG_LEN] = {0};
         if (!validate_json(ctx->validation_ctx, parsed_body, err_buf, sizeof(err_buf))) {
-            struct evbuffer* ev_err = evbuffer_new();
-            if (ev_err) evbuffer_add_printf(ev_err, "{\"error\":\"%s\"}", err_buf);
-            evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", ev_err);
-            if (ev_err) evbuffer_free(ev_err);
+            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+            char ev_err[1024];
+            int len = snprintf(ev_err, sizeof(ev_err), "{\"error\":\"%s\"}", err_buf);
+            evbuffer_add(out_buf, ev_err, len < (int)sizeof(ev_err) ? (size_t)len : sizeof(ev_err) - 1);
+            evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
             json_object_put(parsed_body);
             return;
         }
@@ -528,10 +527,10 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     if (!worker_pool_enqueue(task)) {
         // Backpressure limit reached, queue is full.
         evhttp_request_set_on_complete_cb(req, nullptr, nullptr);
-        struct evbuffer* err_buf = evbuffer_new();
-        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Server Too Busy\"}");
-        evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", err_buf);
-        if (err_buf) evbuffer_free(err_buf);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Server Too Busy\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
         if (parsed_body) json_object_put(parsed_body);
         task_pool_free(task);
         return;
