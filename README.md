@@ -97,18 +97,6 @@ cat <<EOF > bin/apiserver.env
 # database access
 ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
 
-# remote backend API configuration
-API_URL=https://cppserver.com
-API_USER=your_api_user
-API_PASS=your_api_pass
-REMOTE_API_KEY=your_api_key
-TELEMETRY_API_KEY=your_telemetry_key
-
-# security & cors
-# Wildcard '*' is not allowed. You must explicitly list origins separated by comma.
-# If omitted, all cross-origin requests are rejected.
-CORS_ALLOWED_ORIGINS=https://myapp.com,https://dev.myapp.com
-
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
 
@@ -123,12 +111,22 @@ LOGIN_URI=/login
 
 # jwt configuration
 
-# generated with: openssl rand -hex 32
+# secret and api key generated with: openssl rand -hex 32
 JWT_SECRET=your_jwt_secret
 JWT_TIMEOUT_SECONDS=300
+TELEMETRY_API_KEY=your_telemetry_key
 
 # trust haproxy IP for accepting X-Forwarded-For header
 TRUST_PROXY_IP=127.0.0.1
+
+# cors configuration
+CORS_ALLOWED_ORIGINS=file://,null,https://cppserver.com
+
+# remote backend API configuration
+API_URL=https://cppserver.com
+API_USER=your_api_user
+API_PASS=your_api_pass
+REMOTE_API_KEY=your_api_key
 EOF
 ```
 
