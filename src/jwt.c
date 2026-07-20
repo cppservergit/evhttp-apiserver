@@ -36,14 +36,7 @@ void generate_uuidv4(char out[37]) {
              bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
 }
 
-char* jwt_decode_payload(const char* jwt) {
-    const char* dot1 = strchr(jwt, '.');
-    if (!dot1) return nullptr;
-    const char* payload_start = dot1 + 1;
-    const char* dot2 = strchr(payload_start, '.');
-    if (!dot2) return nullptr;
-    
-    size_t len = (size_t)(dot2 - payload_start);
+static char* b64_decode_segment(const char* start, size_t len) {
     size_t out_maxlen = (len * 3) / 4 + 3;
     char* out = malloc(out_maxlen);
     if (!out) return nullptr;
@@ -54,8 +47,8 @@ char* jwt_decode_payload(const char* jwt) {
         int chars = 0;
         for (int k = 0; k < 4; ++k) {
             n <<= 6;
-            if (i < len && payload_start[i] != '=') {
-                unsigned char val = b64_lookup((unsigned char)payload_start[i]);
+            if (i < len && start[i] != '=') {
+                unsigned char val = b64_lookup((unsigned char)start[i]);
                 if (val == 255) {
                     free(out);
                     return nullptr;
@@ -63,7 +56,7 @@ char* jwt_decode_payload(const char* jwt) {
                 n |= val;
                 chars++;
                 i++;
-            } else if (i < len && payload_start[i] == '=') {
+            } else if (i < len && start[i] == '=') {
                 i++; // Skip padding to prevent infinite loop
             }
         }
@@ -73,6 +66,22 @@ char* jwt_decode_payload(const char* jwt) {
     }
     out[j] = '\0';
     return out;
+}
+
+static char* jwt_decode_header(const char* jwt) {
+    const char* dot1 = strchr(jwt, '.');
+    if (!dot1) return nullptr;
+    return b64_decode_segment(jwt, (size_t)(dot1 - jwt));
+}
+
+char* jwt_decode_payload(const char* jwt) {
+    const char* dot1 = strchr(jwt, '.');
+    if (!dot1) return nullptr;
+    const char* payload_start = dot1 + 1;
+    const char* dot2 = strchr(payload_start, '.');
+    if (!dot2) return nullptr;
+    
+    return b64_decode_segment(payload_start, (size_t)(dot2 - payload_start));
 }
 
 time_t jwt_get_expiration(const char* jwt) {
@@ -171,6 +180,23 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
 
     size_t msg_len = (size_t)(dot2 - token);
     
+    // Verify the Header explicitly to reject non-HS256 algorithms early and save CPU cycles
+    char* header_json = jwt_decode_header(token);
+    if (!header_json) return JWT_ERR_INVALID;
+    
+    struct json_object* header_obj = json_tokener_parse(header_json);
+    free(header_json);
+    if (!header_obj) return JWT_ERR_INVALID;
+    
+    struct json_object* alg_obj;
+    if (!json_object_object_get_ex(header_obj, "alg", &alg_obj) || 
+        strcmp(json_object_get_string(alg_obj), "HS256") != 0) {
+        json_object_put(header_obj);
+        return JWT_ERR_INVALID;
+    }
+    json_object_put(header_obj);
+
+    // Compute HMAC
     unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
     size_t secret_bin_len = 0;
     if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
@@ -193,6 +219,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     char* payload_json = jwt_decode_payload(token);
     if (!payload_json) return JWT_ERR_INVALID;
 
+    // Tokens without an 'exp' claim will explicitly fail because ret initializes to JWT_ERR_INVALID
     int ret = JWT_ERR_INVALID;
     struct json_object* jwt_obj = json_tokener_parse(payload_json);
     if (jwt_obj) {
