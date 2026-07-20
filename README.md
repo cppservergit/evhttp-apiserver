@@ -26,7 +26,7 @@ flowchart TD
 * **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
 * **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 1% of RAM under extreme stress loads (tested on an 8GB VM).
 * **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute ODBC queries and orchestrate external downstream REST services.
-* **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error and row-wise data binding for bulk reading JSON datasets.
+* **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error, and highly optimized `SQLGetData` stream-reading to seamlessly process infinitely large JSON database payloads with virtually zero memory overhead.
 
 ## Clean C Design
 
