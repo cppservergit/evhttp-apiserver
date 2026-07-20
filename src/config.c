@@ -22,6 +22,7 @@ static char g_remote_api_key[MAX_CONFIG_STR] = {0};
 static char g_telemetry_api_key[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
 static char g_trust_proxy_ip[MAX_CONFIG_STR] = {0};
+static char g_allowed_origin[MAX_CONFIG_STR] = {0};
 static bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
@@ -95,6 +96,9 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     
     if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
     else g_trust_proxy_ip[0] = '\0';
+    
+    if (getenv("ALLOWED_ORIGIN")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("ALLOWED_ORIGIN"));
+    else g_allowed_origin[0] = '\0';
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
         g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), nullptr, 10);
@@ -250,4 +254,19 @@ size_t config_get_fast_pool_percentage(void) {
     size_t val = g_fast_pool_percentage;
     pthread_rwlock_unlock(&g_config_lock);
     return val;
+}
+
+bool config_is_origin_allowed(const char* origin) {
+    if (!origin) return false;
+    pthread_rwlock_rdlock(&g_config_lock);
+    bool allowed = false;
+    if (g_allowed_origin[0] == '\0') {
+        allowed = true; // If not configured, allow all by default, or strictly reject? Let's assume allow all for backward compatibility or matching '*'
+    } else if (strcmp(g_allowed_origin, "*") == 0) {
+        allowed = true;
+    } else if (strcmp(g_allowed_origin, origin) == 0) {
+        allowed = true;
+    }
+    pthread_rwlock_unlock(&g_config_lock);
+    return allowed;
 }

@@ -57,11 +57,26 @@ for i in $(seq 1 $NUM_REQUESTS); do
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": "ALFKI"}'
 
+        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "ERNSH"}'
+
+        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "BERGS"}'
+
+        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "QUICK"}'
+
         # Request to /sales (JWT)
         curl -s -o /dev/null -X POST "$API_URL/sales" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
-            -d '{"start_date": "2024-01-01", "end_date": "2024-01-31"}'
+            -d '{"start_date": "1994-01-01", "end_date": "1996-12-31"}'
 
         # Request to /shippers (JWT)
         curl -s -o /dev/null -X GET "$API_URL/shippers" -H "Authorization: Bearer $TOKEN"

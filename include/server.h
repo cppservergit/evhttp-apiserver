@@ -27,15 +27,13 @@ int server_init_globals(size_t num_reactors);
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
 
-typedef struct json_object* (*json_handler_fn)(struct evhttp_request*, struct json_object*, void*, int*, const char**);
-typedef struct evbuffer* (*text_handler_fn)(struct evhttp_request*, struct json_object*, void*, int*, const char**);
+typedef void (*handler_fn)(struct evhttp_request*, struct json_object*, void*, int*, const char**, struct evbuffer*);
 
 typedef struct {
     const char* path;
     enum evhttp_cmd_type allowed_method;
     const ValidationContext* validation_ctx;
-    json_handler_fn json_handler;
-    text_handler_fn text_handler;
+    handler_fn handler;
     void* user_arg;
     bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
     bool is_secure; /**< \brief If true, requires and validates a JWT token in the Authorization header. */

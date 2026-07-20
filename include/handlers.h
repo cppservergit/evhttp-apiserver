@@ -12,22 +12,22 @@ extern const ValidationContext CustomerContext;
 extern const ValidationContext SalesContext;
 
 /** \brief Handles /ping requests for liveness checks. */
-struct json_object* ping_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void ping_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /version requests. */
-struct json_object* version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /sysinfo requests. */
-struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /rsysinfo requests. */
-struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handler to test UUIDv4 generation */
-struct json_object* uuid_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void uuid_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /login requests. */
-struct json_object* login_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void login_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 extern const ValidationContext LoginContext;
 
 /** \brief Extracts the client IP from the request, favoring X-Forwarded-For if present. */
@@ -49,22 +49,22 @@ void handlers_clear_identity(void);
 bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip);
 
 /** \brief Handles /customer requests (external REST integration). */
-struct json_object* customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void customer_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /customer_get requests (database integration). */
-struct json_object* customer_get_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void customer_get_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /sales requests. */
-struct json_object* sales_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void sales_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /shippers requests. */
-struct json_object* shippers_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void shippers_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /products requests. */
-struct json_object* products_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void products_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /metrics requests. Returns plain text Prometheus format instead of JSON. */
-struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /getqr requests for TOTP registration. */
-struct evbuffer* getqr_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt);
+void getqr_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);

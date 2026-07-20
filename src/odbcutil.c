@@ -88,64 +88,10 @@ void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     }
 }
 
-struct json_object* odbcutil_fetch_json(SQLHSTMT hstmt) {
-    struct json_object* result_json = nullptr;
-    SQLRETURN ret;
-    
-    raii_json_tokener tok = json_tokener_new();
-    if (tok) {
-        bool has_rows = false;
-        while ((ret = SQLFetch(hstmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-            has_rows = true;
-            char chunk[ODBC_FETCH_CHUNK_SIZE];
-            bool has_more_chunks = true;
-            while (has_more_chunks) {
-                SQLLEN indicator = 0;
-                ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
-                
-                if (ret == SQL_NO_DATA) {
-                    has_more_chunks = false;
-                } else if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-                    if (indicator != SQL_NULL_DATA) {
-                        // Stream chunk directly into the JSON state machine, no intermediate buffers
-                        struct json_object* parsed_obj = json_tokener_parse_ex(tok, chunk, (int)strlen(chunk));
-                        if (parsed_obj) {
-                            if (result_json) {
-                                json_object_put(result_json);
-                            }
-                            result_json = parsed_obj;
-                        }
-                        has_more_chunks = (ret == SQL_SUCCESS_WITH_INFO);
-                    } else {
-                        has_more_chunks = false;
-                    }
-                } else {
-                    odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "SQLGetData failed during chunk streaming");
-                    has_more_chunks = false;
-                }
-            }
-        }
-        
-        if (ret != SQL_NO_DATA && ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "SQLFetch failed while iterating rowset");
-        }
-        
-        if (!has_rows || !result_json) {
-            result_json = json_tokener_parse("[]");
-        }
-    }
-    
-    return result_json;
-}
-
 #define BATCH_SIZE 4
 
-struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name) {
-    struct json_object* result_json = nullptr;
+bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
     SQLRETURN ret;
-    
-    raii_json_tokener tok = json_tokener_new();
-    if (!tok) return nullptr;
     
     char chunks[BATCH_SIZE][ODBC_FETCH_CHUNK_SIZE];
     SQLLEN indicators[BATCH_SIZE];
@@ -165,45 +111,46 @@ struct json_object* odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_n
         for (SQLULEN i = 0; i < rows_fetched; ++i) {
             if (row_status[i] != SQL_ROW_DELETED && row_status[i] != SQL_ROW_ERROR) {
                 if (indicators[i] != SQL_NULL_DATA) {
-                    struct json_object* parsed_obj = json_tokener_parse_ex(tok, chunks[i], (int)strlen(chunks[i]));
-                    if (parsed_obj) {
-                        if (result_json) {
-                            json_object_put(result_json);
-                        }
-                        result_json = parsed_obj;
-                    }
+                    size_t len = (indicators[i] == SQL_NTS) ? strlen(chunks[i]) : (size_t)indicators[i];
+                    if (len > sizeof(chunks[i])) len = strlen(chunks[i]);
+                    evbuffer_add(out_buf, chunks[i], len);
                 }
             }
         }
     }
     
-    if (ret != SQL_NO_DATA && ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+    bool fetch_success = true;
+    if (ret != SQL_NO_DATA) {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "SQLFetchScroll failed while iterating rowset in batch mode in %s", func_name);
+        snprintf(err_msg, sizeof(err_msg), "SQLFetchScroll failed in batch mode for %s", func_name);
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+        fetch_success = false;
     }
     
-    if (!has_rows || !result_json) {
-        result_json = json_tokener_parse("[]");
+    if (!has_rows) {
+        evbuffer_add(out_buf, "[]", 2);
     }
     
-    return result_json;
+    return fetch_success;
 }
 
 
-struct json_object* odbcutil_get_json(const char* sp_call, const char* func_name) {
+bool odbcutil_get_json(const char* query, odbc_bind_fn binder, struct json_object* body, struct evbuffer* out_buf, const char* func_name) {
     SQLHDBC hdbc = odbcutil_connect();
-    if (hdbc == SQL_NULL_HDBC) return nullptr;
+    if (hdbc == SQL_NULL_HDBC) return false;
     
     SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, func_name);
-    if (!hstmt) return nullptr;
+    if (!hstmt) return false;
     
-    struct json_object* result_json = nullptr;
+    if (binder) {
+        binder(body, hstmt);
+    }
     
-    SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)sp_call, SQL_NTS);
+    SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS);
+    bool success = false;
     
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json = odbcutil_fetch_json_batch(hstmt, func_name);
+        success = odbcutil_fetch_json_batch(hstmt, func_name, out_buf);
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
@@ -211,5 +158,5 @@ struct json_object* odbcutil_get_json(const char* sp_call, const char* func_name
     }
     
     odbcutil_disconnect(hdbc, hstmt);
-    return result_json;
+    return success;
 }

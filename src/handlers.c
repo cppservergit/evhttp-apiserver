@@ -3,16 +3,14 @@
 #include "server.h"
 #include "http_client.h"
 #include "customer.h"
-#include "customerdb.h"
-#include "sales.h"
-#include "shippers.h"
-#include "products.h"
+
 #include "validation.h"
 #include "config.h"
 #include "login.h"
 #include "totp.h"
 #include "logger.h"
 #include "jwt.h"
+#include "odbcutil.h"
 #include <unistd.h>
 #include <time.h>
 #include <stdio.h>
@@ -21,17 +19,13 @@
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
-struct json_object* ping_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+void ping_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    struct json_object* root = json_object_new_object();
-    if (root != nullptr) {
-        json_object_object_add(root, "status", json_object_new_string("OK"));
-    }
-    return root;
+    evbuffer_add_printf(out_buf, "{\"status\":\"OK\"}");
 }
 
 static bool validate_telemetry_api_key(struct evhttp_request* req) {
@@ -52,36 +46,35 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     return false;
 }
 
-struct json_object* version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+void version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
         *out_status = 403;
         *out_status_txt = "Access Denied";
-        return nullptr;
+        return;
     }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    struct json_object* root = json_object_new_object();
-    if (root != nullptr) {
-        json_object_object_add(root, "version", json_object_new_string(get_server_version()));
-        json_object_object_add(root, "compiler", json_object_new_string(__VERSION__));
-        json_object_object_add(root, "compile_date", json_object_new_string(__DATE__ " " __TIME__));
-        json_object_object_add(root, "hostname", json_object_new_string(server_get_hostname()));
-        json_object_object_add(root, "os_version", json_object_new_string(server_get_os_version()));
-    }
-    return root;
+    evbuffer_add_printf(out_buf,
+        "{\"version\":\"%s\",\"compiler\":\"%s\",\"compile_date\":\"%s\",\"hostname\":\"%s\",\"os_version\":\"%s\"}",
+        get_server_version(),
+        __VERSION__,
+        __DATE__ " " __TIME__,
+        server_get_hostname(),
+        server_get_os_version()
+    );
 }
 
-struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
         *out_status = 403;
         *out_status_txt = "Access Denied";
-        return nullptr;
+        return;
     }
     
     *out_status = HTTP_OK;
@@ -95,31 +88,35 @@ struct json_object* sysinfo_handler(struct evhttp_request* req, struct json_obje
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
     
-    struct json_object* root = json_object_new_object();
-    if (root != nullptr) {
-        json_object_object_add(root, "start_time", json_object_new_string(server_get_start_time()));
-        json_object_object_add(root, "total_requests", json_object_new_int64((int64_t)stats.total_requests));
-        json_object_object_add(root, "average_processing_time_fast_ms", json_object_new_int64((int64_t)stats.avg_time_fast_ms));
-        json_object_object_add(root, "average_processing_time_slow_ms", json_object_new_int64((int64_t)stats.avg_time_slow_ms));
-        json_object_object_add(root, "total_ram_kb", json_object_new_int64((int64_t)total_ram_kb));
-        json_object_object_add(root, "memory_usage_kb", json_object_new_int64((int64_t)mem_usage_kb));
-        
-        char pct_str[32];
-        snprintf(pct_str, sizeof(pct_str), "%.2f", mem_usage_pct);
-        json_object_object_add(root, "memory_usage_percentage", json_object_new_double_s(mem_usage_pct, pct_str));
-        
-        json_object_object_add(root, "hostname", json_object_new_string(server_get_hostname()));
-    }
-    return root;
+    evbuffer_add_printf(out_buf,
+        "{"
+        "\"start_time\":\"%s\","
+        "\"total_requests\":%" PRIu64 ","
+        "\"average_processing_time_fast_ms\":%" PRIu64 ","
+        "\"average_processing_time_slow_ms\":%" PRIu64 ","
+        "\"total_ram_kb\":%" PRIu64 ","
+        "\"memory_usage_kb\":%" PRIu64 ","
+        "\"memory_usage_percentage\":%.2f,"
+        "\"hostname\":\"%s\""
+        "}",
+        server_get_start_time(),
+        (uint64_t)stats.total_requests,
+        (uint64_t)stats.avg_time_fast_ms,
+        (uint64_t)stats.avg_time_slow_ms,
+        total_ram_kb,
+        mem_usage_kb,
+        mem_usage_pct,
+        server_get_hostname()
+    );
 }
 
-struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+void metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
     
     if (!validate_telemetry_api_key(req)) {
         *out_status = 403;
         *out_status_txt = "Access Denied";
-        return nullptr;
+        return;
     }
     
     *out_status = HTTP_OK;
@@ -132,10 +129,7 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
     uint64_t mem_usage_kb = 0;
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     
-    struct evbuffer* buf = evbuffer_new();
-    if (buf == nullptr) return nullptr;
-    
-    evbuffer_add_printf(buf,
+    evbuffer_add_printf(out_buf,
         "# HELP microservice_requests_total Total number of processed requests\n"
         "# TYPE microservice_requests_total counter\n"
         "microservice_requests_total %lu\n\n"
@@ -170,10 +164,9 @@ struct evbuffer* metrics_handler(struct evhttp_request* req, struct json_object*
         total_ram_kb * 1024
     );
     
-    return buf;
 }
 
-struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+void rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
     
     *out_status = HTTP_OK;
@@ -194,16 +187,15 @@ struct json_object* rsysinfo_handler(struct evhttp_request* req, struct json_obj
     long http_code = 0;
     struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
 
-    struct json_object* root = json_object_new_object();
-    json_object_object_add(root, "remote_status", json_object_new_int((int32_t)http_code));
-    
+    evbuffer_add_printf(out_buf, "{\"remote_status\":%ld,\"remote_data\":", http_code);
     if (remote_json) {
-        json_object_object_add(root, "remote_data", remote_json);
+        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
+        evbuffer_add(out_buf, json_str, strlen(json_str));
+        json_object_put(remote_json);
     } else {
-        json_object_object_add(root, "remote_data", json_object_new_null());
+        evbuffer_add(out_buf, "null", 4);
     }
-
-    return root;
+    evbuffer_add(out_buf, "}", 1);
 }
 
 // --- Customer Handler & Schema ---
@@ -237,12 +229,21 @@ const ValidationContext CustomerContext = {
     .global_validator = nullptr
 };
 
-struct json_object* customer_handler(
+static thread_local SQLLEN cb_nts = SQL_NTS;
+
+static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
+    const char* customer_id = json_get_string(body, "id");
+    size_t len = customer_id ? strlen(customer_id) : 0;
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, len, 0, (SQLPOINTER)customer_id, len, &cb_nts);
+}
+
+void customer_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt
+    [[maybe_unused]] const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     const char *customer_id = json_get_string(body, "id");
     
@@ -252,29 +253,41 @@ struct json_object* customer_handler(
     long http_code = 0;
     struct json_object* remote_json = customer_service_get_info(customer_id, &http_code);
     
-    struct json_object* root = json_object_new_object();
-    json_object_object_add(root, "remote_status", json_object_new_int((int32_t)http_code));
-    
+    evbuffer_add_printf(out_buf, "{\"remote_status\":%ld,\"remote_data\":", http_code);
     if (remote_json) {
-        json_object_object_add(root, "remote_data", remote_json);
+        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
+        evbuffer_add(out_buf, json_str, strlen(json_str));
+        json_object_put(remote_json);
     } else {
-        json_object_object_add(root, "remote_data", json_object_new_null());
+        evbuffer_add(out_buf, "null", 4);
     }
     
-    return root;
+    evbuffer_add(out_buf, ",\"db_data\":", 11);
+    
+    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", customer_bind_cb, body, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+        return;
+    }
+    
+    evbuffer_add(out_buf, "}", 1);
 }
 
-struct json_object* customer_get_handler(
+
+void customer_get_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt
+    [[maybe_unused]] const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
-    const char *customer_id = json_get_string(body, "id");
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    return customerdb_get_data(customer_id);
+    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", customer_bind_cb, body, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
 }
 
 // --- Sales Handler & Schema ---
@@ -312,29 +325,41 @@ const ValidationContext SalesContext = {
     .global_validator = validate_start_before_end
 };
 
-struct json_object* sales_handler(
+static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
+    const char* start_date = json_get_string(body, "start_date");
+    const char* end_date = json_get_string(body, "end_date");
+    
+    size_t start_len = start_date ? strlen(start_date) : 0;
+    size_t end_len = end_date ? strlen(end_date) : 0;
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, start_len, 0, (SQLPOINTER)start_date, start_len, &cb_nts);
+    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, end_len, 0, (SQLPOINTER)end_date, end_len, &cb_nts);
+}
+
+void sales_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt
+    [[maybe_unused]] const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
-    const char* start_date = json_get_string(body, "start_date");
-    const char* end_date = json_get_string(body, "end_date");
-    
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    return sales_service_get_data(start_date, end_date);
+    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", sales_bind_cb, body, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
 }
 
 // --- TOTP QR Handler ---
 
-struct evbuffer* getqr_handler(
+void getqr_handler(
     struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     const char* user = get_user(req);
     
@@ -342,17 +367,18 @@ struct evbuffer* getqr_handler(
     if (buf) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
         evhttp_add_header(headers, "Content-Type", "image/svg+xml");
+        evbuffer_add_buffer(out_buf, buf);
+        evbuffer_free(buf);
     }
-    
-    return buf;
 }
 
-struct json_object* shippers_handler(
+void shippers_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -363,27 +389,32 @@ struct json_object* shippers_handler(
               user ? user : "unknown", 
               session ? session : "unknown");
               
-    return shippers_get_data();
+    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, nullptr, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
 }
 
-struct json_object* products_handler(
+void products_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt
+    [[maybe_unused]] const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    return products_get_data();
+    odbcutil_get_json("{CALL sp_products_view}", nullptr, nullptr, out_buf, __func__);
 }
 
-struct json_object* uuid_handler(
+void uuid_handler(
     [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -391,9 +422,7 @@ struct json_object* uuid_handler(
     char uuid_str[37];
     generate_uuidv4(uuid_str);
     
-    struct json_object* root = json_object_new_object();
-    json_object_object_add(root, "uuid", json_object_new_string(uuid_str));
-    return root;
+    evbuffer_add_printf(out_buf, "{\"uuid\":\"%s\"}", uuid_str);
 }
 
 // --- Shared Utilities ---
@@ -506,11 +535,12 @@ const ValidationContext LoginContext = {
     .global_validator = login_global_validator
 };
 
-static struct json_object* handle_login_success(
+static void handle_login_success(
     const char* username, 
     const char* remote_ip, 
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -524,28 +554,26 @@ static struct json_object* handle_login_success(
 
     char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
 
-    struct json_object* root = json_object_new_object();
     if (ticket) {
-        json_object_object_add(root, "token", json_object_new_string(ticket));
+        evbuffer_add_printf(out_buf, "{\"token\":\"%s\"}", ticket);
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
         free(ticket);
     } else {
-        json_object_object_add(root, "error", json_object_new_string("Failed to generate ticket"));
+        evbuffer_add_printf(out_buf, "{\"error\":\"Failed to generate ticket\"}");
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
         LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
     }
-
-    return root;
 }
 
-static struct json_object* handle_login_failure(
+static void handle_login_failure(
     const char* username, 
     const char* remote_ip, 
     long http_code, 
     struct json_object* remote_response,
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     *out_status = (int)http_code;
     *out_status_txt = "Unauthorized";
@@ -556,7 +584,6 @@ static struct json_object* handle_login_failure(
 
     LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
 
-    struct json_object* safe_response = json_object_new_object();
     if (remote_response) {
         const char* final_error = nullptr;
         const char* desc = json_get_string(remote_response, "description");
@@ -570,21 +597,20 @@ static struct json_object* handle_login_failure(
             final_error = "Unknown provider error";
         }
         
-        json_object_object_add(safe_response, "error", json_object_new_string(final_error));
+        evbuffer_add_printf(out_buf, "{\"error\":\"%s\"}", final_error);
         json_object_put(remote_response);
     } else {
-        json_object_object_add(safe_response, "error", json_object_new_string("Provider unreachable"));
+        evbuffer_add_printf(out_buf, "{\"error\":\"Provider unreachable\"}");
     }
-    
-    return safe_response;
 }
 
-struct json_object* login_handler(
+void login_handler(
     struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt
+    const char** out_status_txt,
+    struct evbuffer* out_buf
 ) {
     const char* username = json_get_string(body, "username");
     const char* password = json_get_string(body, "password");
@@ -596,9 +622,9 @@ struct json_object* login_handler(
 
     if (http_code == 200) {
         if (remote_response) json_object_put(remote_response);
-        return handle_login_success(username, remote_ip, out_status, out_status_txt);
+        handle_login_success(username, remote_ip, out_status, out_status_txt, out_buf);
     } else {
-        return handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_status_txt);
+        handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_status_txt, out_buf);
     }
 }
 

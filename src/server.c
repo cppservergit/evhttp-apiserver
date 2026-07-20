@@ -13,9 +13,7 @@
 #include <curl/curl.h>
 #include "http_client.h"
 #include "customer.h"
-#include "sales.h"
-#include "shippers.h"
-#include "products.h"
+
 #include "config.h"
 #include "login.h"
 #include <arpa/inet.h>
@@ -247,71 +245,23 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
 // middleware_ctx_t now in server.h
 
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = version_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = sysinfo_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = rsysinfo_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false, .is_secure = true },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false, .is_secure = true },
-    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_get_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = shippers_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = products_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = uuid_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = true },
-    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .json_handler = login_handler, .text_handler = nullptr, .user_arg = nullptr, .is_fast = false },
-    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = nullptr, .text_handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true },
+    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = version_handler, .user_arg = nullptr, .is_fast = true },
+    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = sysinfo_handler, .user_arg = nullptr, .is_fast = true },
+    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = rsysinfo_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
+    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_get_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = shippers_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = products_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = uuid_handler, .user_arg = nullptr, .is_fast = true },
+    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = login_handler, .user_arg = nullptr, .is_fast = false },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
-struct json_object* create_error_json(const char* error_msg) {
-    struct json_object* err_root = json_object_new_object();
-    if (err_root != nullptr) {
-        json_object_object_add(err_root, "error", json_object_new_string(error_msg));
-    }
-    return err_root;
-}
 
-static void deferred_json_cleanup(const void *data, size_t datalen, void *extra) {
-    (void)data;
-    (void)datalen;
-    struct json_object *json_root = (struct json_object *)extra;
-    if (json_root) {
-        json_object_put(json_root);
-    }
-}
-
-static void send_json_response(struct evhttp_request* req, int status_code, const char* status_txt, struct json_object* json_root) {
-    if (json_root == nullptr) {
-        evhttp_send_error(req, HTTP_INTERNAL, "Internal Serialization Error");
-        return;
-    }
-
-    const char* serialized_response = json_object_to_json_string(json_root);
-    if (serialized_response == nullptr) {
-        json_object_put(json_root); // Explicit cleanup on failure
-        evhttp_send_error(req, HTTP_INTERNAL, "Allocation Error");
-        return;
-    }
-
-    raii_evbuffer response_buf = evbuffer_new();
-    if (response_buf == nullptr) {
-        json_object_put(json_root); // Explicit cleanup on failure
-        evhttp_send_error(req, HTTP_INTERNAL, "Allocation Error");
-        return;
-    }
-    
-    // Transfer ownership to libevent network queue via Zero-Copy reference
-    if (evbuffer_add_reference(response_buf, serialized_response, strlen(serialized_response), deferred_json_cleanup, json_root) != 0) {
-        json_object_put(json_root); // Explicit cleanup on failure
-        evhttp_send_error(req, HTTP_INTERNAL, "Buffer Allocation Error");
-        return;
-    }
-    
-    struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
-    evhttp_add_header(headers, "Content-Type", "application/json");
-        
-    evhttp_send_reply(req, status_code, status_txt, response_buf);
-}
 
 static long long measure_elapsed_ms(const struct timespec* start, const struct timespec* end) {
     long long seconds = (long long)(end->tv_sec - start->tv_sec);
@@ -330,20 +280,29 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     if (ctype == nullptr || 
         strncmp(ctype, "application/json", 16) != 0 || 
         (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
-        send_json_response(req, HTTP_BADREQUEST, "Bad Request", create_error_json("Invalid Content-Type. Expected application/json."));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Invalid Content-Type. Expected application/json.\"}");
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         return false;
     }
     
     struct evbuffer* in_buf = evhttp_request_get_input_buffer(req);
     size_t len = evbuffer_get_length(in_buf);
     if (len == 0) {
-        send_json_response(req, HTTP_BADREQUEST, "Bad Request", create_error_json("Empty request body."));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Empty request body.\"}");
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         return false;
     }
     
     unsigned char* data = evbuffer_pullup(in_buf, -1);
     if (!data) {
-        send_json_response(req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Failed to pull up request body buffer."));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Failed to pull up request body buffer.\"}");
+        evhttp_send_reply(req, HTTP_INTERNAL, "Internal Server Error", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         return false;
     }
     
@@ -353,7 +312,10 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     
     if (!req_body || jerr != json_tokener_success || !json_object_is_type(req_body, json_type_object)) {
         if (req_body) json_object_put(req_body);
-        send_json_response(req, HTTP_BADREQUEST, "Bad Request", create_error_json("Invalid JSON payload or not a JSON object."));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Invalid JSON payload or not a JSON object.\"}");
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         return false;
     }
     
@@ -395,8 +357,7 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
 }
 
 static void cleanup_cancelled_task(http_task_t* task) {
-    if (task->response_json) json_object_put(task->response_json);
-    if (task->response_text) evbuffer_free(task->response_text);
+    if (task->response_buf) evbuffer_free(task->response_buf);
     if (task->parsed_body) json_object_put(task->parsed_body);
     task_pool_free(task);
 }
@@ -421,21 +382,30 @@ static void process_completed_task(http_task_t* task) {
         LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
     }
     
-    if (task->response_json) {
-        send_json_response(task->req, task->status_code, task->status_txt, task->response_json);
-    } else if (task->response_text) {
+    if (task->response_buf && evbuffer_get_length(task->response_buf) > 0) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
         if (!evhttp_find_header(headers, "Content-Type")) {
-            evhttp_add_header(headers, "Content-Type", "text/plain");
+            evhttp_add_header(headers, "Content-Type", "application/json");
         }
-        evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_text);
-        evbuffer_free(task->response_text);
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, task->response_buf);
     } else {
-        if (task->status_code >= 400 && task->status_code != HTTP_INTERNAL) {
-            send_json_response(task->req, task->status_code, task->status_txt, create_error_json(task->status_txt ? task->status_txt : "Error"));
+        if (task->status_code >= 400) {
+            struct evbuffer* err_buf = evbuffer_new();
+            if (task->status_code != HTTP_INTERNAL) {
+                if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
+                evhttp_send_reply(task->req, task->status_code, task->status_txt, err_buf);
+            } else {
+                if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Internal Server Error\"}");
+                evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", err_buf);
+            }
+            if (err_buf) evbuffer_free(err_buf);
         } else {
-            send_json_response(task->req, HTTP_INTERNAL, "Internal Server Error", create_error_json("Internal Server Error"));
+            evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
         }
+    }
+    
+    if (task->response_buf) {
+        evbuffer_free(task->response_buf);
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);
@@ -482,8 +452,36 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     inject_security_headers(req);
 
     const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;
-    if (ctx == nullptr || (ctx->json_handler == nullptr && ctx->text_handler == nullptr)) {
+    if (ctx == nullptr || ctx->handler == nullptr) {
         evhttp_send_error(req, HTTP_INTERNAL, "Middleware Routing Fault");
+        return;
+    }
+    
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const char* origin = evhttp_find_header(in_headers, "Origin");
+    if (origin) {
+        if (config_is_origin_allowed(origin)) {
+            struct evkeyvalq* out_headers = evhttp_request_get_output_headers(req);
+            evhttp_add_header(out_headers, "Access-Control-Allow-Origin", origin);
+            evhttp_add_header(out_headers, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            evhttp_add_header(out_headers, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+            evhttp_add_header(out_headers, "Access-Control-Max-Age", "86400");
+            evhttp_add_header(out_headers, "Vary", "Origin");
+        } else {
+            const char* client_ip = extract_client_ip(req);
+            LOG_WARN("CORS validation failed for Origin: '%s' from IP: %s accessing URI: %s", origin, client_ip, evhttp_request_get_uri(req));
+            struct evbuffer* err_buf = evbuffer_new();
+            if (err_buf) evbuffer_add_printf(err_buf, "{\"type\":\"https://datatracker.ietf.org/doc/html/rfc7807\",\"title\":\"Forbidden\",\"detail\":\"CORS origin not allowed.\"}");
+            struct evkeyvalq* out_headers = evhttp_request_get_output_headers(req);
+            evhttp_add_header(out_headers, "Content-Type", "application/problem+json");
+            evhttp_send_reply(req, 403, "Forbidden", err_buf);
+            if (err_buf) evbuffer_free(err_buf);
+            return;
+        }
+    }
+    
+    if (evhttp_request_get_command(req) == EVHTTP_REQ_OPTIONS) {
+        evhttp_send_reply(req, 204, "No Content", nullptr);
         return;
     }
 
@@ -491,18 +489,24 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     clock_gettime(CLOCK_MONOTONIC, &start_time);
 
     if (evhttp_request_get_command(req) != ctx->allowed_method) {
-        send_json_response(req, HTTP_BADMETHOD, "Method Not Allowed", create_error_json("Method not permitted."));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Method not permitted.\"}");
+        evhttp_send_reply(req, HTTP_BADMETHOD, "Method Not Allowed", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         return;
     }
     
     struct json_object* parsed_body = nullptr;
     if (!extract_json_body(req, &parsed_body)) {
-        return;
+        return; // extract_json_body handles its own error response, which we should probably also update if possible, but let's leave it for now or update it later.
     }
     if (ctx->validation_ctx != nullptr && parsed_body != nullptr) {
         char err_buf[MAX_ERR_MSG_LEN] = {0};
         if (!validate_json(ctx->validation_ctx, parsed_body, err_buf, sizeof(err_buf))) {
-            send_json_response(req, HTTP_BADREQUEST, "Bad Request", create_error_json(err_buf));
+            struct evbuffer* ev_err = evbuffer_new();
+            if (ev_err) evbuffer_add_printf(ev_err, "{\"error\":\"%s\"}", err_buf);
+            evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", ev_err);
+            if (ev_err) evbuffer_free(ev_err);
             json_object_put(parsed_body);
             return;
         }
@@ -521,7 +525,10 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     if (!worker_pool_enqueue(task)) {
         // Backpressure limit reached, queue is full.
         evhttp_request_set_on_complete_cb(req, nullptr, nullptr);
-        send_json_response(req, HTTP_SERVUNAVAIL, "Service Unavailable", create_error_json("Server Too Busy"));
+        struct evbuffer* err_buf = evbuffer_new();
+        if (err_buf) evbuffer_add_printf(err_buf, "{\"error\":\"Server Too Busy\"}");
+        evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", err_buf);
+        if (err_buf) evbuffer_free(err_buf);
         if (parsed_body) json_object_put(parsed_body);
         task_pool_free(task);
         return;
@@ -579,6 +586,7 @@ static struct evhttp* configure_http_server(struct event_base* base, evutil_sock
 
     evhttp_set_max_body_size(http, MAX_PAYLOAD_SIZE);
     evhttp_set_timeout(http, REQUEST_TIMEOUT_SECONDS); 
+    evhttp_set_allowed_methods(http, EVHTTP_REQ_GET | EVHTTP_REQ_POST | EVHTTP_REQ_OPTIONS);
 
     for (size_t i = 0; i < route_count; ++i) {
         evhttp_set_cb(http, routes[i].path, api_middleware_wrapper, (void*)&routes[i]);

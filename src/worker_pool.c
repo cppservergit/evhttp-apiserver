@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <sodium.h>
+#include <event2/buffer.h>
 
 typedef struct {
     http_task_t* head;
@@ -63,7 +64,8 @@ static void* worker_thread_main(void* arg) {
                 if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
                     task->status_code = 403;
                     task->status_txt = "Forbidden";
-                    task->response_json = create_error_json("Missing or invalid Authorization header");
+                    task->response_buf = evbuffer_new();
+                    if (task->response_buf) evbuffer_add_printf(task->response_buf, "{\"error\":\"Missing or invalid Authorization header\"}");
                     is_authorized = false;
                 } else {
                     char jwt_secret[128];
@@ -75,12 +77,14 @@ static void* worker_thread_main(void* arg) {
                     if (jwt_res == JWT_ERR_EXPIRED) {
                         task->status_code = 401;
                         task->status_txt = "Unauthorized";
-                        task->response_json = create_error_json("Token has expired");
+                        task->response_buf = evbuffer_new();
+                        if (task->response_buf) evbuffer_add_printf(task->response_buf, "{\"error\":\"Token has expired\"}");
                         is_authorized = false;
                     } else if (jwt_res != JWT_OK) {
                         task->status_code = 403;
                         task->status_txt = "Forbidden";
-                        task->response_json = create_error_json("Invalid token signature or format");
+                        task->response_buf = evbuffer_new();
+                        if (task->response_buf) evbuffer_add_printf(task->response_buf, "{\"error\":\"Invalid token signature or format\"}");
                         is_authorized = false;
                     } else {
                         handlers_set_identity(username, session_id);
@@ -103,10 +107,9 @@ static void* worker_thread_main(void* arg) {
             }
             
             if (is_authorized) {
-                if (ctx && ctx->json_handler) {
-                    task->response_json = ctx->json_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
-                } else if (ctx && ctx->text_handler) {
-                    task->response_text = ctx->text_handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt);
+                task->response_buf = evbuffer_new();
+                if (ctx && ctx->handler && task->response_buf) {
+                    ctx->handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->response_buf);
                 }
             }
             

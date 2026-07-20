@@ -65,3 +65,6 @@ long config_get_jwt_timeout_seconds(void);
 
 /** \brief Retrieves the trusted proxy IP for X-Forwarded-For processing. */
 void config_get_trust_proxy_ip(char* buf, size_t max_len);
+
+/** \brief Checks if a CORS Origin is allowed by configuration. */
+bool config_is_origin_allowed(const char* origin);
