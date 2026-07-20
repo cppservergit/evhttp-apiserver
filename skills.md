@@ -95,6 +95,52 @@ Finally, wire the handler into the `libevent` routing table inside `server.c`. Y
 
 ---
 
+## Fast-Track: Simple Handlers (No Input Parameters)
+
+If your endpoint doesn't accept a JSON payload and simply retrieves global data (like the `/shippers` endpoint), the implementation is even more concise. 
+
+You do **not** need a schema, `ValidationContext`, or parameter binder callback.
+
+### The Handler
+Pass `nullptr` for the binder and body in `odbcutil_get_json`:
+
+```c
+void shippers_handler(
+    [[maybe_unused]] struct evhttp_request* req, 
+    [[maybe_unused]] struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt,
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    *out_status_txt = "OK";
+        
+    // Execute parameterless query and stream directly to client
+    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, nullptr, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
+}
+```
+
+### The Route Registration
+In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nullptr`:
+
+```c
+{ 
+    .path = "/shippers", 
+    .allowed_method = EVHTTP_REQ_GET, 
+    .validation_ctx = nullptr, 
+    .handler = shippers_handler, 
+    .user_arg = nullptr, 
+    .is_fast = true, 
+    .is_secure = true 
+}
+```
+
+---
+
 ## Architectural Highlights to Remember
 1. **Never use `json-c` for API Responses:** Building dynamic JSON responses using `json_object_new_*` taxes the heap memory severely. Rely on the database (`FOR JSON`) and `evbuffer` instead.
 2. **Lock-Free by Design:** The hot-path architecture has been deliberately designed to avoid Read/Write locks. Do not introduce global state mutexes in your handlers.
