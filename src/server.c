@@ -102,8 +102,9 @@ int server_init_globals(size_t num_reactors) {
     }
     
     time_t now = time(nullptr);
-    struct tm* tm_info = localtime(&now);
-    strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", tm_info);
+    struct tm tm_info;
+    localtime_r(&now, &tm_info);
+    strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", &tm_info);
     
     if (sodium_init() < 0) {
         LOG_FATAL("Failed to initialize libsodium");
@@ -278,7 +279,7 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* ctype = evhttp_find_header(in_headers, "Content-Type");
     if (ctype == nullptr || 
-        strncmp(ctype, "application/json", 16) != 0 || 
+        strncasecmp(ctype, "application/json", 16) != 0 || 
         (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
         const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";

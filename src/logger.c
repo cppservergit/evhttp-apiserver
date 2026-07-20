@@ -12,14 +12,19 @@ static const char* level_strings[] = {
 };
 
 static _Thread_local char tl_logger_tid[32] = {0};
-static _Thread_local const char* tl_request_id = nullptr;
+static _Thread_local char tl_request_id[128] = {0};
 
 void logger_set_request_id(const char* req_id) {
-    tl_request_id = req_id;
+    if (req_id) {
+        strncpy(tl_request_id, req_id, sizeof(tl_request_id) - 1);
+        tl_request_id[sizeof(tl_request_id) - 1] = '\0';
+    } else {
+        tl_request_id[0] = '\0';
+    }
 }
 
 void logger_clear_request_id(void) {
-    tl_request_id = nullptr;
+    tl_request_id[0] = '\0';
 }
 
 
@@ -51,7 +56,7 @@ void logger_log(LogLevel level, const char* format, ...) {
 
     char out_buf[12800];
     int len;
-    if (tl_request_id) {
+    if (tl_request_id[0] != '\0') {
         len = snprintf(out_buf, sizeof(out_buf), 
             "{\"level\":\"%s\",\"reqID\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
             level_strings[level], tl_request_id, escaped_msg, tl_logger_tid);

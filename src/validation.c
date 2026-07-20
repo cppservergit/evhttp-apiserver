@@ -8,37 +8,47 @@
 // --- Centralized Error Code Registry ---
 
 
-static const char *const ERROR_TEMPLATES[ERR_MAX_ERRORS] = {
-    [ERR_REQUIRED]        = "Field '%s' is required.",
-    [ERR_NOT_INT]         = "Field '%s' must be an integer.",
-    [ERR_NOT_DOUBLE]      = "Field '%s' must be a numeric decimal (double).",
-    [ERR_NOT_STRING]      = "Field '%s' must be a string.",
-    [ERR_NOT_DATE]        = "Field '%s' must be a date string.",
-    [ERR_INVALID_DATE]    = "Field '%s' contains an invalid date format or calendar lie.",
-    [ERR_UNKNOWN_TYPE]    = "Internal error: Unknown validation type configured.",
-    [ERR_NEGATIVE_AMOUNT] = "Field error: Amount on '%s' cannot be negative.",
-    [ERR_START_AFTER_END] = "Business rule violation: 'start_date' must be strictly before 'end_date'.",
-    [ERR_INVALID_CUSTOMER_ID] = "Field error: Customer ID '%s' is invalid."
-};
-
 // --- Safe Format Utility ---
 
 bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) {
     if (!err_buf || err_len == 0) return false;
     
-    if (code >= ERR_MAX_ERRORS || !ERROR_TEMPLATES[code]) {
-        snprintf(err_buf, err_len, "Unknown error code: %d", code);
-        return false;
+    switch (code) {
+        case ERR_REQUIRED:
+            snprintf(err_buf, err_len, "Field '%s' is required.", arg ? arg : "");
+            break;
+        case ERR_NOT_INT:
+            snprintf(err_buf, err_len, "Field '%s' must be an integer.", arg ? arg : "");
+            break;
+        case ERR_NOT_DOUBLE:
+            snprintf(err_buf, err_len, "Field '%s' must be a numeric decimal (double).", arg ? arg : "");
+            break;
+        case ERR_NOT_STRING:
+            snprintf(err_buf, err_len, "Field '%s' must be a string.", arg ? arg : "");
+            break;
+        case ERR_NOT_DATE:
+            snprintf(err_buf, err_len, "Field '%s' must be a date string.", arg ? arg : "");
+            break;
+        case ERR_INVALID_DATE:
+            snprintf(err_buf, err_len, "Field '%s' contains an invalid date format or calendar lie.", arg ? arg : "");
+            break;
+        case ERR_UNKNOWN_TYPE:
+            snprintf(err_buf, err_len, "Internal error: Unknown validation type configured.");
+            break;
+        case ERR_NEGATIVE_AMOUNT:
+            snprintf(err_buf, err_len, "Field error: Amount on '%s' cannot be negative.", arg ? arg : "");
+            break;
+        case ERR_START_AFTER_END:
+            snprintf(err_buf, err_len, "Business rule violation: 'start_date' must be strictly before 'end_date'.");
+            break;
+        case ERR_INVALID_CUSTOMER_ID:
+            snprintf(err_buf, err_len, "Field error: Customer ID '%s' is invalid.", arg ? arg : "");
+            break;
+        default:
+            snprintf(err_buf, err_len, "Unknown error code: %d", code);
+            break;
     }
 
-    if (arg) {
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wformat-nonliteral"
-        snprintf(err_buf, err_len, ERROR_TEMPLATES[code], arg);
-        #pragma GCC diagnostic pop
-    } else {
-        snprintf(err_buf, err_len, "%s", ERROR_TEMPLATES[code]);
-    }
     return false; 
 }
 

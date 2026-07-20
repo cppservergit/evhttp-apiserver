@@ -34,10 +34,10 @@ flowchart TD
 Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas:
 ```c
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .json_handler = ping_handler, .is_fast = true, is_secure = true },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .json_handler = sales_handler, .is_fast = true, is_secure = true },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .json_handler = customer_handler, .is_fast = false, is_secure = true },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .text_handler = metrics_handler, .is_fast = true, is_secure = true }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 ```
 
@@ -45,14 +45,14 @@ static const middleware_ctx_t g_routes[] = {
 Avoid messy manual JSON parsing. Define a strict schema and let the framework automatically validate types and execute custom logical boundaries before the handler is even invoked:
 ```c
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = NULL},
-    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = NULL}
+    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr},
+    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr}
 };
 
 const ValidationContext SalesContext = {
     .schema = SalesSchema,
     .schema_count = sizeof(SalesSchema) / sizeof(SalesSchema[0]),
-    .global_validator = validate_start_before_end
+    .global_validator = sales_invariant_validator
 };
 ```
 

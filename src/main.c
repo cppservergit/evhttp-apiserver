@@ -47,6 +47,7 @@ static int spawn_worker_threads(pthread_t* threads, long num_cores) {
 
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
+        // Modulo ensures round-robin affinity if we ever configure num_reactors > num_cores (oversubscription)
         CPU_SET((long)i % num_cores, &cpuset);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 

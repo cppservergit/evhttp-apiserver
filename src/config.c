@@ -9,6 +9,7 @@
 #include <libgen.h>
 #include <linux/limits.h>
 #include <stdatomic.h>
+#include <ctype.h>
 
 static char g_odbc_conn_str[MAX_CONFIG_STR] = {0};
 static char g_api_url[MAX_CONFIG_STR] = {0};
@@ -27,12 +28,15 @@ static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
 
-static void trim_newline(char* str) {
-    size_t len = strlen(str);
-    while (len > 0 && (str[len-1] == '\n' || str[len-1] == '\r')) {
-        str[len-1] = '\0';
-        len--;
+static char* trim_whitespace(char* str) {
+    while (isspace((unsigned char)*str)) str++;
+    if (*str == '\0') return str;
+    char* end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) {
+        *end = '\0';
+        end--;
     }
+    return str;
 }
 
 static bool load_env_file(const char* filepath) {
@@ -41,15 +45,17 @@ static bool load_env_file(const char* filepath) {
 
     char line[MAX_CONFIG_STR];
     while (fgets(line, sizeof(line), f)) {
-        trim_newline(line);
-        if (line[0] == '#' || line[0] == '\0') continue;
+        char* trimmed_line = trim_whitespace(line);
+        if (trimmed_line[0] == '#' || trimmed_line[0] == '\0') continue;
         
-        char* eq = strchr(line, '=');
+        char* eq = strchr(trimmed_line, '=');
         if (eq) {
             *eq = '\0';
-            const char* key = line;
-            const char* val = eq + 1;
-            setenv(key, val, 1);
+            char* key = trim_whitespace(trimmed_line);
+            char* val = trim_whitespace(eq + 1);
+            if (key[0] != '\0') {
+                setenv(key, val, 1);
+            }
         }
     }
     fclose(f);
