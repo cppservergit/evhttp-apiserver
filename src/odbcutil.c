@@ -88,52 +88,45 @@ void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     }
 }
 
-#define BATCH_SIZE 4
-
 bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
     SQLRETURN ret;
-    
-    char chunks[BATCH_SIZE][ODBC_FETCH_CHUNK_SIZE];
-    SQLLEN indicators[BATCH_SIZE];
-    SQLUSMALLINT row_status[BATCH_SIZE];
-    SQLULEN rows_fetched = 0;
-    
-    SQLSetStmtAttr(hstmt, SQL_ATTR_ROW_BIND_TYPE, (SQLPOINTER)SQL_BIND_BY_COLUMN, 0);
-    SQLSetStmtAttr(hstmt, SQL_ATTR_ROW_ARRAY_SIZE, (SQLPOINTER)BATCH_SIZE, 0);
-    SQLSetStmtAttr(hstmt, SQL_ATTR_ROW_STATUS_PTR, row_status, 0);
-    SQLSetStmtAttr(hstmt, SQL_ATTR_ROWS_FETCHED_PTR, &rows_fetched, 0);
-    
-    SQLBindCol(hstmt, 1, SQL_C_CHAR, chunks, ODBC_FETCH_CHUNK_SIZE, indicators);
+    char chunk[ODBC_FETCH_CHUNK_SIZE];
+    SQLLEN indicator;
     
     bool has_rows = false;
-    while ((ret = SQLFetchScroll(hstmt, SQL_FETCH_NEXT, 0)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+    bool fetch_success = true;
+
+    while ((ret = SQLFetch(hstmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         has_rows = true;
-        for (SQLULEN i = 0; i < rows_fetched; ++i) {
-            if (row_status[i] != SQL_ROW_DELETED && row_status[i] != SQL_ROW_ERROR) {
-                if (indicators[i] != SQL_NULL_DATA) {
-                    size_t len;
-                    if (indicators[i] == SQL_NTS) {
-                        len = strnlen(chunks[i], sizeof(chunks[i]) - 1);
-                    } else {
-                        len = (size_t)indicators[i];
-                    }
-                    
-                    if (len > sizeof(chunks[i]) - 1) {
-                        LOG_ERROR("ODBC fetch truncated row in %s. Expected: %zu, Max Buffer: %zu", 
-                                 func_name, (size_t)indicators[i], sizeof(chunks[i]));
-                        return false;
-                    }
-                    
-                    evbuffer_add(out_buf, chunks[i], len);
-                }
+        
+        while (true) {
+            ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
+            
+            if (ret == SQL_NO_DATA || indicator == SQL_NULL_DATA) {
+                break;
+            }
+            
+            if (ret == SQL_ERROR) {
+                char err_msg[256];
+                snprintf(err_msg, sizeof(err_msg), "SQLGetData failed for %s", func_name);
+                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+                return false;
+            }
+            
+            size_t chunk_len = strnlen(chunk, sizeof(chunk) - 1);
+            if (chunk_len > 0) {
+                evbuffer_add(out_buf, chunk, chunk_len);
+            }
+            
+            if (ret == SQL_SUCCESS) {
+                break;
             }
         }
     }
     
-    bool fetch_success = true;
-    if (ret != SQL_NO_DATA) {
+    if (ret != SQL_NO_DATA && ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "SQLFetchScroll failed in batch mode for %s", func_name);
+        snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
         fetch_success = false;
     }
