@@ -186,48 +186,39 @@ flowchart LR
 This project is licensed under the 3-Clause BSD License - see the [LICENSE](LICENSE) file for details.
 
 ## Example: API Handler via ODBC
-Below is a complete, step-by-step example of how the framework handles a POST request to `/sales`.
+For a comprehensive guide on writing database API handlers, please see the [Developer Guide (skills.md)](skills.md).
 
-### 1. The Request Handler (`include/handlers.h`, `src/handlers.c`)
-Because the framework handles the JSON parsing and validation automatically, the handler simply extracts the validated parameters and calls the service layer:
+Below is a complete example of how the framework handles a POST request to `/sales`, streaming the response directly from ODBC into the network socket without intermediate heap allocations.
+
+### 1. The Parameter Binder & Request Handler (`src/handlers.c`)
+Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters and calls the `odbcutil` streaming abstraction:
+
 ```c
-struct json_object* sales_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt) {
+static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
     const char* start_date = json_get_string(body, "start_date");
     const char* end_date = json_get_string(body, "end_date");
     
+    size_t start_len = start_date ? strlen(start_date) : 0;
+    size_t end_len = end_date ? strlen(end_date) : 0;
+    
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, start_len, 0, (SQLPOINTER)start_date, start_len, &cb_nts);
+    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, end_len, 0, (SQLPOINTER)end_date, end_len, &cb_nts);
+}
+
+void sales_handler(
+    [[maybe_unused]] struct evhttp_request* req, 
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt,
+    struct evbuffer* out_buf
+) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    return sales_service_get_data(start_date, end_date);
-}
-```
-
-### 2. The Database Layer (ODBC) (`include/sales.h`, `src/sales.c`)
-The service layer safely binds the parameters and streams the SQL rowset directly into a `json-c` object via the `odbcutil` abstraction:
-```c
-struct json_object* sales_service_get_data(const char* start_date, const char* end_date) {
-    SQLHDBC hdbc = odbcutil_connect();
-    if (hdbc == SQL_NULL_HDBC) return nullptr;
-    
-    SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
-    if (!hstmt) return nullptr;
-    
-    struct json_object* result_json = nullptr;
-    
-    SQLLEN cbStart = SQL_NTS, cbEnd = SQL_NTS;
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)start_date, 0, &cbStart);
-    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)end_date, 0, &cbEnd);
-    
-    SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL sp_sales_by_category(?,?)}", SQL_NTS);
-    
-    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        result_json = odbcutil_fetch_json_batch(hstmt, __func__);
-    } else {
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute SQLExecDirect for sp_sales_by_category");
+    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", sales_bind_cb, body, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
     }
-    
-    odbcutil_disconnect(hdbc, hstmt);
-    
-    return result_json;
 }
 ```
 
