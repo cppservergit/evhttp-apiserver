@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <sodium.h>
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
@@ -36,14 +37,22 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
         LOG_WARN("TELEMETRY_API_KEY is not configured!");
         return false;
     }
-    
+    size_t expected_len = strlen(expected_key);
     struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    
     const char* auth_header = evhttp_find_header(headers, "X-API-Key");
-    if (auth_header && strcmp(auth_header, expected_key) == 0) return true;
+    if (auth_header && strlen(auth_header) == expected_len && sodium_memcmp(auth_header, expected_key, expected_len) == 0) {
+        sodium_memzero(expected_key, sizeof(expected_key));
+        return true;
+    }
     
     const char* bearer = evhttp_find_header(headers, "Authorization");
-    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strcmp(bearer + 7, expected_key) == 0) return true;
+    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strlen(bearer + 7) == expected_len && sodium_memcmp(bearer + 7, expected_key, expected_len) == 0) {
+        sodium_memzero(expected_key, sizeof(expected_key));
+        return true;
+    }
     
+    sodium_memzero(expected_key, sizeof(expected_key));
     return false;
 }
 

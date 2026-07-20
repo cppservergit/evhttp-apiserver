@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sodium.h>
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLHDBC hdbc = odbcutil_connect();
@@ -65,6 +66,10 @@ void totp_generate_svg(const char* user, int* out_status, const char** out_statu
     snprintf(uri, sizeof(uri), "otpauth://totp/Basica:%s?secret=%s&issuer=Basica", user, secret);
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
+    
+    sodium_memzero(secret, sizeof(secret));
+    sodium_memzero(uri, sizeof(uri));
+
     if (!qrcode) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";

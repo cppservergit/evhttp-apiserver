@@ -15,6 +15,7 @@ apiserver
 *~
 .DS_Store
 claude.md
+code_review_findings.md
 
 # Test directory artifacts
 test/*
