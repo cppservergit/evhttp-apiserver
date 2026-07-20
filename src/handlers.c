@@ -324,7 +324,15 @@ void customer_get_handler(
 
 // --- Sales Handler & Schema ---
 
-static bool validate_start_before_end(
+/**
+ * sales_invariant_validator: Global validator for the Sales endpoint schema.
+ * 
+ * Enforces business logic invariants across multiple fields in the sales request.
+ * Specifically, it ensures that the queried 'start_date' chronologically 
+ * precedes the 'end_date', preventing invalid or negative time range queries 
+ * from hitting the database.
+ */
+static bool sales_invariant_validator(
     [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *root, 
     [[maybe_unused]] const char *name, 
@@ -354,7 +362,7 @@ static const FieldValidator SalesSchema[] = {
 const ValidationContext SalesContext = {
     .schema = SalesSchema,
     .schema_count = sizeof(SalesSchema) / sizeof(SalesSchema[0]),
-    .global_validator = validate_start_before_end
+    .global_validator = sales_invariant_validator
 };
 
 static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
