@@ -55,6 +55,20 @@ static CURL* get_thread_curl(void) {
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);        // 10 second absolute timeout
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // 5 second connect timeout
+            
+            // Explicitly pin secure TLS verification
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+            
+            // Require TLS 1.2 or higher
+            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT);
+            
+            // Defend against SSRF by strictly restricting allowed schemes
+            curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");
+            
+            // Disable HTTP redirects entirely to prevent redirect-based SSRF
+            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+
             pthread_setspecific(g_curl_tls_key, curl);
         }
     }
