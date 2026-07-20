@@ -119,9 +119,9 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
                     }
                     
                     if (len > sizeof(chunks[i]) - 1) {
-                        len = sizeof(chunks[i]) - 1;
-                        LOG_WARN("ODBC fetch truncated row in %s. Expected: %zu, Max Buffer: %zu", 
+                        LOG_ERROR("ODBC fetch truncated row in %s. Expected: %zu, Max Buffer: %zu", 
                                  func_name, (size_t)indicators[i], sizeof(chunks[i]));
+                        return false;
                     }
                     
                     evbuffer_add(out_buf, chunks[i], len);
