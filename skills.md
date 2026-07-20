@@ -13,7 +13,8 @@ To securely accept JSON input, define a strict schema using `FieldValidator` arr
 ```c
 // 1. Define the expected fields and their types
 static const FieldValidator CustomerSchema[] = {
-    {.field_name = "customer_id", .type = TYPE_INT, .is_required = true, .custom_validator = nullptr}
+    // We use a custom validator to enforce the ID is exactly 5 alphabetical chars
+    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
 };
 
 // 2. Wrap it in a ValidationContext
@@ -34,11 +35,12 @@ Create a lightweight callback function that maps the validated JSON payload into
 
 ```c
 static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
-    // 1. Safely extract the pre-validated value
-    int customer_id = json_get_int(json_object_object_get(body, "customer_id"));
+    // 1. Safely extract the pre-validated string
+    const char* customer_id = json_get_string(body, "id");
+    size_t len = customer_id ? strlen(customer_id) : 0;
     
     // 2. Bind it to the prepared statement
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &customer_id, 0, nullptr);
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, len, 0, (SQLPOINTER)customer_id, len, &cb_nts);
 }
 ```
 
