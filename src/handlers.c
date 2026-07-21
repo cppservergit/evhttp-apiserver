@@ -571,16 +571,16 @@ static void handle_login_success(
     config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
     long jwt_timeout = config_get_jwt_timeout_seconds();
 
-    char ticket[1024];
-    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, ticket, sizeof(ticket))) {
+    char token[1024];
+    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, token, sizeof(token))) {
         char buf[1200];
-        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", ticket);
+        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", token);
         evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
     } else {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
-        LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
+        LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
     }
 }
 
