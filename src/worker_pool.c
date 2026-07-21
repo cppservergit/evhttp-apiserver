@@ -52,40 +52,31 @@ static void* worker_thread_main(void* arg) {
         
         if (!atomic_load(&task->cancelled)) {
             const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
-            struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
-            const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
-            logger_set_request_id(req_id);
+            logger_set_request_id(task->request_id);
             
             bool is_authorized = true;
 
             if (ctx && ctx->auth_mode == AUTH_JWT) {
-                handlers_set_identity(task->username, task->session_id);
-            }
-            
-            const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-            if (x_forwarded_for) {
-                const char* peer_ip = nullptr;
-                if (!is_trusted_proxy(task->req, &peer_ip)) {
-                    if (ctx && ctx->auth_mode == AUTH_JWT && is_authorized) {
-                        LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s (User: %s, Session: %s)",
-                                 x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(task->req), task->username, task->session_id);
-                    } else {
-                        LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
-                                 x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(task->req));
-                    }
-                }
+                handlers_set_context(task->username, task->session_id, task->client_ip, task->uri);
+            } else {
+                handlers_set_context(nullptr, nullptr, task->client_ip, task->uri);
             }
             
             if (is_authorized) {
                 if (ctx && ctx->handler) {
                     task->worker_buf = evbuffer_new();
-                    ctx->handler(task->req, task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
+                    ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
+                    const char* ctype = get_content_type();
+                    if (ctype) {
+                        snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
+                    } else {
+                        task->out_content_type[0] = '\0';
+                    }
                 }
             }
             
-            
             logger_clear_request_id();
-            handlers_clear_identity();
+            handlers_clear_context();
         }
         
         // Notify reactor

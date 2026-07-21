@@ -21,8 +21,8 @@ void dummy_cb(struct evhttp_request *req, void *arg) {
     (void)arg;
 }
 
-void dummy_handler(struct evhttp_request *req, struct json_object *body, void *arg, int *status_code, const char **status_txt, struct evbuffer *out_buf) {
-    (void)req; (void)body; (void)arg; (void)status_code; (void)status_txt; (void)out_buf;
+void dummy_handler(struct json_object *body, void *arg, int *status_code, const char **status_txt, struct evbuffer *out_buf) {
+    (void)body; (void)arg; (void)status_code; (void)status_txt; (void)out_buf;
     char buf[1024];
     config_get_odbc_conn_str(buf, sizeof(buf));
     config_get_api_url(buf, sizeof(buf));
@@ -82,11 +82,9 @@ void server_notify_task_done(void* t) {
     task_pool_free(task);
 }
 
-// Mock functions needed by worker_pool.c
-const char* extract_client_ip(struct evhttp_request* req) { (void)req; return "127.0.0.1"; }
-bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip) { (void)req; if (out_peer_ip) *out_peer_ip = "127.0.0.1"; return true; }
-void handlers_set_identity(const char* username, const char* session_id) { (void)username; (void)session_id; }
-void handlers_clear_identity(void) {}
+void handlers_set_context(const char* username, const char* session_id, const char* client_ip, const char* uri) { (void)username; (void)session_id; (void)client_ip; (void)uri; }
+void handlers_clear_context(void) {}
+const char* get_content_type(void) { return NULL; }
 void http_client_init_thread(void) {}
 void http_client_cleanup_thread(void) {}
 int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {

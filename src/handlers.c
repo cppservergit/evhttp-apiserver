@@ -21,8 +21,8 @@
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
-void ping_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
-    (void)req; (void)body; (void)arg;
+void ping_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+    (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -31,8 +31,8 @@ void ping_handler(struct evhttp_request* req, struct json_object* body, void* ar
     evbuffer_add(out_buf, msg, strlen(msg));
 }
 
-void version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
-    (void)req; (void)body; (void)arg;
+void version_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+    (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -56,8 +56,8 @@ void version_handler(struct evhttp_request* req, struct json_object* body, void*
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
-    (void)req; (void)body; (void)arg;
+void sysinfo_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+    (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -98,8 +98,8 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
-    (void)req; (void)body; (void)arg;
+void metrics_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+    (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -150,8 +150,8 @@ void metrics_handler(struct evhttp_request* req, struct json_object* body, void*
     
 }
 
-void rsysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
-    (void)req; (void)body; (void)arg;
+void rsysinfo_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+    (void)body; (void)arg;
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -231,7 +231,6 @@ static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
 }
 
 void customer_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
@@ -270,7 +269,6 @@ void customer_handler(
 
 
 void customer_get_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
@@ -344,7 +342,6 @@ static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
 }
 
 void sales_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
@@ -361,25 +358,7 @@ void sales_handler(
 
 // --- TOTP QR Handler ---
 
-void getqr_handler(
-    struct evhttp_request* req, 
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    const char** out_status_txt,
-    struct evbuffer* out_buf
-) {
-    const char* user = get_user(req);
-    
-    totp_generate_svg(user, out_status, out_status_txt, out_buf);
-    if (*out_status == HTTP_OK) {
-        struct evkeyvalq* headers = evhttp_request_get_output_headers(req);
-        evhttp_add_header(headers, "Content-Type", "image/svg+xml");
-    }
-}
-
 void shippers_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
@@ -389,8 +368,8 @@ void shippers_handler(
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
         
-    const char* user = get_user(req);
-    const char* session = get_session_id(req);
+    const char* user = get_user();
+    const char* session = get_session_id();
     LOG_AUDIT("shippers_handler accessed by User: %s, SessionID: %s", 
               user ? user : "unknown", 
               session ? session : "unknown");
@@ -402,7 +381,6 @@ void shippers_handler(
 }
 
 void products_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
@@ -420,8 +398,22 @@ void products_handler(
     }
 }
 
+void getqr_handler(
+    [[maybe_unused]] struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt,
+    struct evbuffer* out_buf
+) {
+    const char* user = get_user();
+    
+    totp_generate_svg(user, out_status, out_status_txt, out_buf);
+    if (*out_status == HTTP_OK) {
+        set_content_type("image/svg+xml");
+    }
+}
+
 void uuid_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
@@ -441,82 +433,43 @@ void uuid_handler(
 
 // --- Shared Utilities ---
 
-bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip) {
-    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
-    char* peer_ip = nullptr;
-    uint16_t port = 0;
-    if (evcon) evhttp_connection_get_peer(evcon, &peer_ip, &port);
+static _Thread_local char tl_user[33] = {0};
+static _Thread_local char tl_session[37] = {0};
+static _Thread_local char tl_client_ip[64] = {0};
+static _Thread_local char tl_uri[1024] = {0};
+static _Thread_local char tl_content_type[128] = {0};
 
-    if (out_peer_ip) *out_peer_ip = peer_ip;
-
-    char trust_proxy_ip[MAX_CONFIG_STR] = {0};
-    config_get_trust_proxy_ip(trust_proxy_ip, sizeof(trust_proxy_ip));
-
-    if (peer_ip && trust_proxy_ip[0] != '\0' && strcmp(peer_ip, trust_proxy_ip) == 0) {
-        return true;
-    }
-    return false;
+void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri) {
+    if (user) snprintf(tl_user, sizeof(tl_user), "%s", user);
+    else tl_user[0] = '\0';
+    if (session) snprintf(tl_session, sizeof(tl_session), "%s", session);
+    else tl_session[0] = '\0';
+    if (client_ip) snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
+    else tl_client_ip[0] = '\0';
+    if (uri) snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
+    else tl_uri[0] = '\0';
 }
 
-const char* extract_client_ip(struct evhttp_request* req) {
-    if (!req) return "unknown";
-    
-    const char* peer_ip = nullptr;
-    if (is_trusted_proxy(req, &peer_ip)) {
-        struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
-        const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-        if (x_forwarded_for) {
-            static _Thread_local char client_ip_buf[128];
-            strncpy(client_ip_buf, x_forwarded_for, sizeof(client_ip_buf) - 1);
-            client_ip_buf[sizeof(client_ip_buf) - 1] = '\0';
-            
-            // Take the LAST IP in the comma-separated list (the one appended by our trusted proxy)
-            char *comma = strrchr(client_ip_buf, ',');
-            char *ip_start = comma ? (comma + 1) : client_ip_buf;
-            
-            // Trim left whitespace
-            while (isspace((unsigned char)*ip_start)) {
-                ip_start++;
-            }
-            
-            // Trim right whitespace if any
-            int len = strlen(ip_start);
-            while (len > 0 && isspace((unsigned char)ip_start[len - 1])) {
-                ip_start[--len] = '\0';
-            }
-            return ip_start;
-        }
-    }
-    
-    if (peer_ip) return peer_ip;
-    
-    return "unknown";
+void handlers_clear_context(void) {
+    tl_user[0] = '\0';
+    tl_session[0] = '\0';
+    tl_client_ip[0] = '\0';
+    tl_uri[0] = '\0';
+    tl_content_type[0] = '\0';
 }
 
-static _Thread_local char tl_username[33] = {0};
-static _Thread_local char tl_session_id[37] = {0};
+const char* get_user(void) { return tl_user[0] ? tl_user : nullptr; }
+const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
+const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
+const char* get_uri(void) { return tl_uri[0] ? tl_uri : nullptr; }
 
-void handlers_set_identity(const char* user, const char* session) {
-    if (user) strncpy(tl_username, user, sizeof(tl_username) - 1);
-    else tl_username[0] = '\0';
-    
-    if (session) strncpy(tl_session_id, session, sizeof(tl_session_id) - 1);
-    else tl_session_id[0] = '\0';
+void set_content_type(const char* ctype) {
+    if (ctype) snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
+    else tl_content_type[0] = '\0';
 }
 
-void handlers_clear_identity(void) {
-    tl_username[0] = '\0';
-    tl_session_id[0] = '\0';
-}
-
-const char* get_user(struct evhttp_request* req) {
-    (void)req;
-    return tl_username[0] != '\0' ? tl_username : nullptr;
-}
-
-const char* get_session_id(struct evhttp_request* req) {
-    (void)req;
-    return tl_session_id[0] != '\0' ? tl_session_id : nullptr;
+const char* get_content_type(void) {
+    return tl_content_type[0] ? tl_content_type : nullptr;
 }
 
 // --- Login Handler & Schema ---
@@ -626,7 +579,6 @@ static void handle_login_failure(
 }
 
 void login_handler(
-    struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
@@ -636,7 +588,7 @@ void login_handler(
     const char* username = json_get_string(body, "username");
     const char* password = json_get_string(body, "password");
 
-    const char* remote_ip = extract_client_ip(req);
+    const char* remote_ip = get_client_ip();
 
     long http_code = 0;
     struct json_object* remote_response = login_service_authenticate(username, password, &http_code);

@@ -40,6 +40,54 @@ const char* get_server_version(void) {
     return SERVER_VERSION;
 }
 
+static bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip) {
+    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
+    if (!evcon) return false;
+
+    char* peer_ip = nullptr;
+    ev_uint16_t peer_port = 0;
+    evhttp_connection_get_peer(evcon, &peer_ip, &peer_port);
+    if (out_peer_ip) *out_peer_ip = peer_ip;
+
+    if (!peer_ip) return false;
+
+    char trusted_proxy[MAX_CONFIG_STR];
+    config_get_trust_proxy_ip(trusted_proxy, sizeof(trusted_proxy));
+
+    if (trusted_proxy[0] != '\0' && strcmp(peer_ip, trusted_proxy) == 0) {
+        return true;
+    }
+    
+    // Always trust localhost proxies implicitly
+    if (strcmp(peer_ip, "127.0.0.1") == 0 || strcmp(peer_ip, "::1") == 0) {
+        return true;
+    }
+    
+    return false;
+}
+
+static const char* server_extract_client_ip(struct evhttp_request* req) {
+    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    const char* x_forwarded_for = evhttp_find_header(headers, "X-Forwarded-For");
+
+    if (x_forwarded_for) {
+        if (is_trusted_proxy(req, nullptr)) {
+            return x_forwarded_for;
+        } else {
+            // Log untrusted proxy attempt handled later in middleware wrapper
+        }
+    }
+
+    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
+    if (evcon) {
+        char* peer_ip = nullptr;
+        ev_uint16_t peer_port = 0;
+        evhttp_connection_get_peer(evcon, &peer_ip, &peer_port);
+        return peer_ip;
+    }
+    return "unknown";
+}
+
 static _Atomic(struct event_base*) *g_reactor_bases = nullptr;
 static size_t g_num_reactors = 0;
 
@@ -390,14 +438,13 @@ static void process_completed_task(http_task_t* task) {
     bool is_fast = ctx ? ctx->is_fast : false;
     server_record_request_stats(elapsed_ms, is_fast);
     
-    const char* client_ip = extract_client_ip(task->req);
+    const char* client_ip = task->client_ip;
+    const char* req_id = task->request_id;
     
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
-    const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
     logger_set_request_id(req_id);
     
     if (config_get_access_log()) {
-        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, evhttp_request_get_uri(task->req), elapsed_ms);
+        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, task->uri, elapsed_ms);
     }
     
     struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
@@ -408,7 +455,9 @@ static void process_completed_task(http_task_t* task) {
     
     if (evbuffer_get_length(out_buf) > 0) {
         struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-        if (!evhttp_find_header(headers, "Content-Type")) {
+        if (task->out_content_type[0] != '\0') {
+            evhttp_add_header(headers, "Content-Type", task->out_content_type);
+        } else if (!evhttp_find_header(headers, "Content-Type")) {
             evhttp_add_header(headers, "Content-Type", "application/json");
         }
         evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
@@ -522,7 +571,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
             evhttp_add_header(out_headers, "Access-Control-Max-Age", "86400");
             evhttp_add_header(out_headers, "Vary", "Origin");
         } else {
-            const char* client_ip = extract_client_ip(req);
+            const char* client_ip = server_extract_client_ip(req);
             LOG_WARN("CORS validation failed for Origin: '%s' from IP: %s accessing URI: %s", origin, client_ip, evhttp_request_get_uri(req));
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
             const char* msg = "{\"error\":\"CORS origin not allowed.\"}";
@@ -539,6 +588,16 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
 
     struct timespec start_time;
     clock_gettime(CLOCK_MONOTONIC, &start_time);
+    
+    const char* extracted_client_ip = server_extract_client_ip(req);
+    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+    if (x_forwarded_for) {
+        const char* peer_ip = nullptr;
+        if (!is_trusted_proxy(req, &peer_ip)) {
+            LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
+                     x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(req));
+        }
+    }
 
     if (evhttp_request_get_command(req) != ctx->allowed_method) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
@@ -628,6 +687,12 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     task->reactor_id = tl_reactor_id;
     snprintf(task->username, sizeof(task->username), "%s", username);
     snprintf(task->session_id, sizeof(task->session_id), "%s", session_id);
+    snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
+    snprintf(task->uri, sizeof(task->uri), "%s", evhttp_request_get_uri(req));
+    
+    const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+    snprintf(task->request_id, sizeof(task->request_id), "%s", req_id ? req_id : "");
+    
     atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
     evhttp_request_own(req);
