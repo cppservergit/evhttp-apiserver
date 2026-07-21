@@ -291,6 +291,7 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
         strncasecmp(ctype, "application/json", 16) != 0 || 
         (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
         const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
@@ -301,6 +302,7 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     size_t len = evbuffer_get_length(in_buf);
     if (len == 0) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
         const char* msg = "{\"error\":\"Empty request body.\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
@@ -310,6 +312,7 @@ static bool extract_json_body(struct evhttp_request* req, struct json_object** o
     unsigned char* data = evbuffer_pullup(in_buf, -1);
     if (!data) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
         const char* msg = "{\"error\":\"Failed to pull up request body buffer.\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_INTERNAL, "Internal Server Error", nullptr);
@@ -548,13 +551,14 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
         if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
             const char* msg = "{\"error\":\"Missing or invalid Authorization header\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 403, "Forbidden", nullptr);
             return;
         }
 
-        char jwt_secret[128];
+        char jwt_secret[MAX_CONFIG_STR];
         config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
         
         int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, username, sizeof(username), session_id, sizeof(session_id));
@@ -562,13 +566,15 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         
         if (jwt_res == JWT_ERR_EXPIRED) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
             const char* msg = "{\"error\":\"Token has expired\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 401, "Unauthorized", nullptr);
             return;
         } else if (jwt_res != JWT_OK) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            const char* msg = "{\"error\":\"Invalid token signature or format\"}";
+            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
+            const char* msg = "{\"error\":\"Invalid token\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 403, "Forbidden", nullptr);
             return;

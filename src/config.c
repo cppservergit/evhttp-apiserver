@@ -82,8 +82,9 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
     return true;
 }
 
+static bool is_first_load = true;
+
 static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
-    static bool is_first_load = true;
 
     if (is_first_load) {
         if (getenv("ODBC_CONN_STR")) snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
@@ -141,7 +142,12 @@ void config_reload(void) {
         if (!env_url)  LOG_ERROR("Missing required config: API_URL");
         if (!env_user) LOG_ERROR("Missing required config: API_USER");
         if (!env_pass) LOG_ERROR("Missing required config: API_PASS");
-        LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
+        if (is_first_load) {
+            LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
+        } else {
+            LOG_ERROR("Missing configuration variables during hot-reload. Keeping previous configuration.");
+            return;
+        }
     }
     
     size_t num_threads = getenv("NUM_THREADS") ? strtoul(getenv("NUM_THREADS"), nullptr, 10) : 0;

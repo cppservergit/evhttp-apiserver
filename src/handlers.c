@@ -409,9 +409,15 @@ void products_handler(
     [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
-    *out_status = HTTP_OK;
-    *out_status_txt = "OK";
-    odbcutil_get_json("{CALL sp_products_view}", nullptr, nullptr, out_buf, __func__);
+    if (!odbcutil_get_json("{CALL sp_products_view}", nullptr, nullptr, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+        const char* err = "{\"error\":\"Database error\"}";
+        evbuffer_add(out_buf, err, strlen(err));
+    } else {
+        *out_status = HTTP_OK;
+        *out_status_txt = "OK";
+    }
 }
 
 void uuid_handler(
