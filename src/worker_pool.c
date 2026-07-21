@@ -22,6 +22,7 @@ typedef struct {
     size_t num_workers;
     pthread_t* workers;
     bool shutdown;
+    bool initialized;
 } pool_t;
 
 static pool_t g_fast_pool = {0};
@@ -108,6 +109,7 @@ int worker_pool_init(size_t num_workers) {
     
     pthread_mutex_init(&g_fast_pool.mutex, nullptr);
     pthread_cond_init(&g_fast_pool.cond, nullptr);
+    g_fast_pool.initialized = true;
     g_fast_pool.num_workers = fast_workers;
     g_fast_pool.workers = calloc(fast_workers, sizeof(pthread_t));
     if (!g_fast_pool.workers) {
@@ -125,6 +127,7 @@ int worker_pool_init(size_t num_workers) {
     
     pthread_mutex_init(&g_slow_pool.mutex, nullptr);
     pthread_cond_init(&g_slow_pool.cond, nullptr);
+    g_slow_pool.initialized = true;
     g_slow_pool.num_workers = slow_workers;
     g_slow_pool.workers = calloc(slow_workers, sizeof(pthread_t));
     if (!g_slow_pool.workers) {
@@ -146,15 +149,19 @@ int worker_pool_init(size_t num_workers) {
 }
 
 void worker_pool_shutdown(void) {
-    pthread_mutex_lock(&g_fast_pool.mutex);
-    g_fast_pool.shutdown = true;
-    pthread_mutex_unlock(&g_fast_pool.mutex);
-    pthread_cond_broadcast(&g_fast_pool.cond);
+    if (g_fast_pool.initialized) {
+        pthread_mutex_lock(&g_fast_pool.mutex);
+        g_fast_pool.shutdown = true;
+        pthread_mutex_unlock(&g_fast_pool.mutex);
+        pthread_cond_broadcast(&g_fast_pool.cond);
+    }
     
-    pthread_mutex_lock(&g_slow_pool.mutex);
-    g_slow_pool.shutdown = true;
-    pthread_mutex_unlock(&g_slow_pool.mutex);
-    pthread_cond_broadcast(&g_slow_pool.cond);
+    if (g_slow_pool.initialized) {
+        pthread_mutex_lock(&g_slow_pool.mutex);
+        g_slow_pool.shutdown = true;
+        pthread_mutex_unlock(&g_slow_pool.mutex);
+        pthread_cond_broadcast(&g_slow_pool.cond);
+    }
     
     if (g_fast_pool.workers) {
         for (size_t i = 0; i < g_fast_pool.num_workers; ++i) {
@@ -172,10 +179,16 @@ void worker_pool_shutdown(void) {
         g_slow_pool.workers = nullptr;
     }
     
-    pthread_mutex_destroy(&g_fast_pool.mutex);
-    pthread_cond_destroy(&g_fast_pool.cond);
-    pthread_mutex_destroy(&g_slow_pool.mutex);
-    pthread_cond_destroy(&g_slow_pool.cond);
+    if (g_fast_pool.initialized) {
+        pthread_mutex_destroy(&g_fast_pool.mutex);
+        pthread_cond_destroy(&g_fast_pool.cond);
+        g_fast_pool.initialized = false;
+    }
+    if (g_slow_pool.initialized) {
+        pthread_mutex_destroy(&g_slow_pool.mutex);
+        pthread_cond_destroy(&g_slow_pool.cond);
+        g_slow_pool.initialized = false;
+    }
 }
 
 bool worker_pool_enqueue(http_task_t* task) {

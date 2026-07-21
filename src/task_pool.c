@@ -14,6 +14,10 @@ static size_t g_stack_top = 0;
 static size_t g_pool_size = 0;
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#define TL_CACHE_SIZE 64
+static _Thread_local http_task_t* tl_cache[TL_CACHE_SIZE];
+static _Thread_local size_t tl_cache_count = 0;
+
 void task_pool_init(size_t pool_size) {
     if (pool_size == 0) pool_size = 100000;
     g_pool_size = pool_size;
@@ -43,39 +47,61 @@ void task_pool_shutdown(void) {
 }
 
 http_task_t* task_pool_alloc(void) {
-    pthread_mutex_lock(&g_pool_mutex);
-    if (g_stack_top > 0) {
-        http_task_t* task = g_free_stack[--g_stack_top];
-        size_t idx = task - g_task_slab;
-        g_is_free_flag[idx] = false;
-        pthread_mutex_unlock(&g_pool_mutex);
-        
+    if (tl_cache_count > 0) {
+        http_task_t* task = tl_cache[--tl_cache_count];
         memset(task, 0, sizeof(http_task_t));
         return task;
     }
+    
+    pthread_mutex_lock(&g_pool_mutex);
+    size_t batch = (g_stack_top < TL_CACHE_SIZE) ? g_stack_top : TL_CACHE_SIZE;
+    if (batch == 0) {
+        pthread_mutex_unlock(&g_pool_mutex);
+        return nullptr;
+    }
+    
+    for (size_t i = 0; i < batch; i++) {
+        http_task_t* t = g_free_stack[--g_stack_top];
+        size_t idx = t - g_task_slab;
+        g_is_free_flag[idx] = false;
+        tl_cache[tl_cache_count++] = t;
+    }
     pthread_mutex_unlock(&g_pool_mutex);
     
-    // Strict backpressure: return nullptr if pool is exhausted
-    return nullptr;
+    http_task_t* task = tl_cache[--tl_cache_count];
+    memset(task, 0, sizeof(http_task_t));
+    return task;
 }
 
 void task_pool_free(http_task_t* task) {
     if (!task) return;
     
     if (task >= g_task_slab && task < (g_task_slab + g_pool_size)) {
-        pthread_mutex_lock(&g_pool_mutex);
-        size_t idx = task - g_task_slab;
-        if (g_is_free_flag[idx]) {
-            fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
-            abort();
+        if (tl_cache_count < TL_CACHE_SIZE) {
+            tl_cache[tl_cache_count++] = task;
+            return;
         }
-        if (g_stack_top >= g_pool_size) {
+        
+        pthread_mutex_lock(&g_pool_mutex);
+        size_t flush_count = tl_cache_count;
+        if (g_stack_top + flush_count >= g_pool_size) {
             fprintf(stderr, "FATAL: task_pool stack overflow\n");
             abort();
         }
-        g_is_free_flag[idx] = true;
-        g_free_stack[g_stack_top++] = task;
+        for (size_t i = 0; i < flush_count; i++) {
+            http_task_t* t = tl_cache[i];
+            size_t idx = t - g_task_slab;
+            if (g_is_free_flag[idx]) {
+                fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
+                abort();
+            }
+            g_is_free_flag[idx] = true;
+            g_free_stack[g_stack_top++] = t;
+        }
         pthread_mutex_unlock(&g_pool_mutex);
+        
+        tl_cache_count = 0;
+        tl_cache[tl_cache_count++] = task;
     } else {
         free(task);
     }

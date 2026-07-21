@@ -51,10 +51,10 @@ void logger_log(LogLevel level, const char* format, ...) {
 
     // Worst-case JSON escape expansion is 6x (\uXXXX for every char). 
     // msg_buf is 2048 bytes, so we need 2048 * 6 = 12288 bytes.
-    char escaped_msg[12288];
+    static _Thread_local char escaped_msg[12288];
     json_encode_string(msg_buf, escaped_msg, sizeof(escaped_msg));
 
-    char out_buf[12800];
+    static _Thread_local char out_buf[12800];
     int len;
     if (tl_request_id[0] != '\0') {
         len = snprintf(out_buf, sizeof(out_buf), 
