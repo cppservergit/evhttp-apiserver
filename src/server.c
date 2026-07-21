@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdatomic.h>
 #include <event2/thread.h>
+#include <event2/bufferevent.h>
 #include "worker_pool.h"
 #include "task_pool.h"
 #include <sys/eventfd.h>
@@ -40,16 +41,38 @@ const char* get_server_version(void) {
     return SERVER_VERSION;
 }
 
+static const char* server_get_client_ip_fast(struct evhttp_connection* evcon) {
+    static _Thread_local char ip_buf[INET6_ADDRSTRLEN];
+    
+    struct bufferevent* bev = evhttp_connection_get_bufferevent(evcon);
+    if (!bev) return "unknown";
+    
+    int fd = bufferevent_getfd(bev);
+    if (fd < 0) return "unknown";
+    
+    struct sockaddr_storage addr;
+    socklen_t addr_len = sizeof(addr);
+    
+    if (getpeername(fd, (struct sockaddr*)&addr, &addr_len) == 0) {
+        if (addr.ss_family == AF_INET) {
+            struct sockaddr_in* s = (struct sockaddr_in*)&addr;
+            if (inet_ntop(AF_INET, &s->sin_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
+        } else if (addr.ss_family == AF_INET6) {
+            struct sockaddr_in6* s = (struct sockaddr_in6*)&addr;
+            if (inet_ntop(AF_INET6, &s->sin6_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
+        }
+    }
+    return "unknown";
+}
+
 static bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_ip) {
     struct evhttp_connection* evcon = evhttp_request_get_connection(req);
     if (!evcon) return false;
 
-    char* peer_ip = nullptr;
-    ev_uint16_t peer_port = 0;
-    evhttp_connection_get_peer(evcon, &peer_ip, &peer_port);
+    const char* peer_ip = server_get_client_ip_fast(evcon);
     if (out_peer_ip) *out_peer_ip = peer_ip;
 
-    if (!peer_ip) return false;
+    if (strcmp(peer_ip, "unknown") == 0) return false;
 
     char trusted_proxy[MAX_CONFIG_STR];
     config_get_trust_proxy_ip(trusted_proxy, sizeof(trusted_proxy));
@@ -80,10 +103,7 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
 
     struct evhttp_connection* evcon = evhttp_request_get_connection(req);
     if (evcon) {
-        char* peer_ip = nullptr;
-        ev_uint16_t peer_port = 0;
-        evhttp_connection_get_peer(evcon, &peer_ip, &peer_port);
-        return peer_ip;
+        return server_get_client_ip_fast(evcon);
     }
     return "unknown";
 }
