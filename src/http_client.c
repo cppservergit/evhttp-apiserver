@@ -42,33 +42,36 @@ static void curl_init_tls_key(void) {
     pthread_key_create(&g_curl_tls_key, curl_thread_destructor);
 }
 
+static void apply_curl_defaults(CURL* curl) {
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_cb);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);        // 10 second absolute timeout
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // 5 second connect timeout
+    
+    // Explicitly pin secure TLS verification
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    
+    // Require TLS 1.2 or higher
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT);
+    
+    // Defend against SSRF by strictly restricting allowed schemes
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");
+    
+    // Disable HTTP redirects entirely to prevent redirect-based SSRF
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+}
+
 static CURL* get_thread_curl(void) {
     pthread_once(&g_curl_tls_once, curl_init_tls_key);
     CURL* curl = (CURL*)pthread_getspecific(g_curl_tls_key);
     if (!curl) {
         curl = curl_easy_init();
         if (curl) {
-            curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
-            curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L);
-            curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_cb);
-            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);        // 10 second absolute timeout
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // 5 second connect timeout
-            
-            // Explicitly pin secure TLS verification
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-            
-            // Require TLS 1.2 or higher
-            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT);
-            
-            // Defend against SSRF by strictly restricting allowed schemes
-            curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");
-            
-            // Disable HTTP redirects entirely to prevent redirect-based SSRF
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
-
+            apply_curl_defaults(curl);
             pthread_setspecific(g_curl_tls_key, curl);
         }
     }
@@ -78,6 +81,9 @@ static CURL* get_thread_curl(void) {
 static CURL* setup_curl_request(const char* url, const char* body, const char** headers, int num_headers, struct curl_slist** out_headers, struct memory_struct* chunk) {
     CURL* curl = get_thread_curl();
     if (!curl) return nullptr;
+
+    curl_easy_reset(curl);
+    apply_curl_defaults(curl);
 
     chunk->memory = malloc(4096);
     if (!chunk->memory) {

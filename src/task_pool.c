@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "logger.h"
+#include <event2/buffer.h>
 
 // Slab must never be realloc'd to preserve pointer range checks in task_pool_free.
 static http_task_t* g_task_slab = nullptr;
@@ -42,6 +43,13 @@ int task_pool_init(size_t pool_size) {
 }
 
 void task_pool_shutdown(void) {
+    if (g_task_slab) {
+        for (size_t i = 0; i < g_pool_size; i++) {
+            if (g_task_slab[i].worker_buf) {
+                evbuffer_free(g_task_slab[i].worker_buf);
+            }
+        }
+    }
     free(g_free_stack);
     free(g_task_slab);
     free(g_is_free_flag);
@@ -51,29 +59,34 @@ void task_pool_shutdown(void) {
 }
 
 http_task_t* task_pool_alloc(void) {
+    http_task_t* task = nullptr;
     if (tl_cache_count > 0) {
-        http_task_t* task = tl_cache[--tl_cache_count];
-        memset(task, 0, sizeof(http_task_t));
-        return task;
-    }
-    
-    pthread_mutex_lock(&g_pool_mutex);
-    size_t batch = (g_stack_top < TL_CACHE_SIZE) ? g_stack_top : TL_CACHE_SIZE;
-    if (batch == 0) {
+        task = tl_cache[--tl_cache_count];
+    } else {
+        pthread_mutex_lock(&g_pool_mutex);
+        size_t batch = (g_stack_top < TL_CACHE_SIZE) ? g_stack_top : TL_CACHE_SIZE;
+        if (batch > 0) {
+            for (size_t i = 0; i < batch; i++) {
+                http_task_t* t = g_free_stack[--g_stack_top];
+                size_t idx = t - g_task_slab;
+                g_is_free_flag[idx] = false;
+                tl_cache[tl_cache_count++] = t;
+            }
+            task = tl_cache[--tl_cache_count];
+        }
         pthread_mutex_unlock(&g_pool_mutex);
-        return nullptr;
     }
     
-    for (size_t i = 0; i < batch; i++) {
-        http_task_t* t = g_free_stack[--g_stack_top];
-        size_t idx = t - g_task_slab;
-        g_is_free_flag[idx] = false;
-        tl_cache[tl_cache_count++] = t;
+    if (task) {
+        struct evbuffer* cached_buf = task->worker_buf;
+        memset(task, 0, sizeof(http_task_t));
+        if (cached_buf) {
+            evbuffer_drain(cached_buf, evbuffer_get_length(cached_buf));
+            task->worker_buf = cached_buf;
+        } else {
+            task->worker_buf = evbuffer_new();
+        }
     }
-    pthread_mutex_unlock(&g_pool_mutex);
-    
-    http_task_t* task = tl_cache[--tl_cache_count];
-    memset(task, 0, sizeof(http_task_t));
     return task;
 }
 
@@ -88,7 +101,7 @@ void task_pool_free(http_task_t* task) {
         
         pthread_mutex_lock(&g_pool_mutex);
         size_t flush_count = tl_cache_count;
-        if (g_stack_top + flush_count >= g_pool_size) {
+        if (g_stack_top + flush_count > g_pool_size) {
             fprintf(stderr, "FATAL: task_pool stack overflow\n");
             abort();
         }

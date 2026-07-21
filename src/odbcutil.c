@@ -8,11 +8,16 @@
 #include <pthread.h>
 
 static _Thread_local SQLHDBC tl_hdbc = SQL_NULL_HDBC;
+static _Thread_local SQLHSTMT tl_hstmt = SQL_NULL_HSTMT;
 static pthread_key_t tl_hdbc_key;
 static pthread_once_t tl_hdbc_key_once = PTHREAD_ONCE_INIT;
 
 static void tl_hdbc_destructor(void* arg) {
     SQLHDBC hdbc = (SQLHDBC)arg;
+    if (tl_hstmt != SQL_NULL_HSTMT) {
+        SQLFreeHandle(SQL_HANDLE_STMT, tl_hstmt);
+        tl_hstmt = SQL_NULL_HSTMT;
+    }
     if (hdbc != SQL_NULL_HDBC) {
         SQLDisconnect(hdbc);
         SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
@@ -24,6 +29,10 @@ static void make_tl_hdbc_key(void) {
 }
 
 void odbcutil_reset_connection(void) {
+    if (tl_hstmt != SQL_NULL_HSTMT) {
+        SQLFreeHandle(SQL_HANDLE_STMT, tl_hstmt);
+        tl_hstmt = SQL_NULL_HSTMT;
+    }
     if (tl_hdbc != SQL_NULL_HDBC) {
         SQLDisconnect(tl_hdbc);
         SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc);
@@ -50,12 +59,7 @@ void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* c
 
 SQLHDBC odbcutil_connect(void) {
     if (tl_hdbc != SQL_NULL_HDBC) {
-        SQLUINTEGER dead = SQL_CD_FALSE;
-        SQLGetConnectAttr(tl_hdbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, nullptr);
-        if (dead == SQL_CD_FALSE) {
-            return tl_hdbc;
-        }
-        odbcutil_reset_connection();
+        return tl_hdbc;
     }
     
     if (SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &tl_hdbc) != SQL_SUCCESS) {
@@ -86,6 +90,10 @@ SQLHDBC odbcutil_connect(void) {
 }
 
 SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
+    if (tl_hstmt != SQL_NULL_HSTMT) {
+        return tl_hstmt;
+    }
+
     SQLHSTMT hstmt = SQL_NULL_HSTMT;
     if (SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt) != SQL_SUCCESS) {
         char context_msg[256];
@@ -98,13 +106,16 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
     // Set a 5-second timeout on all database queries so worker threads never hang indefinitely
     SQLSetStmtAttr(hstmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)5, 0);
     
+    tl_hstmt = hstmt;
     return hstmt;
 }
 
 void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     (void)hdbc; // Connection remains pooled persistently in tl_hdbc
     if (hstmt != SQL_NULL_HSTMT) {
-        SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+        SQLFreeStmt(hstmt, SQL_CLOSE);        // Close open cursors
+        SQLFreeStmt(hstmt, SQL_RESET_PARAMS); // Clear bound parameters
+        SQLFreeStmt(hstmt, SQL_UNBIND);       // Clear bound columns
     }
 }
 
@@ -133,7 +144,13 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
                 return false;
             }
             
-            size_t chunk_len = strnlen(chunk, sizeof(chunk) - 1);
+            size_t chunk_len = 0;
+            if (indicator >= 0 && (size_t)indicator < sizeof(chunk)) {
+                chunk_len = (size_t)indicator;
+            } else {
+                // Truncated or SQL_NO_TOTAL, we must rely on the null terminator
+                chunk_len = sizeof(chunk) - 1;
+            }
             if (chunk_len > 0) {
                 evbuffer_add(out_buf, chunk, chunk_len);
             }

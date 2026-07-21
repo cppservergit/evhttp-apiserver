@@ -64,7 +64,6 @@ static void* worker_thread_main(void* arg) {
             
             if (is_authorized) {
                 if (ctx && ctx->handler) {
-                    task->worker_buf = evbuffer_new();
                     ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
                     const char* ctype = get_content_type();
                     if (ctype) {
