@@ -578,8 +578,6 @@ static void handle_login_success(
         evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
     } else {
-        const char* msg = "{\"error\":\"Failed to generate ticket\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
         LOG_WARN("Failed to generate ticket for Username: %s, RemoteIP: %s", username, remote_ip);
