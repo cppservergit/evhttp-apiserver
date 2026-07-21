@@ -121,53 +121,49 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     size_t header_b64_max = sodium_base64_ENCODED_LEN(strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
     size_t payload_b64_max = sodium_base64_ENCODED_LEN(strlen(payload), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
     
-    char* header_b64 = malloc(header_b64_max);
-    char* payload_b64 = malloc(payload_b64_max);
-    
-    if (!header_b64 || !payload_b64) {
-        free(header_b64); free(payload_b64); json_object_put(payload_obj); 
+    char header_b64[128];
+    char payload_b64[512];
+    char mac_b64[128];
+    char final_jwt[1024];
+
+    if (header_b64_max > sizeof(header_b64) || payload_b64_max > sizeof(payload_b64)) {
+        json_object_put(payload_obj);
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
         return nullptr;
     }
+
+    sodium_bin2base64(header_b64, sizeof(header_b64), (const unsigned char*)header, strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    sodium_bin2base64(payload_b64, sizeof(payload_b64), (const unsigned char*)payload, strlen(payload), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
     
-    sodium_bin2base64(header_b64, header_b64_max, (const unsigned char*)header, strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    sodium_bin2base64(payload_b64, payload_b64_max, (const unsigned char*)payload, strlen(payload), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    
-    size_t msg_len = strlen(header_b64) + 1 + strlen(payload_b64) + 1;
-    char* msg = malloc(msg_len);
-    if (!msg) {
-        free(header_b64); free(payload_b64); json_object_put(payload_obj); 
+    char msg[768];
+    int msg_len = snprintf(msg, sizeof(msg), "%s.%s", header_b64, payload_b64);
+    if (msg_len >= (int)sizeof(msg)) {
+        json_object_put(payload_obj);
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
         return nullptr;
     }
-    snprintf(msg, msg_len, "%s.%s", header_b64, payload_b64);
     
     unsigned char mac[crypto_auth_hmacsha256_BYTES];
     crypto_auth_hmacsha256(mac, (const unsigned char*)msg, strlen(msg), secret_bytes);
     
     size_t mac_b64_max = sodium_base64_ENCODED_LEN(sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    char* mac_b64 = malloc(mac_b64_max);
-    if (!mac_b64) {
-        free(header_b64); free(payload_b64); free(msg); json_object_put(payload_obj); 
+    if (mac_b64_max > sizeof(mac_b64)) {
+        json_object_put(payload_obj);
         sodium_memzero(secret_bytes, sizeof(secret_bytes));
         return nullptr;
     }
-    sodium_bin2base64(mac_b64, mac_b64_max, mac, sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    sodium_bin2base64(mac_b64, sizeof(mac_b64), mac, sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
     
-    size_t jwt_len = strlen(msg) + 1 + strlen(mac_b64) + 1;
-    char* jwt = malloc(jwt_len);
-    if (jwt) {
-        snprintf(jwt, jwt_len, "%s.%s", msg, mac_b64);
+    int final_len = snprintf(final_jwt, sizeof(final_jwt), "%s.%s", msg, mac_b64);
+    if (final_len >= (int)sizeof(final_jwt)) {
+        json_object_put(payload_obj);
+        sodium_memzero(secret_bytes, sizeof(secret_bytes));
+        return nullptr;
     }
     
-    free(header_b64);
-    free(payload_b64);
-    free(msg);
-    free(mac_b64);
     json_object_put(payload_obj);
-    
     sodium_memzero(secret_bytes, sizeof(secret_bytes));
-    return jwt;
+    return strdup(final_jwt);
 }
 
 int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {

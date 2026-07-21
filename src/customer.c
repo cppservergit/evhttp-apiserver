@@ -12,40 +12,14 @@
 #include "jwt.h"
 
 struct jwt_cache {
-    char* token;
+    char token[1024];
     time_t expires_at;
 };
 
-static pthread_key_t g_jwt_tls_key;
-static pthread_once_t g_jwt_tls_once = PTHREAD_ONCE_INIT;
-
-static void jwt_cache_destructor(void* val) {
-    struct jwt_cache* cache = (struct jwt_cache*)val;
-    if (cache) {
-        if (cache->token) free(cache->token);
-        free(cache);
-    }
-}
-
-static void jwt_init_tls_key(void) {
-    pthread_key_create(&g_jwt_tls_key, jwt_cache_destructor);
-}
+static _Thread_local struct jwt_cache tls_cache;
 
 static struct jwt_cache* get_jwt_cache(void) {
-    pthread_once(&g_jwt_tls_once, jwt_init_tls_key);
-    struct jwt_cache* cache = (struct jwt_cache*)pthread_getspecific(g_jwt_tls_key);
-    if (!cache) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-        cache = calloc(1, sizeof(struct jwt_cache));
-        if (!cache) {
-            LOG_ERROR("Out of memory allocating jwt_cache");
-            return nullptr;
-        }
-        pthread_setspecific(g_jwt_tls_key, cache);
-#pragma GCC diagnostic pop
-    }
-    return cache;
+    return &tls_cache;
 }
 
 static struct json_object* execute_login_request(void) {
@@ -54,16 +28,17 @@ static struct json_object* execute_login_request(void) {
     config_get_api_pass(api_pass, sizeof(api_pass));
     config_get_api_url(api_url, sizeof(api_url));
     
-    struct json_object* login_payload = json_object_new_object();
-    json_object_object_add(login_payload, "username", json_object_new_string(api_user));
-    json_object_object_add(login_payload, "password", json_object_new_string(api_pass));
+    char body_str[512];
+    int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", api_user, api_pass);
+    if (len >= (int)sizeof(body_str)) {
+        LOG_ERROR("Login payload truncated");
+        return nullptr;
+    }
     
-    const char* body = json_object_to_json_string(login_payload);
     const char* headers[] = {"Content-Type: application/json"};
     long http_code = 0;
     
-    struct json_object* login_response = http_client_post_json(api_url, "/api/login", body, headers, 1, &http_code);
-    json_object_put(login_payload);
+    struct json_object* login_response = http_client_post_json(api_url, "/api/login", body_str, headers, 1, &http_code);
     
     if (http_code != 200 || !login_response) {
         if (login_response) json_object_put(login_response);
@@ -77,13 +52,13 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
     if (json_object_object_get_ex(login_response, "id_token", &token_obj)) {
         const char* id_token = json_object_get_string(token_obj);
         if (id_token) {
-            cache->token = strdup(id_token);
-            if (cache->token) {
-                time_t exp = jwt_get_expiration(id_token);
-                cache->expires_at = exp > 0 ? exp : time(nullptr) + 180;
-            } else {
-                LOG_ERROR("Out of memory in strdup for id_token");
+            if (strlen(id_token) >= sizeof(cache->token)) {
+                LOG_ERROR("Remote token exceeds %zu bytes", sizeof(cache->token) - 1);
+                return;
             }
+            snprintf(cache->token, sizeof(cache->token), "%s", id_token);
+            time_t exp = jwt_get_expiration(id_token);
+            cache->expires_at = exp > 0 ? exp : time(nullptr) + 180;
         }
     }
 }
@@ -91,18 +66,14 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
 static const char* login_and_get_token(void) {
     time_t now = time(nullptr);
     struct jwt_cache* cache = get_jwt_cache();
-    if (!cache) return nullptr;
     
-    if (cache->token && now < cache->expires_at) {
+    if (cache->token[0] != '\0' && now < cache->expires_at) {
         return cache->token;
     }
     
     LOG_WARN("[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
     
-    if (cache->token) {
-        free(cache->token);
-        cache->token = nullptr;
-    }
+    cache->token[0] = '\0';
     
     struct json_object* login_response = execute_login_request();
     if (!login_response) return nullptr;
@@ -110,7 +81,7 @@ static const char* login_and_get_token(void) {
     update_jwt_cache(cache, login_response);
     json_object_put(login_response);
     
-    return cache->token;
+    return cache->token[0] != '\0' ? cache->token : nullptr;
 }
 
 struct json_object* customer_service_get_info(const char* customer_id, long* out_http_code) {
@@ -141,9 +112,8 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
     // Invalidate token cache on auth failure
     if (out_http_code && *out_http_code == 401) {
         struct jwt_cache* cache = get_jwt_cache();
-        if (cache && cache->token) {
-            free(cache->token);
-            cache->token = nullptr;
+        if (cache) {
+            cache->token[0] = '\0';
         }
     }
     
