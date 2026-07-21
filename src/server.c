@@ -679,7 +679,10 @@ static evutil_socket_t create_and_bind_socket(uint16_t port, const char* addr) {
         .sin_family = AF_INET,
         .sin_port = htons(port)
     };
-    inet_pton(AF_INET, addr, &sin.sin_addr);
+    if (inet_pton(AF_INET, addr, &sin.sin_addr) != 1) {
+        close(fd);
+        return -1;
+    }
 
     if (bind(fd, (struct sockaddr*)&sin, sizeof(sin)) < 0 || listen(fd, SOMAXCONN) < 0) {
         close(fd);
