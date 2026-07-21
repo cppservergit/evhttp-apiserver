@@ -31,7 +31,6 @@
 #include "worker_pool.h"
 #include "task_pool.h"
 #include <sys/eventfd.h>
-#include <fcntl.h>
 
 constexpr size_t MAX_PAYLOAD_SIZE = 5 * 1024 * 1024;
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
@@ -242,39 +241,16 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     }
     
     if (mem_usage_kb) {
-        static _Atomic uint64_t cached_mem = 0;
-        static _Atomic time_t last_update = 0;
-        
-        time_t now = time(nullptr);
-        time_t last = atomic_load_explicit(&last_update, memory_order_acquire);
-        
-        // Cache for 1 second to prevent scraping-induced I/O latency
-        if (now - last >= 1) {
-            uint64_t mem_usage = 0;
-            // Use low-level open/read to bypass libc FILE* lock contention and heap allocations
-            int fd = open("/proc/self/statm", O_RDONLY);
-            if (fd >= 0) {
-                char buf[256];
-                ssize_t n = read(fd, buf, sizeof(buf) - 1);
-                if (n > 0) {
-                    buf[n] = '\0';
-                    char* p = strchr(buf, ' ');
-                    if (p) {
-                        long resident = strtol(p + 1, nullptr, 10);
-                        mem_usage = (uint64_t)((resident * g_page_size) / 1024);
-                    }
-                }
-                close(fd);
+        uint64_t mem_usage = 0;
+        FILE* f = fopen("/proc/self/statm", "r");
+        if (f) {
+            long size, resident, share, text, lib, data, dt;
+            if (fscanf(f, "%ld %ld %ld %ld %ld %ld %ld", &size, &resident, &share, &text, &lib, &data, &dt) == 7) {
+                mem_usage = (uint64_t)((resident * g_page_size) / 1024);
             }
-            if (mem_usage > 0) {
-                atomic_store_explicit(&cached_mem, mem_usage, memory_order_release);
-                atomic_store_explicit(&last_update, now, memory_order_release);
-                *mem_usage_kb = mem_usage;
-                return;
-            }
+            fclose(f);
         }
-        
-        *mem_usage_kb = atomic_load_explicit(&cached_mem, memory_order_acquire);
+        *mem_usage_kb = mem_usage;
     }
 }
 
