@@ -124,7 +124,12 @@ int server_init_globals(size_t num_reactors) {
     size_t configured_threads = config_get_num_threads();
     size_t bg_workers_count = (configured_threads > 0) ? configured_threads : (num_reactors * 2);
     size_t q_size = config_get_max_queue_size();
-    task_pool_init(q_size == 0 ? 100000 : q_size);
+    
+    // Scale task pool to safely accommodate:
+    // 2x MAX_QUEUE_SIZE (fast + slow queues) + background workers + generous buffer for reactor completion queues
+    size_t safe_q_size = (q_size == 0) ? 100000 : q_size;
+    size_t slab_size = (safe_q_size * 2) + bg_workers_count + 10000;
+    task_pool_init(slab_size);
     g_reactor_stats = calloc(g_num_reactors, sizeof(struct reactor_stats));
     g_reactor_bases = calloc(g_num_reactors, sizeof(_Atomic(struct event_base*)));
     g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
