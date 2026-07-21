@@ -137,11 +137,11 @@ void config_reload(void) {
     const char* env_pass = getenv("API_PASS");
 
     if (!env_odbc || !env_url || !env_user || !env_pass) {
-        if (!env_odbc) LOG_FATAL("Missing required config: ODBC_CONN_STR");
-        if (!env_url) LOG_FATAL("Missing required config: API_URL");
-        if (!env_user) LOG_FATAL("Missing required config: API_USER");
-        if (!env_pass) LOG_FATAL("Missing required config: API_PASS");
-        return;
+        if (!env_odbc) LOG_ERROR("Missing required config: ODBC_CONN_STR");
+        if (!env_url)  LOG_ERROR("Missing required config: API_URL");
+        if (!env_user) LOG_ERROR("Missing required config: API_USER");
+        if (!env_pass) LOG_ERROR("Missing required config: API_PASS");
+        LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
     }
     
     size_t num_threads = getenv("NUM_THREADS") ? strtoul(getenv("NUM_THREADS"), nullptr, 10) : 0;
