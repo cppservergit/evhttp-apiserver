@@ -95,6 +95,25 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
 
     if (x_forwarded_for) {
         if (is_trusted_proxy(req, nullptr)) {
+            const char* last_comma = strrchr(x_forwarded_for, ',');
+            if (last_comma) {
+                static _Thread_local char parsed_ip[INET6_ADDRSTRLEN];
+                
+                // The IP starts after the comma
+                const char* start = last_comma + 1;
+                
+                // Skip leading spaces after the comma
+                while (*start == ' ') {
+                    start++;
+                }
+                
+                size_t len = strlen(start);
+                if (len >= sizeof(parsed_ip)) len = sizeof(parsed_ip) - 1;
+                
+                memcpy(parsed_ip, start, len);
+                parsed_ip[len] = '\0';
+                return parsed_ip;
+            }
             return x_forwarded_for;
         } else {
             // Log untrusted proxy attempt handled later in middleware wrapper
