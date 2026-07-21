@@ -7,11 +7,14 @@
  */
 
 /** 
- * \brief Decodes the base64 payload from a JWT token.
+ * \brief Decodes the base64 payload from a JWT token into a provided buffer.
  * \param jwt The raw JWT string.
- * \return A malloc'd string containing the payload (must be freed), or nullptr on failure.
+ * \param out The buffer to write the decoded JSON string to.
+ * \param out_maxlen The maximum length of the output buffer.
+ * \return True on success, False on failure.
  */
-char* jwt_decode_payload(const char* jwt);
+#include <stdbool.h>
+bool jwt_decode_payload(const char* jwt, char* out, size_t out_maxlen);
 
 /** 
  * \brief Extracts the 'exp' (expiration) claim from a JWT token.

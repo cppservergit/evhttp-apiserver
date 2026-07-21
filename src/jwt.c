@@ -36,10 +36,8 @@ void generate_uuidv4(char out[37]) {
              bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
 }
 
-static char* b64_decode_segment(const char* start, size_t len) {
-    size_t out_maxlen = (len * 3) / 4 + 3;
-    char* out = malloc(out_maxlen);
-    if (!out) return nullptr;
+static bool b64_decode_segment(const char* start, size_t len, char* out, size_t out_maxlen) {
+    if (!out || out_maxlen == 0) return false;
     
     size_t i = 0, j = 0;
     while (i < len) {
@@ -50,8 +48,7 @@ static char* b64_decode_segment(const char* start, size_t len) {
             if (i < len && start[i] != '=') {
                 unsigned char val = b64_lookup((unsigned char)start[i]);
                 if (val == 255) {
-                    free(out);
-                    return nullptr;
+                    return false;
                 }
                 n |= val;
                 chars++;
@@ -65,28 +62,28 @@ static char* b64_decode_segment(const char* start, size_t len) {
         if (chars > 3 && j < out_maxlen - 1) out[j++] = (char)(n & 0xFF);
     }
     out[j] = '\0';
-    return out;
+    return true;
 }
 
-static char* jwt_decode_header(const char* jwt) {
+static bool jwt_decode_header(const char* jwt, char* out, size_t out_maxlen) {
     const char* dot1 = strchr(jwt, '.');
-    if (!dot1) return nullptr;
-    return b64_decode_segment(jwt, (size_t)(dot1 - jwt));
+    if (!dot1) return false;
+    return b64_decode_segment(jwt, (size_t)(dot1 - jwt), out, out_maxlen);
 }
 
-char* jwt_decode_payload(const char* jwt) {
+bool jwt_decode_payload(const char* jwt, char* out, size_t out_maxlen) {
     const char* dot1 = strchr(jwt, '.');
-    if (!dot1) return nullptr;
+    if (!dot1) return false;
     const char* payload_start = dot1 + 1;
     const char* dot2 = strchr(payload_start, '.');
-    if (!dot2) return nullptr;
+    if (!dot2) return false;
     
-    return b64_decode_segment(payload_start, (size_t)(dot2 - payload_start));
+    return b64_decode_segment(payload_start, (size_t)(dot2 - payload_start), out, out_maxlen);
 }
 
 time_t jwt_get_expiration(const char* jwt) {
-    char* payload_json = jwt_decode_payload(jwt);
-    if (!payload_json) return 0;
+    char payload_json[8192];
+    if (!jwt_decode_payload(jwt, payload_json, sizeof(payload_json))) return 0;
     
     time_t exp = 0;
     struct json_object* jwt_obj = json_tokener_parse(payload_json);
@@ -97,7 +94,6 @@ time_t jwt_get_expiration(const char* jwt) {
         }
         json_object_put(jwt_obj);
     }
-    free(payload_json);
     return exp;
 }
 
@@ -181,11 +177,10 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     size_t msg_len = (size_t)(dot2 - token);
     
     // Verify the Header explicitly to reject non-HS256 algorithms early and save CPU cycles
-    char* header_json = jwt_decode_header(token);
-    if (!header_json) return JWT_ERR_INVALID;
+    char header_json[1024];
+    if (!jwt_decode_header(token, header_json, sizeof(header_json))) return JWT_ERR_INVALID;
     
     struct json_object* header_obj = json_tokener_parse(header_json);
-    free(header_json);
     if (!header_obj) return JWT_ERR_INVALID;
     
     struct json_object* alg_obj;
@@ -216,8 +211,8 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
         return JWT_ERR_INVALID;
     }
 
-    char* payload_json = jwt_decode_payload(token);
-    if (!payload_json) return JWT_ERR_INVALID;
+    char payload_json[8192];
+    if (!jwt_decode_payload(token, payload_json, sizeof(payload_json))) return JWT_ERR_INVALID;
 
     // Tokens without an 'exp' claim will explicitly fail because ret initializes to JWT_ERR_INVALID
     int ret = JWT_ERR_INVALID;
@@ -245,6 +240,5 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
         }
         json_object_put(jwt_obj);
     }
-    free(payload_json);
     return ret;
 }
