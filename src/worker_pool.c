@@ -102,8 +102,14 @@ int worker_pool_init(size_t num_workers) {
     // Allocate dynamic percentage of workers to the fast pool (minimum 1)
     size_t pct = config_get_fast_pool_percentage();
     size_t fast_workers = (num_workers * pct) / 100;
+    
+    // Guarantee at least 1 fast worker
     if (fast_workers == 0) fast_workers = 1;
-    if (fast_workers > num_workers) fast_workers = num_workers;
+    
+    // Guarantee at least 1 slow worker without exceeding total num_workers (if > 1)
+    if (fast_workers == num_workers && num_workers > 1) {
+        fast_workers = num_workers - 1;
+    }
     
     size_t slow_workers = (num_workers > fast_workers) ? (num_workers - fast_workers) : 1;
     
