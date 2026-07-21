@@ -129,7 +129,7 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
 
     while ((ret = SQLFetch(hstmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         has_rows = true;
-        
+                
         while (true) {
             ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
             

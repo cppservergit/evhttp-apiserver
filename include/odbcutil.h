@@ -12,7 +12,7 @@ struct evbuffer;
  */
 
 #define MAX_ODBC_CONN_STR_LEN 1024
-#define ODBC_FETCH_CHUNK_SIZE 8192
+#define ODBC_FETCH_CHUNK_SIZE 4096
 
 typedef void (*odbc_bind_fn)(struct json_object* body, SQLHSTMT hstmt);
 
