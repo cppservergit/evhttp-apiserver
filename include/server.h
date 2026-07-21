@@ -27,6 +27,9 @@ int server_init_globals(size_t num_reactors);
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
 
+/** \brief Safely cleans up all global resources deterministically without relying on atexit */
+void server_cleanup_globals(void);
+
 typedef void (*handler_fn)(struct evhttp_request*, struct json_object*, void*, int*, const char**, struct evbuffer*);
 
 typedef enum {

@@ -74,7 +74,7 @@ static struct reactor_stats* g_reactor_stats = nullptr;
 static _Thread_local size_t tl_reactor_id = 0;
 static _Thread_local char tl_tid_str[32] = {0};
 
-static void server_free_globals(void);
+// Removed static void server_free_globals(void);
 
 static SQLHENV g_odbc_env = SQL_NULL_HENV;
 
@@ -115,7 +115,6 @@ int server_init_globals(size_t num_reactors) {
     curl_global_init(CURL_GLOBAL_ALL);
     SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &g_odbc_env);
     SQLSetEnvAttr(g_odbc_env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
-    atexit(odbc_cleanup);
     
     g_page_size = sysconf(_SC_PAGE_SIZE);
     long pages = sysconf(_SC_PHYS_PAGES);
@@ -135,7 +134,7 @@ int server_init_globals(size_t num_reactors) {
     g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
     
     if (g_reactor_stats == nullptr || g_reactor_bases == nullptr || g_reactor_queues == nullptr) {
-        server_free_globals();
+        server_cleanup_globals();
         return -1;
     }
     
@@ -144,22 +143,21 @@ int server_init_globals(size_t num_reactors) {
         int efd = eventfd(0, EFD_NONBLOCK);
         if (efd < 0) {
             LOG_FATAL("Failed to create eventfd for Worker %zu", i);
-            server_free_globals();
+            server_cleanup_globals();
             return -1;
         }
         g_reactor_queues[i].eventfd = efd;
     }
 
     if (worker_pool_init(bg_workers_count) != 0) {
-        server_free_globals();
+        server_cleanup_globals();
         return -1;
     }
     
-    atexit(server_free_globals);
     return 0;
 }
 
-static void server_free_globals(void) {
+void server_cleanup_globals(void) {
     worker_pool_shutdown();
     task_pool_shutdown();
     if (g_reactor_stats) {
@@ -181,6 +179,7 @@ static void server_free_globals(void) {
         free(g_reactor_queues);
         g_reactor_queues = nullptr;
     }
+    odbc_cleanup();
 }
 
 void server_shutdown_workers(void) {
