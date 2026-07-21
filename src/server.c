@@ -252,19 +252,19 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
 // middleware_ctx_t now in server.h
 
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true },
-    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = version_handler, .user_arg = nullptr, .is_fast = true },
-    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = sysinfo_handler, .user_arg = nullptr, .is_fast = true },
-    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = rsysinfo_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = false, .is_secure = true },
-    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_get_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = shippers_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = products_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = uuid_handler, .user_arg = nullptr, .is_fast = true },
-    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = login_handler, .user_arg = nullptr, .is_fast = false },
-    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .is_secure = true },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = version_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = sysinfo_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = rsysinfo_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_get_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = shippers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = products_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = uuid_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = login_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_NONE },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
@@ -467,6 +467,32 @@ static void inject_security_headers(struct evhttp_request* req) {
     evhttp_add_header(headers, "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
 }
 
+static bool validate_telemetry_api_key(struct evhttp_request* req) {
+    char expected_key[MAX_CONFIG_STR];
+    config_get_telemetry_api_key(expected_key, sizeof(expected_key));
+    if (expected_key[0] == '\0') {
+        LOG_WARN("TELEMETRY_API_KEY is not configured!");
+        return false;
+    }
+    size_t expected_len = strlen(expected_key);
+    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    
+    const char* auth_header = evhttp_find_header(headers, "X-API-Key");
+    if (auth_header && strlen(auth_header) == expected_len && sodium_memcmp(auth_header, expected_key, expected_len) == 0) {
+        sodium_memzero(expected_key, sizeof(expected_key));
+        return true;
+    }
+    
+    const char* bearer = evhttp_find_header(headers, "Authorization");
+    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strlen(bearer + 7) == expected_len && sodium_memcmp(bearer + 7, expected_key, expected_len) == 0) {
+        sodium_memzero(expected_key, sizeof(expected_key));
+        return true;
+    }
+    
+    sodium_memzero(expected_key, sizeof(expected_key));
+    return false;
+}
+
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     inject_security_headers(req);
 
@@ -516,7 +542,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     char username[33] = {0};
     char session_id[37] = {0};
 
-    if (ctx->is_secure) {
+    if (ctx->auth_mode == AUTH_JWT) {
         const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
         if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
@@ -541,6 +567,14 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         } else if (jwt_res != JWT_OK) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
             const char* msg = "{\"error\":\"Invalid token signature or format\"}";
+            evbuffer_add(out_buf, msg, strlen(msg));
+            evhttp_send_reply(req, 403, "Forbidden", nullptr);
+            return;
+        }
+    } else if (ctx->auth_mode == AUTH_API_KEY) {
+        if (!validate_telemetry_api_key(req)) {
+            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+            const char* msg = "{\"error\":\"Access Denied\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 403, "Forbidden", nullptr);
             return;

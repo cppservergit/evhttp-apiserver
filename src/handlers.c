@@ -31,40 +31,8 @@ void ping_handler(struct evhttp_request* req, struct json_object* body, void* ar
     evbuffer_add(out_buf, msg, strlen(msg));
 }
 
-static bool validate_telemetry_api_key(struct evhttp_request* req) {
-    char expected_key[MAX_CONFIG_STR];
-    config_get_telemetry_api_key(expected_key, sizeof(expected_key));
-    if (expected_key[0] == '\0') {
-        LOG_WARN("TELEMETRY_API_KEY is not configured!");
-        return false;
-    }
-    size_t expected_len = strlen(expected_key);
-    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
-    
-    const char* auth_header = evhttp_find_header(headers, "X-API-Key");
-    if (auth_header && strlen(auth_header) == expected_len && sodium_memcmp(auth_header, expected_key, expected_len) == 0) {
-        sodium_memzero(expected_key, sizeof(expected_key));
-        return true;
-    }
-    
-    const char* bearer = evhttp_find_header(headers, "Authorization");
-    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strlen(bearer + 7) == expected_len && sodium_memcmp(bearer + 7, expected_key, expected_len) == 0) {
-        sodium_memzero(expected_key, sizeof(expected_key));
-        return true;
-    }
-    
-    sodium_memzero(expected_key, sizeof(expected_key));
-    return false;
-}
-
 void version_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
-    
-    if (!validate_telemetry_api_key(req)) {
-        *out_status = 403;
-        *out_status_txt = "Access Denied";
-        return;
-    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -90,12 +58,6 @@ void version_handler(struct evhttp_request* req, struct json_object* body, void*
 
 void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
-    
-    if (!validate_telemetry_api_key(req)) {
-        *out_status = 403;
-        *out_status_txt = "Access Denied";
-        return;
-    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
@@ -138,12 +100,6 @@ void sysinfo_handler(struct evhttp_request* req, struct json_object* body, void*
 
 void metrics_handler(struct evhttp_request* req, struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
     (void)req; (void)body; (void)arg;
-    
-    if (!validate_telemetry_api_key(req)) {
-        *out_status = 403;
-        *out_status_txt = "Access Denied";
-        return;
-    }
     
     *out_status = HTTP_OK;
     *out_status_txt = "OK";

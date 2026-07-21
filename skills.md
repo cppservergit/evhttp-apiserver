@@ -111,7 +111,7 @@ Finally, wire the handler into the `libevent` routing table inside `server.c`. Y
     .handler = customer_get_handler, 
     .user_arg = nullptr, 
     .is_fast = true,   // True if the query is extremely fast (< 5ms)
-    .is_secure = true  // True to enforce Bearer JWT Authentication
+    .auth_mode = AUTH_JWT  // Require Bearer JWT Authentication
 }
 ```
 
@@ -157,7 +157,7 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
     .handler = shippers_handler, 
     .user_arg = nullptr, 
     .is_fast = true, 
-    .is_secure = true 
+    .auth_mode = AUTH_JWT 
 }
 ```
 

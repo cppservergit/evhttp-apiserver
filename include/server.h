@@ -29,6 +29,12 @@ void server_shutdown_workers(void);
 
 typedef void (*handler_fn)(struct evhttp_request*, struct json_object*, void*, int*, const char**, struct evbuffer*);
 
+typedef enum {
+    AUTH_NONE = 0,
+    AUTH_JWT = 1,
+    AUTH_API_KEY = 2
+} auth_mode_t;
+
 typedef struct {
     const char* path;
     enum evhttp_cmd_type allowed_method;
@@ -36,7 +42,7 @@ typedef struct {
     handler_fn handler;
     void* user_arg;
     bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
-    bool is_secure; /**< \brief If true, requires and validates a JWT token in the Authorization header. */
+    auth_mode_t auth_mode; /**< \brief Security enforcement mode for this route. */
 } middleware_ctx_t;
 
 /** \brief Retrieves the hardcoded server version string. */

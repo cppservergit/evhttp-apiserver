@@ -36,7 +36,7 @@ void dummy_handler(struct evhttp_request *req, struct json_object *body, void *a
 
 static middleware_ctx_t mock_ctx = {
     .is_fast = true,
-    .is_secure = false,
+    .auth_mode = AUTH_NONE,
     .handler = dummy_handler
 };
 

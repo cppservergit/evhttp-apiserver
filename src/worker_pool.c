@@ -57,7 +57,7 @@ static void* worker_thread_main(void* arg) {
             
             bool is_authorized = true;
 
-            if (ctx && ctx->is_secure) {
+            if (ctx && ctx->auth_mode == AUTH_JWT) {
                 handlers_set_identity(task->username, task->session_id);
             }
             
@@ -65,7 +65,7 @@ static void* worker_thread_main(void* arg) {
             if (x_forwarded_for) {
                 const char* peer_ip = nullptr;
                 if (!is_trusted_proxy(task->req, &peer_ip)) {
-                    if (ctx && ctx->is_secure && is_authorized) {
+                    if (ctx && ctx->auth_mode == AUTH_JWT && is_authorized) {
                         LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s (User: %s, Session: %s)",
                                  x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(task->req), task->username, task->session_id);
                     } else {
