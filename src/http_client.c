@@ -94,6 +94,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
     } else {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     }
     
@@ -102,9 +103,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
         chunk_headers = curl_slist_append(chunk_headers, headers[i]);
     }
     
-    if (chunk_headers) {
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk_headers);
-    }
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk_headers);
     *out_headers = chunk_headers;
     return curl;
 }

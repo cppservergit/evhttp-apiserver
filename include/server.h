@@ -84,4 +84,4 @@ const char* server_get_hostname(void);
 const char* server_get_os_version(void);
 
 /** \brief Helper to create standard JSON error payloads */
-struct json_object* create_error_json(const char* error_msg);
+
