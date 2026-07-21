@@ -32,9 +32,11 @@ void generate_uuidv4(char out[37]);
  * \param session_id The session ID to include in the payload.
  * \param secret_hex The 64-character hex-encoded secret key.
  * \param timeout_seconds The number of seconds until the token expires.
- * \return A newly allocated string containing the JWT, or nullptr on failure. Caller must free.
+ * \param out_jwt The pre-allocated output buffer where the JWT will be written.
+ * \param out_jwt_size The maximum size of the output buffer.
+ * \return True on success, False on failure.
  */
-char* jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds);
+bool jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds, char* out_jwt, size_t out_jwt_size);
 
 #define JWT_OK 0
 #define JWT_ERR_EXPIRED 1

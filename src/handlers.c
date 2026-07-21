@@ -571,14 +571,12 @@ static void handle_login_success(
     config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
     long jwt_timeout = config_get_jwt_timeout_seconds();
 
-    char* ticket = jwt_create(username, session_id, jwt_secret, jwt_timeout);
-
-    if (ticket) {
-        char buf[512];
+    char ticket[1024];
+    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, ticket, sizeof(ticket))) {
+        char buf[1200];
         int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", ticket);
         evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
-        free(ticket);
     } else {
         const char* msg = "{\"error\":\"Failed to generate ticket\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
