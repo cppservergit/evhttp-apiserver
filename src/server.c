@@ -463,7 +463,6 @@ static void inject_security_headers(struct evhttp_request* req) {
     evhttp_add_header(headers, "X-Content-Type-Options", "nosniff");
     evhttp_add_header(headers, "X-Frame-Options", "DENY");
     evhttp_add_header(headers, "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    evhttp_add_header(headers, "Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     evhttp_add_header(headers, "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
 }
 

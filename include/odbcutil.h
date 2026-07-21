@@ -33,6 +33,6 @@ void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* c
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name);
 
-/** \brief Frees the statement and disconnects/frees the database connection. */
+/** \brief Frees the statement and returns the connection to the thread-local pool. The connection remains open by design. */
 void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt);
 
