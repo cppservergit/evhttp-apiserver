@@ -8,8 +8,8 @@
  * \brief Object Pool (Slab Allocator) for http_task_t structures.
  */
 
-/** \brief Initializes the task pool with a given maximum capacity. */
-void task_pool_init(size_t pool_size);
+/** \brief Initializes the task pool with a given maximum capacity. \return 0 on success, -1 on failure */
+int task_pool_init(size_t pool_size);
 
 /** \brief Gracefully destroys the task pool and frees underlying memory. */
 void task_pool_shutdown(void);

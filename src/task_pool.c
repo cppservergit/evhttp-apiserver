@@ -18,7 +18,7 @@ static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 static _Thread_local http_task_t* tl_cache[TL_CACHE_SIZE];
 static _Thread_local size_t tl_cache_count = 0;
 
-void task_pool_init(size_t pool_size) {
+int task_pool_init(size_t pool_size) {
     if (pool_size == 0) pool_size = 100000;
     g_pool_size = pool_size;
     g_task_slab = calloc(pool_size, sizeof(http_task_t));
@@ -27,7 +27,10 @@ void task_pool_init(size_t pool_size) {
     
     if (!g_task_slab || !g_free_stack || !g_is_free_flag) {
         LOG_FATAL("Out of memory in task_pool_init");
-        exit(1);
+        if (g_task_slab) { free(g_task_slab); g_task_slab = nullptr; }
+        if (g_free_stack) { free(g_free_stack); g_free_stack = nullptr; }
+        if (g_is_free_flag) { free(g_is_free_flag); g_is_free_flag = nullptr; }
+        return -1;
     }
 
     for (size_t i = 0; i < pool_size; i++) {
@@ -35,6 +38,7 @@ void task_pool_init(size_t pool_size) {
         g_is_free_flag[i] = true;
     }
     g_stack_top = pool_size;
+    return 0;
 }
 
 void task_pool_shutdown(void) {

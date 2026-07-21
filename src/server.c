@@ -31,6 +31,7 @@
 #include "worker_pool.h"
 #include "task_pool.h"
 #include <sys/eventfd.h>
+#include <fcntl.h>
 
 constexpr size_t MAX_PAYLOAD_SIZE = 5 * 1024 * 1024;
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
@@ -128,7 +129,10 @@ int server_init_globals(size_t num_reactors) {
     // 2x MAX_QUEUE_SIZE (fast + slow queues) + background workers + generous buffer for reactor completion queues
     size_t safe_q_size = (q_size == 0) ? 100000 : q_size;
     size_t slab_size = (safe_q_size * 2) + bg_workers_count + 10000;
-    task_pool_init(slab_size);
+    if (task_pool_init(slab_size) != 0) {
+        server_cleanup_globals();
+        return -1;
+    }
     g_reactor_stats = calloc(g_num_reactors, sizeof(struct reactor_stats));
     g_reactor_bases = calloc(g_num_reactors, sizeof(_Atomic(struct event_base*)));
     g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
@@ -238,16 +242,39 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     }
     
     if (mem_usage_kb) {
-        uint64_t mem_usage = 0;
-        FILE* f = fopen("/proc/self/statm", "r");
-        if (f) {
-            long size, resident, share, text, lib, data, dt;
-            if (fscanf(f, "%ld %ld %ld %ld %ld %ld %ld", &size, &resident, &share, &text, &lib, &data, &dt) == 7) {
-                mem_usage = (uint64_t)((resident * g_page_size) / 1024);
+        static _Atomic uint64_t cached_mem = 0;
+        static _Atomic time_t last_update = 0;
+        
+        time_t now = time(nullptr);
+        time_t last = atomic_load_explicit(&last_update, memory_order_acquire);
+        
+        // Cache for 1 second to prevent scraping-induced I/O latency
+        if (now - last >= 1) {
+            uint64_t mem_usage = 0;
+            // Use low-level open/read to bypass libc FILE* lock contention and heap allocations
+            int fd = open("/proc/self/statm", O_RDONLY);
+            if (fd >= 0) {
+                char buf[256];
+                ssize_t n = read(fd, buf, sizeof(buf) - 1);
+                if (n > 0) {
+                    buf[n] = '\0';
+                    char* p = strchr(buf, ' ');
+                    if (p) {
+                        long resident = strtol(p + 1, nullptr, 10);
+                        mem_usage = (uint64_t)((resident * g_page_size) / 1024);
+                    }
+                }
+                close(fd);
             }
-            fclose(f);
+            if (mem_usage > 0) {
+                atomic_store_explicit(&cached_mem, mem_usage, memory_order_release);
+                atomic_store_explicit(&last_update, now, memory_order_release);
+                *mem_usage_kb = mem_usage;
+                return;
+            }
         }
-        *mem_usage_kb = mem_usage;
+        
+        *mem_usage_kb = atomic_load_explicit(&cached_mem, memory_order_acquire);
     }
 }
 
@@ -472,29 +499,31 @@ static void inject_security_headers(struct evhttp_request* req) {
 }
 
 static bool validate_telemetry_api_key(struct evhttp_request* req) {
-    char expected_key[MAX_CONFIG_STR];
+    char expected_key[MAX_CONFIG_STR] = {0};
     config_get_telemetry_api_key(expected_key, sizeof(expected_key));
     if (expected_key[0] == '\0') {
         LOG_WARN("TELEMETRY_API_KEY is not configured!");
         return false;
     }
-    size_t expected_len = strlen(expected_key);
+    
     struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
-    
     const char* auth_header = evhttp_find_header(headers, "X-API-Key");
-    if (auth_header && strlen(auth_header) == expected_len && sodium_memcmp(auth_header, expected_key, expected_len) == 0) {
-        sodium_memzero(expected_key, sizeof(expected_key));
-        return true;
+    const char* bearer = evhttp_find_header(headers, "Authorization");
+    
+    char provided_key[MAX_CONFIG_STR] = {0};
+    if (auth_header) {
+        snprintf(provided_key, sizeof(provided_key), "%s", auth_header);
+    } else if (bearer && strncmp(bearer, "Bearer ", 7) == 0) {
+        snprintf(provided_key, sizeof(provided_key), "%s", bearer + 7);
     }
     
-    const char* bearer = evhttp_find_header(headers, "Authorization");
-    if (bearer && strncmp(bearer, "Bearer ", 7) == 0 && strlen(bearer + 7) == expected_len && sodium_memcmp(bearer + 7, expected_key, expected_len) == 0) {
-        sodium_memzero(expected_key, sizeof(expected_key));
-        return true;
-    }
+    // Constant-time compare over the entire maximum buffer size to prevent length leakage
+    int match = sodium_memcmp(provided_key, expected_key, MAX_CONFIG_STR);
     
     sodium_memzero(expected_key, sizeof(expected_key));
-    return false;
+    sodium_memzero(provided_key, sizeof(provided_key));
+    
+    return (match == 0 && provided_key[0] != '\0');
 }
 
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
@@ -621,10 +650,8 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     task->middleware_ctx = ctx;
     task->start_time = start_time;
     task->reactor_id = tl_reactor_id;
-    strncpy(task->username, username, sizeof(task->username) - 1);
-    task->username[sizeof(task->username) - 1] = '\0';
-    strncpy(task->session_id, session_id, sizeof(task->session_id) - 1);
-    task->session_id[sizeof(task->session_id) - 1] = '\0';
+    snprintf(task->username, sizeof(task->username), "%s", username);
+    snprintf(task->session_id, sizeof(task->session_id), "%s", session_id);
     atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
     evhttp_request_own(req);
