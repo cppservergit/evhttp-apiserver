@@ -544,11 +544,12 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     
     // Constant-time compare over the entire maximum buffer size to prevent length leakage
     int match = sodium_memcmp(provided_key, expected_key, MAX_CONFIG_STR);
+    bool valid_len = (provided_key[0] != '\0');
     
     sodium_memzero(expected_key, sizeof(expected_key));
     sodium_memzero(provided_key, sizeof(provided_key));
     
-    return (match == 0 && provided_key[0] != '\0');
+    return (match == 0 && valid_len);
 }
 
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
