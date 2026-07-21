@@ -5,13 +5,30 @@
 #include "config.h"
 #include <string.h>
 
+#include <pthread.h>
+
 static _Thread_local SQLHDBC tl_hdbc = SQL_NULL_HDBC;
+static pthread_key_t tl_hdbc_key;
+static pthread_once_t tl_hdbc_key_once = PTHREAD_ONCE_INIT;
+
+static void tl_hdbc_destructor(void* arg) {
+    SQLHDBC hdbc = (SQLHDBC)arg;
+    if (hdbc != SQL_NULL_HDBC) {
+        SQLDisconnect(hdbc);
+        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+    }
+}
+
+static void make_tl_hdbc_key(void) {
+    pthread_key_create(&tl_hdbc_key, tl_hdbc_destructor);
+}
 
 void odbcutil_reset_connection(void) {
     if (tl_hdbc != SQL_NULL_HDBC) {
         SQLDisconnect(tl_hdbc);
         SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc);
         tl_hdbc = SQL_NULL_HDBC;
+        pthread_setspecific(tl_hdbc_key, NULL);
     }
 }
 
@@ -58,10 +75,13 @@ SQLHDBC odbcutil_connect(void) {
     
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         odbcutil_log_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");
-        SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc);
-        tl_hdbc = SQL_NULL_HDBC;
+        odbcutil_reset_connection();
         return SQL_NULL_HDBC;
     }
+    
+    pthread_once(&tl_hdbc_key_once, make_tl_hdbc_key);
+    pthread_setspecific(tl_hdbc_key, (void*)tl_hdbc);
+    
     return tl_hdbc;
 }
 

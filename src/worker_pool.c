@@ -171,6 +171,11 @@ void worker_pool_shutdown(void) {
         free(g_slow_pool.workers);
         g_slow_pool.workers = nullptr;
     }
+    
+    pthread_mutex_destroy(&g_fast_pool.mutex);
+    pthread_cond_destroy(&g_fast_pool.cond);
+    pthread_mutex_destroy(&g_slow_pool.mutex);
+    pthread_cond_destroy(&g_slow_pool.cond);
 }
 
 bool worker_pool_enqueue(http_task_t* task) {

@@ -173,6 +173,9 @@ static void server_free_globals(void) {
     }
     if (g_reactor_queues) {
         for (size_t i = 0; i < g_num_reactors; ++i) {
+            if (g_reactor_queues[i].eventfd > 0) {
+                close(g_reactor_queues[i].eventfd);
+            }
             pthread_mutex_destroy(&g_reactor_queues[i].lock);
         }
         free(g_reactor_queues);
@@ -617,7 +620,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     task->username[sizeof(task->username) - 1] = '\0';
     strncpy(task->session_id, session_id, sizeof(task->session_id) - 1);
     task->session_id[sizeof(task->session_id) - 1] = '\0';
-    atomic_init(&task->cancelled, false);
+    atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
     evhttp_request_own(req);
     evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);

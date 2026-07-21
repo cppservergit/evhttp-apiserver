@@ -105,6 +105,10 @@ char* jwt_create(const char* username, const char* session_id, const char* secre
     if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
         return nullptr; // Invalid hex or wrong length
     }
+    if (secret_bin_len != crypto_auth_hmacsha256_KEYBYTES) {
+        sodium_memzero(secret_bytes, sizeof(secret_bytes));
+        return nullptr;
+    }
     
     const char* header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
     
@@ -196,6 +200,10 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     size_t secret_bin_len = 0;
     if (sodium_hex2bin(secret_bytes, sizeof(secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
         return JWT_ERR_INVALID; 
+    }
+    if (secret_bin_len != crypto_auth_hmacsha256_KEYBYTES) {
+        sodium_memzero(secret_bytes, sizeof(secret_bytes));
+        return JWT_ERR_INVALID;
     }
 
     unsigned char mac[crypto_auth_hmacsha256_BYTES];
