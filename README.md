@@ -6,9 +6,17 @@
 flowchart TD
     Client((Client)) <-->|HTTP/1.1| RT[Reactor Threads\nNetwork I/O]
     RT -->|Enqueue Task| GQ[(Global Inbound Queue)]
-    GQ -->|Dequeue Task| WT[Worker Pool\nBusiness Logic]
-    WT <-->|ODBC / REST| DB[(External Systems)]
-    WT -->|eventfd signaling| CQ[Dedicated Reactor\nCompletion Queues]
+    
+    subgraph WP [Worker Pool - Fully Decoupled]
+        GQ -->|Dequeue| Dispatch{Bulkhead Dispatch}
+        Dispatch -->|is_fast=true| FastPool[Fast Pool\nValidation & Fast I/O]
+        Dispatch -->|is_fast=false| SlowPool[Slow Pool\nHeavy Remote I/O]
+    end
+    
+    FastPool <-->|ODBC| DB[(SQL Database)]
+    SlowPool <-->|REST API| Ext[(Remote Services)]
+    
+    WP -->|eventfd signaling| CQ[Dedicated Reactor\nCompletion Queues]
     CQ --> RT
 ```
 
