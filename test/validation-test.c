@@ -56,6 +56,9 @@ static void test_coverage(void) {
     // Test emit_error unknown code
     assert(emit_error(err_buf, sizeof(err_buf), ERR_MAX_ERRORS, "x") == false);
     assert(emit_error(err_buf, sizeof(err_buf), (ErrorCode)999, "x") == false);
+    
+    // Test emit_error coverage
+    assert(emit_error(err_buf, sizeof(err_buf), ERR_INVALID_CUSTOMER_ID, "abc") == false);
 
     // Test validate_json null safety
     assert(validate_json(nullptr, nullptr, nullptr, 0) == false);

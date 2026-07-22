@@ -164,9 +164,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
 
         if (field->is_required) {
             bool is_empty = false;
-            if (json_object_is_type(field_obj, json_type_null)) {
-                is_empty = true;
-            } else if (json_object_is_type(field_obj, json_type_string)) {
+            if (json_object_is_type(field_obj, json_type_string)) {
                 const char* str = json_object_get_string(field_obj);
                 if (!str || str[0] == '\0') is_empty = true;
             } else if (json_object_is_type(field_obj, json_type_array)) {
