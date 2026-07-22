@@ -256,14 +256,6 @@ void customer_handler(
         evbuffer_add(out_buf, "null", 4);
     }
     
-    evbuffer_add(out_buf, ",\"db_data\":", 11);
-    
-    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", customer_bind_cb, body, out_buf, __func__)) {
-        *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
-        return;
-    }
-    
     evbuffer_add(out_buf, "}", 1);
 }
 
