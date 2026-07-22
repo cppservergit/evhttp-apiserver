@@ -5,6 +5,7 @@
 #include "raii.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -329,13 +330,27 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     
     if (mem_usage_kb) {
         uint64_t mem_usage = 0;
-        FILE* f = fopen("/proc/self/statm", "r");
-        if (f) {
-            long size, resident, share, text, lib, data, dt;
-            if (fscanf(f, "%ld %ld %ld %ld %ld %ld %ld", &size, &resident, &share, &text, &lib, &data, &dt) == 7) {
-                mem_usage = (uint64_t)((resident * g_page_size) / 1024);
+        int fd = open("/proc/self/statm", O_RDONLY);
+        if (fd >= 0) {
+            char buf[128];
+            ssize_t bytes = read(fd, buf, sizeof(buf) - 1);
+            if (bytes > 0) {
+                buf[bytes] = '\0';
+                char* p = buf;
+                // Skip first field (size)
+                while (*p && *p != ' ') p++;
+                if (*p == ' ') {
+                    p++;
+                    // Read second field (resident)
+                    long resident = 0;
+                    while (*p >= '0' && *p <= '9') {
+                        resident = resident * 10 + (*p - '0');
+                        p++;
+                    }
+                    mem_usage = (uint64_t)((resident * g_page_size) / 1024);
+                }
             }
-            fclose(f);
+            close(fd);
         }
         *mem_usage_kb = mem_usage;
     }

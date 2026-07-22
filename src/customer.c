@@ -70,7 +70,12 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     pthread_rwlock_rdlock(&jwt_cache_lock);
     if (cache->token[0] != '\0' && now < cache->expires_at) {
-        snprintf(out_token, max_len, "%s", cache->token);
+        size_t cpy_len = strlen(cache->token);
+        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
+        if (max_len > 0) {
+            memcpy(out_token, cache->token, cpy_len);
+            out_token[cpy_len] = '\0';
+        }
         pthread_rwlock_unlock(&jwt_cache_lock);
         return true;
     }
@@ -82,7 +87,12 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     // Double-checked locking
     now = time(nullptr);
     if (cache->token[0] != '\0' && now < cache->expires_at) {
-        snprintf(out_token, max_len, "%s", cache->token);
+        size_t cpy_len = strlen(cache->token);
+        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
+        if (max_len > 0) {
+            memcpy(out_token, cache->token, cpy_len);
+            out_token[cpy_len] = '\0';
+        }
         pthread_rwlock_unlock(&jwt_cache_lock);
         return true;
     }
@@ -102,7 +112,12 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     bool success = false;
     if (cache->token[0] != '\0') {
-        snprintf(out_token, max_len, "%s", cache->token);
+        size_t cpy_len = strlen(cache->token);
+        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
+        if (max_len > 0) {
+            memcpy(out_token, cache->token, cpy_len);
+            out_token[cpy_len] = '\0';
+        }
         success = true;
     }
     pthread_rwlock_unlock(&jwt_cache_lock);

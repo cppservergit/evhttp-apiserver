@@ -43,3 +43,13 @@ void logger_set_request_id(const char* req_id);
  * \brief Clears the thread-local request ID.
  */
 void logger_clear_request_id(void);
+
+/**
+ * \brief Initializes the asynchronous logger background thread.
+ */
+void logger_init(void);
+
+/**
+ * \brief Flushes remaining logs and shuts down the logger thread.
+ */
+void logger_shutdown(void);

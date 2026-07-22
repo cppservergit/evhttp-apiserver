@@ -86,7 +86,9 @@ static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_co
 
     free(threads);
     server_cleanup_globals();
+    
     LOG_INFO("APIServer system halted safely. Network loops unlinked cleanly.");
+    logger_shutdown();
 }
 
 int main(void) {
@@ -94,6 +96,8 @@ int main(void) {
         LOG_FATAL("Failed to initialize libevent pthreads.");
         return EXIT_FAILURE;
     }
+    
+    logger_init();
     
     config_init();
 
