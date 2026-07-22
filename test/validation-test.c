@@ -59,6 +59,8 @@ static void test_coverage(void) {
     
     // Test emit_error coverage
     assert(emit_error(err_buf, sizeof(err_buf), ERR_INVALID_CUSTOMER_ID, "abc") == false);
+    assert(emit_error(err_buf, sizeof(err_buf), ERR_DATE_TOO_EARLY, nullptr) == false);
+    assert(emit_error(err_buf, sizeof(err_buf), ERR_DATE_TOO_LATE, nullptr) == false);
 
     // Test validate_json null safety
     assert(validate_json(nullptr, nullptr, nullptr, 0) == false);

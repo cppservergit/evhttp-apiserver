@@ -44,6 +44,12 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
         case ERR_INVALID_CUSTOMER_ID:
             snprintf(err_buf, err_len, "Field error: Customer ID '%s' is invalid.", arg ? arg : "");
             break;
+        case ERR_DATE_TOO_EARLY:
+            snprintf(err_buf, err_len, "no data before that year");
+            break;
+        case ERR_DATE_TOO_LATE:
+            snprintf(err_buf, err_len, "no data after that year");
+            break;
         default:
             snprintf(err_buf, err_len, "Unknown error code: %d", code);
             break;

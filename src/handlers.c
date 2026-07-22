@@ -312,9 +312,43 @@ static bool sales_invariant_validator(
     return true;
 }
 
+static bool validate_sales_start_date(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *date_str = json_object_get_string((json_object *)obj);
+    if (date_str && strlen(date_str) >= 4) {
+        int year = atoi(date_str);
+        if (year <= 1993) {
+            return emit_error(err_buf, err_len, ERR_DATE_TOO_EARLY, nullptr);
+        }
+    }
+    return true;
+}
+
+static bool validate_sales_end_date(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *date_str = json_object_get_string((json_object *)obj);
+    if (date_str && strlen(date_str) >= 4) {
+        int year = atoi(date_str);
+        if (year >= 1997) {
+            return emit_error(err_buf, err_len, ERR_DATE_TOO_LATE, nullptr);
+        }
+    }
+    return true;
+}
+
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr},
-    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr}
+    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = validate_sales_start_date},
+    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = validate_sales_end_date}
 };
 
 const ValidationContext SalesContext = {
