@@ -61,8 +61,8 @@ static void* worker_thread_main(void* arg) {
                 struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
                 const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
                 if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
-                    task->status_code = 403;
-                    task->status_txt = "Forbidden";
+                    task->status_code = 401;
+                    task->status_txt = "Unauthorized";
                     const char* msg = "{\"error\":\"Missing or invalid Authorization header\"}";
                     evbuffer_add(task->worker_buf, msg, strlen(msg));
                     is_authorized = false;
@@ -79,8 +79,8 @@ static void* worker_thread_main(void* arg) {
                         evbuffer_add(task->worker_buf, msg, strlen(msg));
                         is_authorized = false;
                     } else if (jwt_res != JWT_OK) {
-                        task->status_code = 403;
-                        task->status_txt = "Forbidden";
+                        task->status_code = 401;
+                        task->status_txt = "Unauthorized";
                         const char* msg = "{\"error\":\"Invalid token\"}";
                         evbuffer_add(task->worker_buf, msg, strlen(msg));
                         is_authorized = false;
