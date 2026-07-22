@@ -23,6 +23,7 @@ test/*
 !test/validation-test.c
 !test/test.sh
 !test/concurrency-test.c
+!test/unit-tester.sh
 
 # Docs
 features.md
