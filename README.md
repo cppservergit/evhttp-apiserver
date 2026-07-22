@@ -14,6 +14,8 @@ flowchart TD
 
 ## Features
 * **Thread-Safety & Memory-Safety:** Rigorously profiled and tested under extreme stress loads (80 concurrent client threads hitting all API handlers simultaneously) using Google's AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind to guarantee zero data races, zero memory leaks, and no undefined behavior.
+* **Lock-Free Single-Flight JWT Authentication:** Implements a leader-follower concurrency pattern to eliminate thundering herd requests. Ensures that out of thousands of concurrent worker threads, exactly ONE thread performs the network refresh for an expired JWT, while the others sleep efficiently on condition variables—avoiding global read/write lock contention.
+* **Fully Decoupled Reactor/Worker Hot-Path:** Decouples JSON parsing, schema validation, and JWT verification from the `libevent` reactor threads. The reactors instantly hand off bare network payloads to the background pool, allowing the core loops to sustain massive TCP bursts without CPU blocking.
 * **Bulkheading Architecture:** Dynamically segments worker threads into separate "fast" and "slow" pools based on configuration (`FAST_POOL_PERCENTAGE`). This guarantees that slow external APIs never starve resources from fast database queries or health checks.
 * **Zero-Allocation Intrusive Queues:** Eliminates `malloc`/`free` bottlenecks on the critical request path by embedding intrusive linked-list pointers directly into the task state. This prevents memory fragmentation, OOM crashes under extreme load, and glibc lock contention.
 * **Object Pool / Slab Allocator:** Pre-allocates request task structures at startup and manages an O(1) Mutex-guarded free-list stack. This guarantees exactly zero dynamic heap allocations on the critical path, acting as a natural backpressure valve if traffic surges beyond bounds.
@@ -36,7 +38,8 @@ Endpoints are defined using a crisp, array-based routing table mapped directly t
 static const middleware_ctx_t g_routes[] = {
     { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true },
     { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/rcustomer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = rcustomer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true }
 };
 ```
@@ -206,7 +209,6 @@ static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
 }
 
 void sales_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 

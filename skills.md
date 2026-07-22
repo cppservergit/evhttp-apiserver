@@ -71,8 +71,7 @@ static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
 The handler function orchestrates the request. By using the `odbcutil_get_json` abstraction, you eliminate all boilerplate connection handling, fetching, and memory allocation.
 
 ```c
-void customer_get_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
+void customer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
@@ -105,10 +104,10 @@ Finally, wire the handler into the `libevent` routing table inside `server.c`. Y
 ```c
 // Inside server.c (e.g., in a route configuration function)
 { 
-    .path = "/customer/get", 
+    .path = "/customer", 
     .allowed_method = EVHTTP_REQ_POST, 
     .validation_ctx = &CustomerContext, 
-    .handler = customer_get_handler, 
+    .handler = customer_handler, 
     .user_arg = nullptr, 
     .is_fast = true,   // True if the query is extremely fast (< 5ms)
     .auth_mode = AUTH_JWT  // Require Bearer JWT Authentication
@@ -128,7 +127,6 @@ Pass `nullptr` for the binder and body in `odbcutil_get_json`:
 
 ```c
 void shippers_handler(
-    [[maybe_unused]] struct evhttp_request* req, 
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
