@@ -230,7 +230,7 @@ static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
     SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, len, 0, (SQLPOINTER)customer_id, len, &cb_nts);
 }
 
-void customer_handler(
+void rcustomer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
@@ -260,7 +260,7 @@ void customer_handler(
 }
 
 
-void customer_get_handler(
+void customer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 

@@ -54,10 +54,10 @@ const char* get_content_type(void);
 /** \brief Retrieves the requested URI. */
 const char* get_uri(void);
 /** \brief Handles /customer requests (external REST integration). */
-void customer_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
+void rcustomer_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /customer_get requests (database integration). */
-void customer_get_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
+void customer_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
 
 /** \brief Handles /sales requests. */
 void sales_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
