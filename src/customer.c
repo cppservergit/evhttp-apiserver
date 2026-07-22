@@ -17,7 +17,9 @@ struct jwt_cache {
 };
 
 static struct jwt_cache global_jwt_cache = {0};
-static pthread_rwlock_t jwt_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_mutex_t jwt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t jwt_cache_cond = PTHREAD_COND_INITIALIZER;
+static bool jwt_is_refreshing = false;
 
 static struct jwt_cache* get_jwt_cache(void) {
     return &global_jwt_cache;
@@ -65,50 +67,49 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
 }
 
 static bool login_and_get_token(char* out_token, size_t max_len) {
-    time_t now = time(nullptr);
+    time_t now;
     struct jwt_cache* cache = get_jwt_cache();
     
-    pthread_rwlock_rdlock(&jwt_cache_lock);
-    if (cache->token[0] != '\0' && now < cache->expires_at) {
-        size_t cpy_len = strlen(cache->token);
-        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
-        if (max_len > 0) {
-            memcpy(out_token, cache->token, cpy_len);
-            out_token[cpy_len] = '\0';
-        }
-        pthread_rwlock_unlock(&jwt_cache_lock);
-        return true;
-    }
-    pthread_rwlock_unlock(&jwt_cache_lock);
+    pthread_mutex_lock(&jwt_cache_lock);
     
-    // Cache miss - acquire write lock to prevent thundering herd
-    pthread_rwlock_wrlock(&jwt_cache_lock);
-    
-    // Double-checked locking
-    now = time(nullptr);
-    if (cache->token[0] != '\0' && now < cache->expires_at) {
-        size_t cpy_len = strlen(cache->token);
-        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
-        if (max_len > 0) {
-            memcpy(out_token, cache->token, cpy_len);
-            out_token[cpy_len] = '\0';
+    while (1) {
+        now = time(nullptr);
+        if (cache->token[0] != '\0' && now < cache->expires_at) {
+            size_t cpy_len = strlen(cache->token);
+            if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
+            if (max_len > 0) {
+                memcpy(out_token, cache->token, cpy_len);
+                out_token[cpy_len] = '\0';
+            }
+            pthread_mutex_unlock(&jwt_cache_lock);
+            return true;
         }
-        pthread_rwlock_unlock(&jwt_cache_lock);
-        return true;
+        
+        if (jwt_is_refreshing) {
+            pthread_cond_wait(&jwt_cache_cond, &jwt_cache_lock);
+            continue;
+        }
+        
+        jwt_is_refreshing = true;
+        break;
     }
+    
+    pthread_mutex_unlock(&jwt_cache_lock);
     
     LOG_WARN("[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
     
-    cache->token[0] = '\0';
-    
     struct json_object* login_response = execute_login_request();
-    if (!login_response) {
-        pthread_rwlock_unlock(&jwt_cache_lock);
-        return false;
+    
+    pthread_mutex_lock(&jwt_cache_lock);
+    
+    if (login_response) {
+        cache->token[0] = '\0';
+        update_jwt_cache(cache, login_response);
+        json_object_put(login_response);
     }
     
-    update_jwt_cache(cache, login_response);
-    json_object_put(login_response);
+    jwt_is_refreshing = false;
+    pthread_cond_broadcast(&jwt_cache_cond);
     
     bool success = false;
     if (cache->token[0] != '\0') {
@@ -120,7 +121,7 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
         }
         success = true;
     }
-    pthread_rwlock_unlock(&jwt_cache_lock);
+    pthread_mutex_unlock(&jwt_cache_lock);
     
     return success;
 }
@@ -152,9 +153,9 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
     
     // Invalidate token cache on auth failure
     if (out_http_code && *out_http_code == 401) {
-        pthread_rwlock_wrlock(&jwt_cache_lock);
+        pthread_mutex_lock(&jwt_cache_lock);
         get_jwt_cache()->token[0] = '\0';
-        pthread_rwlock_unlock(&jwt_cache_lock);
+        pthread_mutex_unlock(&jwt_cache_lock);
     }
     
     return remote_response;
