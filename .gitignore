@@ -26,6 +26,7 @@ test/*
 
 # Docs
 features.md
+patterns.md
 issues*.md
 async*.md
 code*.md
