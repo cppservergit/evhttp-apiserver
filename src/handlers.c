@@ -295,11 +295,6 @@ static bool sales_invariant_validator(
     const char* start_str = json_get_string(root, "start_date");
     const char* end_str = json_get_string(root, "end_date");
 
-    // Defensive check to avoid crash if fields are unexpectedly missing
-    if (!start_str || !end_str) {
-        return emit_error(err_buf, err_len, ERR_REQUIRED, "start_date/end_date");
-    }
-
     // NOTE: This relies exclusively on the TYPE_DATE field validators (in SalesSchema)
     // guaranteeing that the strings are strictly formatted as zero-padded ISO-8601 (YYYY-MM-DD).
     // Because of this fixed-width ISO-8601 format invariant, lexical string order is mathematically 
@@ -320,11 +315,9 @@ static bool validate_sales_start_date(
     size_t err_len
 ) {
     const char *date_str = json_object_get_string((json_object *)obj);
-    if (date_str && strlen(date_str) >= 4) {
-        int year = atoi(date_str);
-        if (year <= 1993) {
-            return emit_error(err_buf, err_len, ERR_DATE_TOO_EARLY, nullptr);
-        }
+    int year = atoi(date_str);
+    if (year <= 1993) {
+        return emit_error(err_buf, err_len, ERR_DATE_TOO_EARLY, nullptr);
     }
     return true;
 }
@@ -337,11 +330,9 @@ static bool validate_sales_end_date(
     size_t err_len
 ) {
     const char *date_str = json_object_get_string((json_object *)obj);
-    if (date_str && strlen(date_str) >= 4) {
-        int year = atoi(date_str);
-        if (year >= 1997) {
-            return emit_error(err_buf, err_len, ERR_DATE_TOO_LATE, nullptr);
-        }
+    int year = atoi(date_str);
+    if (year >= 1997) {
+        return emit_error(err_buf, err_len, ERR_DATE_TOO_LATE, nullptr);
     }
     return true;
 }
