@@ -76,9 +76,6 @@ void server_notify_task_done(void* t) {
     if (task->req) {
         evhttp_request_free(task->req);
     }
-    if (task->worker_buf) {
-        evbuffer_free(task->worker_buf);
-    }
     task_pool_free(task);
 }
 

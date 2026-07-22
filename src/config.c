@@ -248,7 +248,7 @@ bool config_is_origin_allowed(const char* origin) {
     char* saveptr = nullptr;
     char* token = strtok_r(copy, ",", &saveptr);
     while (token != nullptr) {
-        while (*token == ' ') token++;
+        token = trim_whitespace(token);
         if (strcmp(token, origin) == 0) {
             allowed = true;
             break;
