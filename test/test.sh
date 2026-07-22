@@ -45,29 +45,29 @@ for i in $(seq 1 $NUM_REQUESTS); do
         # Request to /rsysinfo (JWT)
         curl -s -o /dev/null -X GET "$API_URL/rsysinfo" -H "Authorization: Bearer $TOKEN"
         
+        # Request to /rcustomer (JWT)
+        curl -s -o /dev/null -X POST "$API_URL/rcustomer" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": "ALFKI"}'
+            
         # Request to /customer (JWT)
         curl -s -o /dev/null -X POST "$API_URL/customer" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": "ALFKI"}'
-            
-        # Request to /customer/get (JWT)
-        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d '{"id": "ALFKI"}'
 
-        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+        curl -s -o /dev/null -X POST "$API_URL/customer" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": "ERNSH"}'
 
-        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+        curl -s -o /dev/null -X POST "$API_URL/customer" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": "BERGS"}'
 
-        curl -s -o /dev/null -X POST "$API_URL/customer/get" \
+        curl -s -o /dev/null -X POST "$API_URL/customer" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": "QUICK"}'
