@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <sodium.h>
 #include <event2/buffer.h>
+#include "raii.h"
 
 typedef struct {
     http_task_t* head;
@@ -57,12 +58,98 @@ static void* worker_thread_main(void* arg) {
             bool is_authorized = true;
 
             if (ctx && ctx->auth_mode == AUTH_JWT) {
-                handlers_set_context(task->username, task->session_id, task->client_ip, task->uri);
+                struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+                const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
+                if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
+                    task->status_code = 403;
+                    task->status_txt = "Forbidden";
+                    const char* msg = "{\"error\":\"Missing or invalid Authorization header\"}";
+                    evbuffer_add(task->worker_buf, msg, strlen(msg));
+                    is_authorized = false;
+                } else {
+                    char jwt_secret[MAX_CONFIG_STR];
+                    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+                    int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, task->username, sizeof(task->username), task->session_id, sizeof(task->session_id));
+                    sodium_memzero(jwt_secret, sizeof(jwt_secret));
+                    
+                    if (jwt_res == JWT_ERR_EXPIRED) {
+                        task->status_code = 401;
+                        task->status_txt = "Unauthorized";
+                        const char* msg = "{\"error\":\"Token has expired\"}";
+                        evbuffer_add(task->worker_buf, msg, strlen(msg));
+                        is_authorized = false;
+                    } else if (jwt_res != JWT_OK) {
+                        task->status_code = 403;
+                        task->status_txt = "Forbidden";
+                        const char* msg = "{\"error\":\"Invalid token\"}";
+                        evbuffer_add(task->worker_buf, msg, strlen(msg));
+                        is_authorized = false;
+                    }
+                }
+                if (is_authorized) {
+                    handlers_set_context(task->username, task->session_id, task->client_ip, task->uri);
+                }
             } else {
                 handlers_set_context(nullptr, nullptr, task->client_ip, task->uri);
             }
             
-            if (is_authorized) {
+            bool body_ok = true;
+            if (is_authorized && evhttp_request_get_command(task->req) == EVHTTP_REQ_POST) {
+                struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+                const char* ctype = evhttp_find_header(in_headers, "Content-Type");
+                if (ctype == nullptr || strncasecmp(ctype, "application/json", 16) != 0) {
+                    task->status_code = HTTP_BADREQUEST;
+                    task->status_txt = "Bad Request";
+                    const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";
+                    evbuffer_add(task->worker_buf, msg, strlen(msg));
+                    body_ok = false;
+                } else {
+                    struct evbuffer* in_buf = evhttp_request_get_input_buffer(task->req);
+                    size_t len = evbuffer_get_length(in_buf);
+                    if (len == 0) {
+                        task->status_code = HTTP_BADREQUEST;
+                        task->status_txt = "Bad Request";
+                        const char* msg = "{\"error\":\"Empty request body.\"}";
+                        evbuffer_add(task->worker_buf, msg, strlen(msg));
+                        body_ok = false;
+                    } else {
+                        unsigned char* data = evbuffer_pullup(in_buf, -1);
+                        if (!data) {
+                            task->status_code = HTTP_INTERNAL;
+                            task->status_txt = "Internal Server Error";
+                            const char* msg = "{\"error\":\"Failed to pull up request body buffer.\"}";
+                            evbuffer_add(task->worker_buf, msg, strlen(msg));
+                            body_ok = false;
+                        } else {
+                            raii_json_tokener tok = json_tokener_new();
+                            task->parsed_body = json_tokener_parse_ex(tok, (const char*)data, (int)len);
+                            enum json_tokener_error jerr = json_tokener_get_error(tok);
+                            if (!task->parsed_body || jerr != json_tokener_success || !json_object_is_type(task->parsed_body, json_type_object)) {
+                                task->status_code = HTTP_BADREQUEST;
+                                task->status_txt = "Bad Request";
+                                const char* msg = "{\"error\":\"Invalid JSON payload or not a JSON object.\"}";
+                                evbuffer_add(task->worker_buf, msg, strlen(msg));
+                                body_ok = false;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            bool valid = true;
+            if (is_authorized && body_ok && ctx && ctx->validation_ctx != nullptr && task->parsed_body != nullptr) {
+                char err_buf[MAX_ERR_MSG_LEN] = {0};
+                if (!validate_json(ctx->validation_ctx, task->parsed_body, err_buf, sizeof(err_buf))) {
+                    task->status_code = HTTP_BADREQUEST;
+                    task->status_txt = "Bad Request";
+                    char ev_err[1024];
+                    int len = snprintf(ev_err, sizeof(ev_err), "{\"error\":\"%s\"}", err_buf);
+                    evbuffer_add(task->worker_buf, ev_err, len < (int)sizeof(ev_err) ? (size_t)len : sizeof(ev_err) - 1);
+                    valid = false;
+                }
+            }
+            
+            if (is_authorized && body_ok && valid) {
                 if (ctx && ctx->handler) {
                     ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
                     const char* ctype = get_content_type();

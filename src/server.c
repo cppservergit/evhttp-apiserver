@@ -383,63 +383,6 @@ static long long measure_elapsed_ms(const struct timespec* start, const struct t
     return (seconds * 1000LL) + (nanoseconds / 1000000LL);
 }
 
-static bool extract_json_body(struct evhttp_request* req, struct json_object** out_body) {
-    *out_body = nullptr;
-    if (evhttp_request_get_command(req) != EVHTTP_REQ_POST) {
-        return true;
-    }
-    
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
-    const char* ctype = evhttp_find_header(in_headers, "Content-Type");
-    if (ctype == nullptr || 
-        strncasecmp(ctype, "application/json", 16) != 0 || 
-        (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
-        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-        const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
-        return false;
-    }
-    
-    struct evbuffer* in_buf = evhttp_request_get_input_buffer(req);
-    size_t len = evbuffer_get_length(in_buf);
-    if (len == 0) {
-        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-        const char* msg = "{\"error\":\"Empty request body.\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
-        return false;
-    }
-    
-    unsigned char* data = evbuffer_pullup(in_buf, -1);
-    if (!data) {
-        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-        const char* msg = "{\"error\":\"Failed to pull up request body buffer.\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
-        evhttp_send_reply(req, HTTP_INTERNAL, "Internal Server Error", nullptr);
-        return false;
-    }
-    
-    raii_json_tokener tok = json_tokener_new();
-    struct json_object* req_body = json_tokener_parse_ex(tok, (const char*)data, (int)len);
-    enum json_tokener_error jerr = json_tokener_get_error(tok);
-    
-    if (!req_body || jerr != json_tokener_success || !json_object_is_type(req_body, json_type_object)) {
-        if (req_body) json_object_put(req_body);
-        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-        const char* msg = "{\"error\":\"Invalid JSON payload or not a JSON object.\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
-        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
-        return false;
-    }
-    
-    *out_body = req_body;
-    return true;
-}
-
 void server_notify_task_done(void* arg) {
     http_task_t* task = (http_task_t*)arg;
     size_t rid = task->reactor_id;
@@ -471,11 +414,11 @@ static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
     (void)req;
     http_task_t* task = (http_task_t*)arg;
     atomic_store(&task->cancelled, true);
-    task->req = nullptr;
 }
 
 static void cleanup_cancelled_task(http_task_t* task) {
     if (task->parsed_body) json_object_put(task->parsed_body);
+    if (task->req) evhttp_request_free(task->req);
     task_pool_free(task);
 }
 
@@ -658,42 +601,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         return;
     }
     
-    char username[33] = {0};
-    char session_id[37] = {0};
-
-    if (ctx->auth_mode == AUTH_JWT) {
-        const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
-        if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
-            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-            const char* msg = "{\"error\":\"Missing or invalid Authorization header\"}";
-            evbuffer_add(out_buf, msg, strlen(msg));
-            evhttp_send_reply(req, 403, "Forbidden", nullptr);
-            return;
-        }
-
-        char jwt_secret[MAX_CONFIG_STR];
-        config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
-        
-        int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, username, sizeof(username), session_id, sizeof(session_id));
-        sodium_memzero(jwt_secret, sizeof(jwt_secret));
-        
-        if (jwt_res == JWT_ERR_EXPIRED) {
-            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-            const char* msg = "{\"error\":\"Token has expired\"}";
-            evbuffer_add(out_buf, msg, strlen(msg));
-            evhttp_send_reply(req, 401, "Unauthorized", nullptr);
-            return;
-        } else if (jwt_res != JWT_OK) {
-            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "application/json");
-            const char* msg = "{\"error\":\"Invalid token\"}";
-            evbuffer_add(out_buf, msg, strlen(msg));
-            evhttp_send_reply(req, 403, "Forbidden", nullptr);
-            return;
-        }
-    } else if (ctx->auth_mode == AUTH_API_KEY) {
+    if (ctx->auth_mode == AUTH_API_KEY) {
         if (!validate_telemetry_api_key(req)) {
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
             const char* msg = "{\"error\":\"Access Denied\"}";
@@ -702,42 +610,23 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
             return;
         }
     }
-
-    
-    struct json_object* parsed_body = nullptr;
-    if (!extract_json_body(req, &parsed_body)) {
-        return; // extract_json_body handles its own error response, which we should probably also update if possible, but let's leave it for now or update it later.
-    }
-    if (ctx->validation_ctx != nullptr && parsed_body != nullptr) {
-        char err_buf[MAX_ERR_MSG_LEN] = {0};
-        if (!validate_json(ctx->validation_ctx, parsed_body, err_buf, sizeof(err_buf))) {
-            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            char ev_err[1024];
-            int len = snprintf(ev_err, sizeof(ev_err), "{\"error\":\"%s\"}", err_buf);
-            evbuffer_add(out_buf, ev_err, len < (int)sizeof(ev_err) ? (size_t)len : sizeof(ev_err) - 1);
-            evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
-            json_object_put(parsed_body);
-            return;
-        }
-    }
     
     http_task_t* task = task_pool_alloc();
     if (!task) {
-        // Backpressure limit reached, task pool is exhausted.
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
         const char* msg = "{\"error\":\"Server Too Busy\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
-        if (parsed_body) json_object_put(parsed_body);
         return;
     }
+    
     task->req = req;
-    task->parsed_body = parsed_body;
+    task->parsed_body = nullptr;
     task->middleware_ctx = ctx;
     task->start_time = start_time;
     task->reactor_id = tl_reactor_id;
-    snprintf(task->username, sizeof(task->username), "%s", username);
-    snprintf(task->session_id, sizeof(task->session_id), "%s", session_id);
+    task->username[0] = '\0';
+    task->session_id[0] = '\0';
     snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
     snprintf(task->uri, sizeof(task->uri), "%s", evhttp_request_get_uri(req));
     
@@ -748,14 +637,15 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     
     evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);
     
+    // PHASE 1: Take ownership to prevent libevent from freeing it on disconnect
+    evhttp_request_own(req);
+    
     if (!worker_pool_enqueue(task)) {
-        // Backpressure limit reached, queue is full.
         evhttp_request_set_on_complete_cb(req, nullptr, nullptr);
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
         const char* msg = "{\"error\":\"Server Too Busy\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
-        if (parsed_body) json_object_put(parsed_body);
         task_pool_free(task);
         return;
     }

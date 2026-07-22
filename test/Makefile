@@ -7,7 +7,7 @@ BIN_VALIDATION = test_validation
 ASAN_BIN_VALIDATION = test_validation_asan
 TSAN_BIN_VALIDATION = test_validation_tsan
 
-SRC_CONCURRENCY = concurrency-test.c ../src/worker_pool.c ../src/task_pool.c ../src/config.c ../src/logger.c ../src/json_util.c
+SRC_CONCURRENCY = concurrency-test.c ../src/worker_pool.c ../src/task_pool.c ../src/config.c ../src/logger.c ../src/json_util.c ../src/validation.c
 BIN_CONCURRENCY = test_concurrency
 ASAN_BIN_CONCURRENCY = test_concurrency_asan
 TSAN_BIN_CONCURRENCY = test_concurrency_tsan
