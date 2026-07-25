@@ -102,14 +102,14 @@ void task_pool_free(http_task_t* task) {
         pthread_mutex_lock(&g_pool_mutex);
         size_t flush_count = tl_cache_count;
         if (g_stack_top + flush_count > g_pool_size) {
-            fprintf(stderr, "FATAL: task_pool stack overflow\n");
+            (void)fprintf(stderr, "FATAL: task_pool stack overflow\n");
             abort();
         }
         for (size_t i = 0; i < flush_count; i++) {
             http_task_t* t = tl_cache[i];
             size_t idx = t - g_task_slab;
             if (g_is_free_flag[idx]) {
-                fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
+                (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
                 abort();
             }
             g_is_free_flag[idx] = true;

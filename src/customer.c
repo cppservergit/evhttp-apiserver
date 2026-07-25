@@ -59,7 +59,7 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
                 set_thread_error(TL_ERR_ERROR, "Remote token exceeds %zu bytes", sizeof(cache->token) - 1);
                 return;
             }
-            snprintf(cache->token, sizeof(cache->token), "%s", id_token);
+            (void)snprintf(cache->token, sizeof(cache->token), "%s", id_token);
             time_t exp = jwt_get_expiration(id_token);
             cache->expires_at = exp > 0 ? exp : time(nullptr) + 180;
         }
@@ -138,7 +138,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
     const char* body = json_object_to_json_string(req_payload);
     
     char auth_header[1100];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);
+    (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);
     
     const char* headers[] = {
         auth_header,

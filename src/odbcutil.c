@@ -96,7 +96,7 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
     SQLHSTMT hstmt = SQL_NULL_HSTMT;
     if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt))) {
         char context_msg[256];
-        snprintf(context_msg, sizeof(context_msg), "Failed to allocate ODBC statement handle in %s", func_name);
+        (void)snprintf(context_msg, sizeof(context_msg), "Failed to allocate ODBC statement handle in %s", func_name);
         odbcutil_set_error(SQL_HANDLE_DBC, hdbc, context_msg);
         odbcutil_reset_connection();
         return SQL_NULL_HSTMT;
@@ -135,7 +135,7 @@ bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct ev
             
             if (ret == SQL_ERROR) {
                 char err_msg[256];
-                snprintf(err_msg, sizeof(err_msg), "SQLGetData failed for %s", func_name);
+                (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed for %s", func_name);
                 odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
                 return false;
             }
@@ -176,7 +176,7 @@ bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct ev
     
     if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
+        (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
         odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
         fetch_success = false;
     }
@@ -245,7 +245,7 @@ bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count
         success = odbcutil_fetch_json_native(hstmt, func_name, out_buf);
     } else {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
         odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
     }
     
@@ -452,7 +452,7 @@ bool odbcutil_fetch_rs2json(SQLHSTMT hstmt, const char* func_name, struct evbuff
     
     if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
+        (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
         odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
         return false;
     }
@@ -517,7 +517,7 @@ bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_co
         success = odbcutil_fetch_rs2json(hstmt, func_name, out_buf);
     } else {
         char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
         odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
     }
     

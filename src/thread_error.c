@@ -11,7 +11,7 @@ void set_thread_error(ThreadErrorLevel level, const char* format, ...) {
     tl_err_level = level;
     va_list args;
     va_start(args, format);
-    vsnprintf(tl_err_msg, sizeof(tl_err_msg), format, args);
+    (void)vsnprintf(tl_err_msg, sizeof(tl_err_msg), format, args);
     va_end(args);
 }
 

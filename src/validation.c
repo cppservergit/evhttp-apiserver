@@ -15,28 +15,28 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
     
     switch (code) {
         case ERR_REQUIRED:
-            snprintf(err_buf, err_len, "Field '%s' is required.", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' is required.", arg ? arg : "");
             break;
         case ERR_NOT_INT:
-            snprintf(err_buf, err_len, "Field '%s' must be an integer.", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' must be an integer.", arg ? arg : "");
             break;
         case ERR_NOT_DOUBLE:
-            snprintf(err_buf, err_len, "Field '%s' must be a numeric decimal (double).", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' must be a numeric decimal (double).", arg ? arg : "");
             break;
         case ERR_NOT_STRING:
-            snprintf(err_buf, err_len, "Field '%s' must be a string.", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' must be a string.", arg ? arg : "");
             break;
         case ERR_NOT_DATE:
-            snprintf(err_buf, err_len, "Field '%s' must be a date string.", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' must be a date string.", arg ? arg : "");
             break;
         case ERR_INVALID_DATE:
-            snprintf(err_buf, err_len, "Field '%s' contains an invalid date format or calendar lie.", arg ? arg : "");
+            (void)snprintf(err_buf, err_len, "Field '%s' contains an invalid date format or calendar lie.", arg ? arg : "");
             break;
         case ERR_UNKNOWN_TYPE:
-            snprintf(err_buf, err_len, "Internal error: Unknown validation type configured.");
+            (void)snprintf(err_buf, err_len, "Internal error: Unknown validation type configured.");
             break;
         default:
-            snprintf(err_buf, err_len, "Unknown error code: %d", code);
+            (void)snprintf(err_buf, err_len, "Unknown error code: %d", code);
             break;
     }
 
@@ -136,7 +136,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
     if (!ctx || !root || !err_buf || err_len == 0) return false;
     
     if (!json_object_is_type(root, json_type_object)) {
-        snprintf(err_buf, err_len, "Payload must be a JSON object.");
+        (void)snprintf(err_buf, err_len, "Payload must be a JSON object.");
         return false;
     }
 

@@ -154,7 +154,7 @@ void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  str
     char api_key[256] = {0};
     config_get_remote_api_key(api_key, sizeof(api_key));
     char auth_header[512];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
+    (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
 
     const char* headers[] = {
         auth_header
@@ -197,12 +197,12 @@ static bool customer_id_validator(
 ) {
     const char *id = json_object_get_string((json_object *)obj);
     if (!id || strlen(id) != 5) {
-        snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
+        (void)snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
         return false;
     }
     for (int i = 0; i < 5; ++i) {
         if (!isalpha((unsigned char)id[i])) {
-            snprintf(err_buf, err_len, "Invalid customer ID character: %s", id);
+            (void)snprintf(err_buf, err_len, "Invalid customer ID character: %s", id);
             return false;
         }
     }
@@ -291,7 +291,7 @@ static bool sales_invariant_validator(
     // identical to chronological order, making strcmp highly optimized and perfectly safe here.
     // (Also note that >= 0 correctly rejects identical dates, forcing start to be strictly before end).
     if (strcmp(start_str, end_str) >= 0) {
-        snprintf(err_buf, err_len, "Start date must strictly precede end date");
+        (void)snprintf(err_buf, err_len, "Start date must strictly precede end date");
         return false;
     }
 
@@ -308,7 +308,7 @@ static bool validate_sales_start_date(
     const char *date_str = json_object_get_string((json_object *)obj);
     int year = atoi(date_str);
     if (year <= 1993) {
-        snprintf(err_buf, err_len, "Start date is too early (min 1994)");
+        (void)snprintf(err_buf, err_len, "Start date is too early (min 1994)");
         return false;
     }
     return true;
@@ -324,7 +324,7 @@ static bool validate_sales_end_date(
     const char *date_str = json_object_get_string((json_object *)obj);
     int year = atoi(date_str);
     if (year >= 1997) {
-        snprintf(err_buf, err_len, "End date is too late (max 1996)");
+        (void)snprintf(err_buf, err_len, "End date is too late (max 1996)");
         return false;
     }
     return true;
@@ -486,12 +486,12 @@ static bool login_global_validator(
     const char* password = json_get_string(root, "password");
     
     if (username && strlen(username) > 32) {
-        snprintf(err_buf, err_len, "username exceeds 32 characters");
+        (void)snprintf(err_buf, err_len, "username exceeds 32 characters");
         return false;
     }
 
     if (password && strlen(password) > 32) {
-        snprintf(err_buf, err_len, "password exceeds 32 characters");
+        (void)snprintf(err_buf, err_len, "password exceeds 32 characters");
         return false;
     }
     return true;
@@ -601,7 +601,7 @@ static bool employee_id_validator(
 ) {
     int id = json_object_get_int((json_object *)obj);
     if (id <= 0 || id >= 10) {
-        snprintf(err_buf, err_len, "Employee ID must be greater than 0 and less than 10");
+        (void)snprintf(err_buf, err_len, "Employee ID must be greater than 0 and less than 10");
         return false;
     }
     return true;

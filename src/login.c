@@ -20,7 +20,7 @@ struct json_object* login_service_authenticate(const char* username, const char*
     json_encode_string(password, escaped_pass, sizeof(escaped_pass));
 
     char body_str[2048];
-    snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
+    (void)snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
 
     const char* headers[] = {"Content-Type: application/json"};
     struct json_object* result = http_client_post_json(provider, uri, body_str, headers, 1, out_http_code);

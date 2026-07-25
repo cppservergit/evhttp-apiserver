@@ -28,7 +28,7 @@ void generate_uuidv4(char out[37]) {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
     // 4. Format into the standard 36-character UUID string (plus null terminator)
-    snprintf(out, 37,
+    (void)snprintf(out, 37,
              "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
              bytes[0], bytes[1], bytes[2], bytes[3],
              bytes[4], bytes[5],
@@ -235,11 +235,11 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
         if (ret == JWT_OK) {
             struct json_object* sub_obj;
             if (json_object_object_get_ex(jwt_obj, "username", &sub_obj) && out_username) {
-                snprintf(out_username, out_uname_size, "%s", json_object_get_string(sub_obj));
+                (void)snprintf(out_username, out_uname_size, "%s", json_object_get_string(sub_obj));
             }
             struct json_object* jti_obj;
             if (json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj) && out_session_id) {
-                snprintf(out_session_id, out_sess_size, "%s", json_object_get_string(jti_obj));
+                (void)snprintf(out_session_id, out_sess_size, "%s", json_object_get_string(jti_obj));
             }
         }
         json_object_put(jwt_obj);

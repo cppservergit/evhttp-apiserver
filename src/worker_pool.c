@@ -174,7 +174,7 @@ static void* worker_thread_main(void* arg) {
                     ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, task->worker_buf);
                     const char* ctype = get_content_type();
                     if (ctype) {
-                        snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
+                        (void)snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
                     } else {
                         task->out_content_type[0] = '\0';
                     }

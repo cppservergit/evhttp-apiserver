@@ -180,14 +180,14 @@ static void odbc_cleanup(void) {
 int server_init_globals(size_t num_reactors) {
     g_num_reactors = num_reactors;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
-        snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
+        (void)snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
     }
     
     struct utsname os_info;
     if (uname(&os_info) == 0) {
-        snprintf(g_os_version, sizeof(g_os_version), "%s %s", os_info.sysname, os_info.release);
+        (void)snprintf(g_os_version, sizeof(g_os_version), "%s %s", os_info.sysname, os_info.release);
     } else {
-        snprintf(g_os_version, sizeof(g_os_version), "unknown-os");
+        (void)snprintf(g_os_version, sizeof(g_os_version), "unknown-os");
     }
     
     time_t now = time(nullptr);
@@ -531,9 +531,9 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     
     char provided_key[MAX_CONFIG_STR] = {0};
     if (auth_header) {
-        snprintf(provided_key, sizeof(provided_key), "%s", auth_header);
+        (void)snprintf(provided_key, sizeof(provided_key), "%s", auth_header);
     } else if (bearer && strncmp(bearer, "Bearer ", 7) == 0) {
-        snprintf(provided_key, sizeof(provided_key), "%s", bearer + 7);
+        (void)snprintf(provided_key, sizeof(provided_key), "%s", bearer + 7);
     }
     
     // Constant-time compare over the entire maximum buffer size to prevent length leakage
@@ -612,11 +612,11 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
     task->reactor_id = tl_reactor_id;
     task->username[0] = '\0';
     task->session_id[0] = '\0';
-    snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
-    snprintf(task->uri, sizeof(task->uri), "%s", evhttp_request_get_uri(req));
+    (void)snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
+    (void)snprintf(task->uri, sizeof(task->uri), "%s", evhttp_request_get_uri(req));
     
     const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
-    snprintf(task->request_id, sizeof(task->request_id), "%s", req_id ? req_id : "");
+    (void)snprintf(task->request_id, sizeof(task->request_id), "%s", req_id ? req_id : "");
     
     atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
@@ -768,7 +768,7 @@ void* reactor_thread_logic(void* arg) {
     }
 
     unsigned long long tid = (unsigned long long)pthread_self();
-    snprintf(tl_tid_str, sizeof(tl_tid_str), "0x%llx", tid);
+    (void)snprintf(tl_tid_str, sizeof(tl_tid_str), "0x%llx", tid);
     LOG_INFO("Worker %zu started", worker_id);
     
     event_base_dispatch(base);

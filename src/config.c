@@ -67,7 +67,7 @@ static bool locate_and_load_env(void) {
     char env_path[PATH_MAX] = {0};
     if (readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1) != -1) {
         char* dir = dirname(exe_path);
-        snprintf(env_path, sizeof(env_path), "%s/apiserver.env", dir);
+        (void)snprintf(env_path, sizeof(env_path), "%s/apiserver.env", dir);
         if (load_env_file(env_path)) return true;
     }
     return load_env_file("apiserver.env");
@@ -166,32 +166,32 @@ void config_init(void) {
 
 void config_get_odbc_conn_str(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_odbc_conn_str);
+    (void)snprintf(out, max_len, "%s", g_odbc_conn_str);
 }
 
 void config_get_api_url(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_api_url);
+    (void)snprintf(out, max_len, "%s", g_api_url);
 }
 
 void config_get_api_user(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_api_user);
+    (void)snprintf(out, max_len, "%s", g_api_user);
 }
 
 void config_get_api_pass(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_api_pass);
+    (void)snprintf(out, max_len, "%s", g_api_pass);
 }
 
 void config_get_login_provider(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_login_provider);
+    (void)snprintf(out, max_len, "%s", g_login_provider);
 }
 
 void config_get_login_uri(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    snprintf(out, max_len, "%s", g_login_uri);
+    (void)snprintf(out, max_len, "%s", g_login_uri);
 }
 
 
@@ -244,7 +244,7 @@ bool config_is_origin_allowed(const char* origin) {
     
     bool allowed = false;
     char copy[MAX_CONFIG_STR];
-    snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
+    (void)snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
     char* saveptr = nullptr;
     char* token = strtok_r(copy, ",", &saveptr);
     while (token != nullptr) {

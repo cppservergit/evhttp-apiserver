@@ -104,7 +104,7 @@ void logger_clear_request_id(void) {
 
 void logger_log(LogLevel level, const char* format, ...) {
     if (tl_logger_tid[0] == '\0') {
-        snprintf(tl_logger_tid, sizeof(tl_logger_tid), "0x%lx", pthread_self());
+        (void)snprintf(tl_logger_tid, sizeof(tl_logger_tid), "0x%lx", pthread_self());
     }
 
     log_entry_t* entry = NULL;
