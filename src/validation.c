@@ -205,3 +205,11 @@ int64_t json_get_int(const struct json_object* obj, const char* key) {
     return 0;
 }
 
+double json_get_double(const struct json_object* obj, const char* key) {
+    struct json_object* val;
+    if (json_object_object_get_ex((struct json_object*)obj, key, &val)) {
+        return json_object_get_double(val);
+    }
+    return 0.0;
+}
+

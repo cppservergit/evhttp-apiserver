@@ -4,9 +4,16 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <json-c/json.h>
+#include <time.h>
 #include "validation.h"
 
 // --- Custom Validators for Test ---
+#define ERR_NEGATIVE_AMOUNT ((ErrorCode)100)
+#define ERR_START_AFTER_END ((ErrorCode)101)
+#define ERR_INVALID_CUSTOMER_ID ((ErrorCode)102)
+#define ERR_DATE_TOO_EARLY ((ErrorCode)103)
+#define ERR_DATE_TOO_LATE ((ErrorCode)104)
+
 static bool validate_positive_amount(const ValidationContext *ctx, const json_object *obj, const char *name, char *err_buf, size_t err_len) {
     (void)ctx;
     if (json_object_get_double((struct json_object*)obj) < 0.0) {
@@ -234,7 +241,80 @@ static void test_coverage(void) {
     printf("All validation edge cases passed successfully!\n");
 }
 
+static void fuzz_json_payloads(int iterations) {
+    char err_buf[256];
+    char payload[1024];
+    
+    const char* templates[] = {
+        "{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": %s, \"count\": %s, \"name\": \"%s\"}",
+        "{\"start_date\":\"%s\", \"end_date\":\"%s\", \"amount\": %s, \"count\": %s, \"name\": \"%s\"}",
+        "{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": %s}"
+    };
+    
+    const char* bad_dates[] = {
+        "2024-01-01", "202-01-01", "2024-99-99", "2024-00-00", "2024-01-32",
+        "invalid_date_string", "", "2024\\u000001-01"
+    };
+    
+    const char* bad_numbers[] = {
+        "100", "-100", "0", 
+        "999999999999999999999999999999999999.99",   // Double overflow
+        "-999999999999999999999999999999999999.99",
+        "1e400", "-1e400",                           // Extreme double bounds
+        "2147483647", "2147483648",                  // Int32 overflow
+        "-2147483648", "-2147483649",                // Int32 underflow
+        "\"not_a_number\"", "null", "[]", "{}"
+    };
+    
+    const char* bad_names[] = {
+        "test", "", "averylongnamethatgoesonsonandonandonandonandonandon",
+        "\\u0000", "null", "123", "[]"
+    };
+
+    printf("Running %d fuzzing iterations...\n", iterations);
+    srand((unsigned int)time(nullptr));
+
+    for (int i = 0; i < iterations; i++) {
+        int t = rand() % 3;
+        
+        if (t == 0) {
+            (void)snprintf(payload, sizeof(payload), templates[t], 
+                     bad_numbers[rand() % 15], 
+                     bad_numbers[rand() % 15], 
+                     bad_names[rand() % 7]);
+        } else if (t == 1) {
+            (void)snprintf(payload, sizeof(payload), templates[t], 
+                     bad_dates[rand() % 8],
+                     bad_dates[rand() % 8],
+                     bad_numbers[rand() % 15], 
+                     bad_numbers[rand() % 15], 
+                     bad_names[rand() % 7]);
+        } else {
+            (void)snprintf(payload, sizeof(payload), templates[t], 
+                     bad_numbers[rand() % 15]); 
+        }
+
+        // Randomly mutate a bit (causes syntax errors, unclosed strings, etc.)
+        if (rand() % 10 == 0) {
+            size_t len = strlen(payload);
+            if (len > 0) {
+                payload[rand() % len] = (char)(rand() % 255);
+            }
+        }
+
+        // Parse and validate
+        struct json_object* root = json_tokener_parse(payload);
+        if (root) {
+            // Should not crash, leak memory, or trigger ASAN bounds errors
+            validate_json(&TestContext, root, err_buf, sizeof(err_buf));
+            json_object_put(root);
+        }
+    }
+    printf("Fuzzing complete.\n");
+}
+
 int main(void) {
     test_coverage();
+    fuzz_json_payloads(10000);
     return 0;
 }
