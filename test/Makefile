@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -std=gnu2x -Wall -Wextra -Wpedantic -O1 -g -I../include --coverage
-LDFLAGS = -ljson-c --coverage
+CFLAGS = -std=gnu2x -Wall -Wextra -Wpedantic -O1 -g -I../include
+LDFLAGS = -ljson-c
 
 SRC_VALIDATION = validation-test.c ../src/validation.c ../src/json_util.c ../src/thread_error.c
 BIN_VALIDATION = test_validation
@@ -27,7 +27,7 @@ coverage: $(BIN_VALIDATION)
 	gcov-14 test_validation-validation.gcda
 
 $(BIN_VALIDATION): $(SRC_VALIDATION)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) --coverage $^ -o $@ $(LDFLAGS) --coverage
 
 $(ASAN_BIN_VALIDATION): $(SRC_VALIDATION)
 	$(CC) $(CFLAGS) -fsanitize=address,leak $^ -o $@ $(LDFLAGS)
