@@ -16,6 +16,16 @@
 #define ERR_DATE_TOO_EARLY ((ErrorCode)103)
 #define ERR_DATE_TOO_LATE ((ErrorCode)104)
 
+#define assert_validation_error(ctx, root, expected_str) \
+    do { \
+        err_buf[0] = '\0'; \
+        assert(validate_json((ctx), (root), err_buf, sizeof(err_buf)) == false); \
+        if (strstr(err_buf, (expected_str)) == NULL) { \
+            fprintf(stderr, "Assertion failed: expected error containing '%s', got '%s'\n", (expected_str), err_buf); \
+            assert(strstr(err_buf, (expected_str)) != NULL); \
+        } \
+    } while (0)
+
 static bool validate_positive_amount(const ValidationContext *ctx, const json_object *obj, const char *name, char *err_buf, size_t err_len) {
     (void)ctx;
     if (json_object_get_double((struct json_object*)obj) < 0.0) {
@@ -74,11 +84,11 @@ static void test_coverage(void) {
     // Test validate_json null safety
     assert(validate_json(nullptr, nullptr, nullptr, 0) == false);
     struct json_object* empty_obj = json_object_new_object();
-    assert(validate_json(&TestContext, empty_obj, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, empty_obj, "is required.");
 
     // Test validate_json on non-object payload
     struct json_object* arr = json_object_new_array();
-    assert(validate_json(&TestContext, arr, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, arr, "JSON object");
     json_object_put(arr);
 
     // Test json extraction utilities
@@ -104,37 +114,37 @@ static void test_coverage(void) {
 
     // Test missing required field
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false); // missing "name"
+    assert_validation_error(&TestContext, root, "is required."); // missing "name"
     json_object_put(root);
 
     // Test required field with empty string
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "is required.");
     json_object_put(root);
     
     // Test required field with empty object
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": {}}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "is required.");
     json_object_put(root);
 
     // Test required field with empty array
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": []}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "is required.");
     json_object_put(root);
     
     // Test required field with null
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": null}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "is required.");
     json_object_put(root);
 
     // Test TYPE_INT failure
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"count\": \"10\", \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "must be an integer");
     json_object_put(root);
 
     // Test TYPE_DOUBLE failure (passing string)
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": \"100.5\", \"count\": 10, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "numeric decimal");
     json_object_put(root);
 
     // Test TYPE_DOUBLE success with integer
@@ -144,71 +154,71 @@ static void test_coverage(void) {
 
     // Test TYPE_STRING failure
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"count\": 10, \"name\": 123}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "must be a string");
     json_object_put(root);
 
     // Test custom validator failure
     root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": -50.0, \"count\": 10, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "Unknown error code: 100");
     json_object_put(root);
 
     // Test global validator failure (start > end)
     root = json_tokener_parse("{\"start_date\":\"2024-12-31\", \"end_date\":\"2024-01-01\", \"amount\": 100.0, \"count\": 10, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "Unknown error code: 101");
     json_object_put(root);
 
     // Test global validator failure (start == end, must be strictly before)
     root = json_tokener_parse("{\"start_date\":\"2024-06-15\", \"end_date\":\"2024-06-15\", \"amount\": 100.0, \"count\": 10, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "Unknown error code: 101");
     json_object_put(root);
 
     // Test DATE specific edge cases
     // Not a string
     root = json_tokener_parse("{\"start_date\":1234, \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "must be a date string");
     json_object_put(root);
     
     // Short date
     root = json_tokener_parse("{\"start_date\":\"2024\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Long date
     root = json_tokener_parse("{\"start_date\":\"2024-01-01T00:00:00\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Wrong hyphen positions
     root = json_tokener_parse("{\"start_date\":\"2024/01/01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Non-numeric characters
     root = json_tokener_parse("{\"start_date\":\"2024-01-XX\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Invalid month
     root = json_tokener_parse("{\"start_date\":\"2024-13-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     root = json_tokener_parse("{\"start_date\":\"2024-00-01\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Invalid day
     root = json_tokener_parse("{\"start_date\":\"2024-01-32\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
     
     root = json_tokener_parse("{\"start_date\":\"2024-01-00\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Invalid leap year
     root = json_tokener_parse("{\"start_date\":\"2023-02-29\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Valid leap year
@@ -218,7 +228,7 @@ static void test_coverage(void) {
     
     // Invalid century leap year (1900 is not leap)
     root = json_tokener_parse("{\"start_date\":\"1900-02-29\", \"end_date\":\"2024-12-31\", \"amount\": 100.5, \"name\": \"test\"}");
-    assert(validate_json(&TestContext, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&TestContext, root, "invalid date");
     json_object_put(root);
 
     // Valid century leap year (2000 is leap)
@@ -236,7 +246,7 @@ static void test_coverage(void) {
         .global_validator = nullptr
     };
     root = json_tokener_parse("{\"start_date\":\"2000-01-01\"}");
-    assert(validate_json(&bad_ctx, root, err_buf, sizeof(err_buf)) == false);
+    assert_validation_error(&bad_ctx, root, "Unknown validation type");
     json_object_put(root);
 
     json_object_put(empty_obj);
