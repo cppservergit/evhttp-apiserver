@@ -5,6 +5,8 @@
 #include <assert.h>
 #include <json-c/json.h>
 #include <time.h>
+#include <pthread.h>
+#include <stdint.h>
 #include "validation.h"
 
 // --- Custom Validators for Test ---
@@ -241,9 +243,12 @@ static void test_coverage(void) {
     printf("All validation edge cases passed successfully!\n");
 }
 
-static void fuzz_json_payloads(int iterations) {
+static void* fuzz_thread(void* arg) {
+    int iterations = (int)(intptr_t)arg;
     char err_buf[256];
     char payload[1024];
+    
+    unsigned int seed = (unsigned int)time(nullptr) ^ (unsigned int)pthread_self();
     
     const char* templates[] = {
         "{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"amount\": %s, \"count\": %s, \"name\": \"%s\"}",
@@ -271,34 +276,31 @@ static void fuzz_json_payloads(int iterations) {
         "\\u0000", "null", "123", "[]"
     };
 
-    printf("Running %d fuzzing iterations...\n", iterations);
-    srand((unsigned int)time(nullptr));
-
     for (int i = 0; i < iterations; i++) {
-        int t = rand() % 3;
+        int t = rand_r(&seed) % 3;
         
         if (t == 0) {
             (void)snprintf(payload, sizeof(payload), templates[t], 
-                     bad_numbers[rand() % 15], 
-                     bad_numbers[rand() % 15], 
-                     bad_names[rand() % 7]);
+                     bad_numbers[rand_r(&seed) % 15], 
+                     bad_numbers[rand_r(&seed) % 15], 
+                     bad_names[rand_r(&seed) % 7]);
         } else if (t == 1) {
             (void)snprintf(payload, sizeof(payload), templates[t], 
-                     bad_dates[rand() % 8],
-                     bad_dates[rand() % 8],
-                     bad_numbers[rand() % 15], 
-                     bad_numbers[rand() % 15], 
-                     bad_names[rand() % 7]);
+                     bad_dates[rand_r(&seed) % 8],
+                     bad_dates[rand_r(&seed) % 8],
+                     bad_numbers[rand_r(&seed) % 15], 
+                     bad_numbers[rand_r(&seed) % 15], 
+                     bad_names[rand_r(&seed) % 7]);
         } else {
             (void)snprintf(payload, sizeof(payload), templates[t], 
-                     bad_numbers[rand() % 15]); 
+                     bad_numbers[rand_r(&seed) % 15]); 
         }
 
         // Randomly mutate a bit (causes syntax errors, unclosed strings, etc.)
-        if (rand() % 10 == 0) {
+        if (rand_r(&seed) % 10 == 0) {
             size_t len = strlen(payload);
             if (len > 0) {
-                payload[rand() % len] = (char)(rand() % 255);
+                payload[rand_r(&seed) % len] = (char)(rand_r(&seed) % 255);
             }
         }
 
@@ -310,11 +312,23 @@ static void fuzz_json_payloads(int iterations) {
             json_object_put(root);
         }
     }
-    printf("Fuzzing complete.\n");
+    return NULL;
 }
 
 int main(void) {
     test_coverage();
-    fuzz_json_payloads(10000);
+    
+    int num_threads = 8;
+    int iterations_per_thread = 2000;
+    pthread_t threads[8];
+    
+    printf("Starting %d fuzzing threads (%d iterations each)...\n", num_threads, iterations_per_thread);
+    for (int i = 0; i < num_threads; i++) {
+        pthread_create(&threads[i], NULL, fuzz_thread, (void*)(intptr_t)iterations_per_thread);
+    }
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    printf("Multithreaded fuzzing complete.\n");
     return 0;
 }

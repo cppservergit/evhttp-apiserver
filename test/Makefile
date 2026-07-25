@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=gnu2x -Wall -Wextra -Wpedantic -O1 -g -I../include
-LDFLAGS = -ljson-c
+LDFLAGS = -ljson-c -lpthread
 
 SRC_VALIDATION = validation-test.c ../src/validation.c ../src/json_util.c ../src/thread_error.c
 BIN_VALIDATION = test_validation
