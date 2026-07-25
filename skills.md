@@ -158,6 +158,45 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
 
 ## Internals: Separation of Concerns, Thread Safety, and Error Logging
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant RT as Reactor Thread (server.c)
+    participant WT as Worker Thread (worker_pool.c)
+    participant H as Domain Handler (handlers.c)
+    participant S as Services (odbcutil, etc.)
+    participant TL as Thread-Local State
+    
+    Client->>RT: HTTP Request
+    RT->>RT: libevent parses headers
+    RT->>RT: evhttp_request_own() (Memory Safety)
+    RT->>WT: server_enqueue_task()
+    RT-->>Client: (Returns to epoll loop)
+    
+    WT->>WT: Dequeues Task
+    WT->>WT: worker_process_jwt()
+    WT->>WT: worker_process_payload()
+    WT->>WT: worker_process_validation()
+    WT->>H: ctx->handler()
+    
+    H->>S: odbcutil_get_json()
+    alt Database Error
+        S->>TL: set_thread_error(TL_ERR_ERROR, "DB Offline")
+        S-->>H: false
+    else Success
+        S-->>H: true (streams directly to evbuffer)
+    end
+    
+    H-->>WT: Returns (modifies status_code)
+    WT->>TL: get_thread_error_level()
+    TL-->>WT: Error Level & Message
+    WT->>WT: Logs error centrally (no global mutex)
+    WT->>TL: clear_thread_error()
+    
+    WT->>RT: Signals completion via eventfd
+    RT->>Client: evhttp_send_reply() (Flushes evbuffer)
+```
+
 The architecture of EvHttp guarantees zero data races, use-after-free protection, and centralizes side effects like logging. Here's how a request flows through the system securely:
 
 ### 1. The Reactor Thread (Network I/O)
