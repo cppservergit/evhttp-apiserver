@@ -73,3 +73,7 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status, const
 
 /** \brief Handles /getqr requests for TOTP registration. */
 void getqr_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
+
+/** \brief Handles /employee requests. */
+void employee_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
+extern const ValidationContext EmployeeContext;

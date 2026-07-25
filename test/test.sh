@@ -78,6 +78,27 @@ for i in $(seq 1 $NUM_REQUESTS); do
             -H "Authorization: Bearer $TOKEN" \
             -d '{"start_date": "1994-01-01", "end_date": "1996-12-31"}'
 
+        # Request to /employee (JWT)
+        curl -s -o /dev/null -X POST "$API_URL/employee" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": 9}'
+
+        curl -s -o /dev/null -X POST "$API_URL/employee" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": 4}'
+
+        curl -s -o /dev/null -X POST "$API_URL/employee" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": 6}'
+
+        curl -s -o /dev/null -X POST "$API_URL/employee" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": 1}'
+
         # Request to /shippers (JWT)
         curl -s -o /dev/null -X GET "$API_URL/shippers" -H "Authorization: Bearer $TOKEN"
 

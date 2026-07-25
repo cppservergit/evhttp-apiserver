@@ -614,4 +614,51 @@ void login_handler(
     }
 }
 
+// --- Employee Handler & Schema ---
 
+static bool employee_id_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    int id = json_object_get_int((json_object *)obj);
+    if (id <= 0 || id >= 10) {
+        snprintf(err_buf, err_len, "Employee ID must be greater than 0 and less than 10");
+        return false;
+    }
+    return true;
+}
+
+static const FieldValidator EmployeeSchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .custom_validator = employee_id_validator}
+};
+
+const ValidationContext EmployeeContext = {
+    .schema = EmployeeSchema,
+    .schema_count = sizeof(EmployeeSchema) / sizeof(EmployeeSchema[0]),
+    .global_validator = nullptr
+};
+
+void employee_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    const char** out_status_txt,
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    *out_status_txt = "OK";
+    
+    int emp_id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &emp_id }
+    };
+    
+    if (!odbcutil_get_rs2json("{CALL emp_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+        *out_status_txt = "Internal Server Error";
+    }
+}
