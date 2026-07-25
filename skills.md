@@ -162,13 +162,13 @@ The architecture of EvHttp guarantees zero data races, use-after-free protection
 
 ### 1. The Reactor Thread (Network I/O)
 The `libevent` reactor threads exclusively handle non-blocking TCP socket I/O. When a complete HTTP request is received:
-1. The reactor parses the headers and the body.
+1. The reactor processes security headers, CORS, and API keys via modular middleware (e.g., `server_validate_cors`, `server_validate_method_and_auth`).
 2. **Memory Safety**: The reactor calls `evhttp_request_own(req)` to officially steal ownership of the request memory from `libevent`. This is critical. If the client abruptly disconnects or times out, `libevent` will NOT free the request out from under the background worker thread, completely preventing Use-After-Free vulnerabilities.
-3. The reactor packages the request into a task and enqueues it into the Global Inbound Queue for the worker pool, then immediately returns to epoll to serve more clients.
+3. The reactor packages the request into a task and enqueues it into the Global Inbound Queue via `server_enqueue_task`, then immediately returns to epoll to serve more clients.
 
 ### 2. The Worker Thread (The Orchestrator)
 The worker thread wakes up, dequeues the task, and executes `worker_thread_main()`. This function is the central orchestrator:
-1. **Middleware & Validation**: It executes authorization checks (JWT) and schema validation (our `ValidationContext`).
+1. **Middleware & Validation**: It delegates authorization (`worker_process_jwt`), payload parsing (`worker_process_payload`), and schema enforcement (`worker_process_validation`) to modular helper functions.
 2. **Handler Execution**: It invokes your concise, domain-specific handler (e.g., `customer_handler`).
 3. **Response Status Extraction**: Once the handler returns, it inspects the modified integer `task->status_code` (e.g., `200` or `500`). The worker thread handles translating this into the standard HTTP string via `get_http_status_text(code)`.
 4. **Centralized Error Logging**: Instead of handlers or low-level services (like `odbcutil` or `http_client`) spamming the global logger directly, they use `set_thread_error(...)`. The worker thread pulls this contextual error string via `get_thread_error_level()` and logs it cleanly as `LOG_ERROR` or `LOG_WARN`. This preserves strict separation of concerns and allows 100% unit testing of backend services.

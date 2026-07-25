@@ -546,15 +546,8 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     return (match == 0 && valid_len);
 }
 
-static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
-    inject_security_headers(req);
 
-    const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;
-    if (ctx == nullptr || ctx->handler == nullptr) {
-        evhttp_send_error(req, HTTP_INTERNAL, "Middleware Routing Fault");
-        return;
-    }
-    
+static bool server_validate_cors(struct evhttp_request* req) {
     struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* origin = evhttp_find_header(in_headers, "Origin");
     if (origin) {
@@ -572,34 +565,19 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
             const char* msg = "{\"error\":\"CORS origin not allowed.\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 403, "Forbidden", nullptr);
-            return;
+            return false;
         }
     }
-    
-    if (evhttp_request_get_command(req) == EVHTTP_REQ_OPTIONS) {
-        evhttp_send_reply(req, 204, "No Content", nullptr);
-        return;
-    }
+    return true;
+}
 
-    struct timespec start_time;
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
-    
-    const char* extracted_client_ip = server_extract_client_ip(req);
-    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-    if (x_forwarded_for) {
-        const char* peer_ip = nullptr;
-        if (!is_trusted_proxy(req, &peer_ip)) {
-            LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
-                     x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(req));
-        }
-    }
-
+static bool server_validate_method_and_auth(struct evhttp_request* req, const middleware_ctx_t* ctx) {
     if (evhttp_request_get_command(req) != ctx->allowed_method) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
         const char* msg = "{\"error\":\"Method not permitted.\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_BADMETHOD, "Method Not Allowed", nullptr);
-        return;
+        return false;
     }
     
     if (ctx->auth_mode == AUTH_API_KEY) {
@@ -608,10 +586,16 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
             const char* msg = "{\"error\":\"Access Denied\"}";
             evbuffer_add(out_buf, msg, strlen(msg));
             evhttp_send_reply(req, 403, "Forbidden", nullptr);
-            return;
+            return false;
         }
     }
-    
+    return true;
+}
+
+static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx_t* ctx, struct timespec start_time) {
+    const char* extracted_client_ip = server_extract_client_ip(req);
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+
     http_task_t* task = task_pool_alloc();
     if (!task) {
         struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
@@ -638,7 +622,6 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     
     evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);
     
-    // PHASE 1: Take ownership to prevent libevent from freeing it on disconnect
     evhttp_request_own(req);
     
     if (!worker_pool_enqueue(task)) {
@@ -648,8 +631,45 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
         task_pool_free(task);
+    }
+}
+
+static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
+    inject_security_headers(req);
+
+    const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;
+    if (ctx == nullptr || ctx->handler == nullptr) {
+        evhttp_send_error(req, HTTP_INTERNAL, "Middleware Routing Fault");
         return;
     }
+    
+    if (!server_validate_cors(req)) {
+        return;
+    }
+    
+    if (evhttp_request_get_command(req) == EVHTTP_REQ_OPTIONS) {
+        evhttp_send_reply(req, 204, "No Content", nullptr);
+        return;
+    }
+
+    struct timespec start_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    
+    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
+    if (x_forwarded_for) {
+        const char* peer_ip = nullptr;
+        if (!is_trusted_proxy(req, &peer_ip)) {
+            LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
+                     x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(req));
+        }
+    }
+
+    if (!server_validate_method_and_auth(req, ctx)) {
+        return;
+    }
+    
+    server_enqueue_task(req, ctx, start_time);
 }
 
 static struct event_base* create_optimized_event_base(void) {
