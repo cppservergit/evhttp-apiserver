@@ -21,21 +21,19 @@
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
-void ping_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void ping_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     const char* msg = "{\"status\":\"OK\"}";
     evbuffer_add(out_buf, msg, strlen(msg));
 }
 
-void version_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void version_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     char esc_version[64], esc_compiler[256], esc_date[128], esc_hostname[256], esc_os[256];
     json_encode_string(get_server_version(), esc_version, sizeof(esc_version));
@@ -56,11 +54,10 @@ void version_handler(struct json_object* body, void* arg, int* out_status, const
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void sysinfo_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     server_request_stats_t stats = {0};
     server_get_request_stats(&stats);
@@ -98,11 +95,10 @@ void sysinfo_handler(struct json_object* body, void* arg, int* out_status, const
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void metrics_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void metrics_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     server_request_stats_t stats = {0};
     server_get_request_stats(&stats);
@@ -150,11 +146,10 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status, const
     
 }
 
-void rsysinfo_handler(struct json_object* body, void* arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
 
     char api_key[256] = {0};
     config_get_remote_api_key(api_key, sizeof(api_key));
@@ -202,11 +197,13 @@ static bool customer_id_validator(
 ) {
     const char *id = json_object_get_string((json_object *)obj);
     if (!id || strlen(id) != 5) {
-        return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id ? id : "null");
+        snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
+        return false;
     }
     for (int i = 0; i < 5; ++i) {
         if (!isalpha((unsigned char)id[i])) {
-            return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id);
+            snprintf(err_buf, err_len, "Invalid customer ID character: %s", id);
+            return false;
         }
     }
     return true;
@@ -226,13 +223,11 @@ void rcustomer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     const char *customer_id = json_get_string(body, "id");
     
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     long http_code = 0;
     struct json_object* remote_json = customer_service_get_info(customer_id, &http_code);
@@ -256,11 +251,9 @@ void customer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     const char* customer_id = json_get_string(body, "id");
     QueryParam params[] = {
@@ -269,7 +262,6 @@ void customer_handler(
     
     if (!odbcutil_get_json("{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 
@@ -299,7 +291,8 @@ static bool sales_invariant_validator(
     // identical to chronological order, making strcmp highly optimized and perfectly safe here.
     // (Also note that >= 0 correctly rejects identical dates, forcing start to be strictly before end).
     if (strcmp(start_str, end_str) >= 0) {
-        return emit_error(err_buf, err_len, ERR_START_AFTER_END, nullptr);
+        snprintf(err_buf, err_len, "Start date must strictly precede end date");
+        return false;
     }
 
     return true;
@@ -315,7 +308,8 @@ static bool validate_sales_start_date(
     const char *date_str = json_object_get_string((json_object *)obj);
     int year = atoi(date_str);
     if (year <= 1993) {
-        return emit_error(err_buf, err_len, ERR_DATE_TOO_EARLY, nullptr);
+        snprintf(err_buf, err_len, "Start date is too early (min 1994)");
+        return false;
     }
     return true;
 }
@@ -330,7 +324,8 @@ static bool validate_sales_end_date(
     const char *date_str = json_object_get_string((json_object *)obj);
     int year = atoi(date_str);
     if (year >= 1997) {
-        return emit_error(err_buf, err_len, ERR_DATE_TOO_LATE, nullptr);
+        snprintf(err_buf, err_len, "End date is too late (max 1996)");
+        return false;
     }
     return true;
 }
@@ -350,11 +345,9 @@ void sales_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     const char* start_date = json_get_string(body, "start_date");
     const char* end_date = json_get_string(body, "end_date");
@@ -365,7 +358,6 @@ void sales_handler(
     
     if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 
@@ -375,11 +367,9 @@ void shippers_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
         
     const char* user = get_user();
     const char* session = get_session_id();
@@ -389,7 +379,6 @@ void shippers_handler(
               
     if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 
@@ -397,17 +386,14 @@ void products_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     [[maybe_unused]] int* out_status, 
-    [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     if (!odbcutil_get_json("{CALL sp_products_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
         const char* err = "{\"error\":\"Database error\"}";
         evbuffer_add(out_buf, err, strlen(err));
     } else {
         *out_status = HTTP_OK;
-        *out_status_txt = "OK";
     }
 }
 
@@ -415,12 +401,11 @@ void getqr_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     const char* user = get_user();
     
-    totp_generate_svg(user, out_status, out_status_txt, out_buf);
+    totp_generate_svg(user, out_status, out_buf);
     if (*out_status == HTTP_OK) {
         set_content_type("image/svg+xml");
     }
@@ -430,11 +415,9 @@ void uuid_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     char uuid_str[37];
     generate_uuidv4(uuid_str);
@@ -524,11 +507,9 @@ static void handle_login_success(
     const char* username, 
     const char* remote_ip, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     char session_id[37];
     generate_uuidv4(session_id);
@@ -545,7 +526,6 @@ static void handle_login_success(
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
     } else {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
         LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
     }
 }
@@ -556,14 +536,11 @@ static void handle_login_failure(
     long http_code, 
     struct json_object* remote_response,
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = (int)http_code;
-    *out_status_txt = "Unauthorized";
     if (http_code == 0) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 
     LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
@@ -595,7 +572,6 @@ void login_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     const char* username = json_get_string(body, "username");
@@ -608,9 +584,9 @@ void login_handler(
 
     if (http_code == 200) {
         if (remote_response) json_object_put(remote_response);
-        handle_login_success(username, remote_ip, out_status, out_status_txt, out_buf);
+        handle_login_success(username, remote_ip, out_status, out_buf);
     } else {
-        handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_status_txt, out_buf);
+        handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_buf);
     }
 }
 
@@ -645,11 +621,9 @@ void employee_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     int emp_id = json_get_int(body, "id");
     
@@ -659,6 +633,5 @@ void employee_handler(
     
     if (!odbcutil_get_rs2json("{CALL emp_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }

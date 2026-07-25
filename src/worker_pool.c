@@ -13,6 +13,7 @@
 #include <sodium.h>
 #include <event2/buffer.h>
 #include "raii.h"
+#include "thread_error.h"
 
 typedef struct {
     http_task_t* head;
@@ -28,6 +29,21 @@ typedef struct {
 
 static pool_t g_fast_pool = {0};
 static pool_t g_slow_pool = {0};
+
+static const char* get_http_status_text(int code) {
+    switch (code) {
+        case 200: return "OK";
+        case 400: return "Bad Request";
+        case 401: return "Unauthorized";
+        case 403: return "Forbidden";
+        case 404: return "Not Found";
+        case 429: return "Too Many Requests";
+        case 500: return "Internal Server Error";
+        case 502: return "Bad Gateway";
+        case 503: return "Service Unavailable";
+        default: return "Unknown Status";
+    }
+}
 
 
 static void* worker_thread_main(void* arg) {
@@ -151,7 +167,7 @@ static void* worker_thread_main(void* arg) {
             
             if (is_authorized && body_ok && valid) {
                 if (ctx && ctx->handler) {
-                    ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, &task->status_txt, task->worker_buf);
+                    ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, task->worker_buf);
                     const char* ctype = get_content_type();
                     if (ctype) {
                         snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
@@ -160,6 +176,18 @@ static void* worker_thread_main(void* arg) {
                     }
                 }
             }
+            
+            task->status_txt = get_http_status_text(task->status_code);
+
+            ThreadErrorLevel err_lvl = get_thread_error_level();
+            if (err_lvl == TL_ERR_ERROR) {
+                LOG_ERROR("Request failed for URI %s: %s", task->uri, get_thread_error_msg());
+            } else if (err_lvl == TL_ERR_WARN) {
+                LOG_WARN("Request warning for URI %s: %s", task->uri, get_thread_error_msg());
+            } else if (task->status_code >= 500) {
+                LOG_ERROR("Request failed with status %d for URI %s", task->status_code, task->uri);
+            }
+            clear_thread_error();
             
             logger_clear_request_id();
             handlers_clear_context();

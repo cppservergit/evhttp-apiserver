@@ -1,6 +1,6 @@
 #include "totp.h"
 #include "odbcutil.h"
-#include "logger.h"
+#include "thread_error.h"
 #include <qrencode.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,11 +34,11 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
                     status = HTTP_OK;
                 }
             } else if (get_ret == SQL_SUCCESS_WITH_INFO) {
-                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
+                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
             }
         }
     } else {
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
         status = HTTP_INTERNAL;
     }
     
@@ -46,10 +46,10 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     return status;
 }
 
-void totp_generate_svg(const char* user, int* out_status, const char** out_status_txt, struct evbuffer* out_buf) {
+void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_buf) {
     if (!user) {
         *out_status = HTTP_BADREQUEST;
-        *out_status_txt = "Bad Request";
+        
         return;
     }
 
@@ -58,7 +58,7 @@ void totp_generate_svg(const char* user, int* out_status, const char** out_statu
     
     if (db_status != HTTP_OK) {
         *out_status = db_status;
-        *out_status_txt = (db_status == HTTP_NOTFOUND) ? "Not Found" : "Internal Server Error";
+        
         return;
     }
 
@@ -72,7 +72,7 @@ void totp_generate_svg(const char* user, int* out_status, const char** out_statu
 
     if (!qrcode) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
+        
         return;
     }
 
@@ -102,5 +102,5 @@ void totp_generate_svg(const char* user, int* out_status, const char** out_statu
     QRcode_free(qrcode);
 
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
+    
 }

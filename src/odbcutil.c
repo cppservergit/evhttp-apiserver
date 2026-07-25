@@ -1,6 +1,6 @@
 #include "odbcutil.h"
 #include "raii.h"
-#include "logger.h"
+#include "thread_error.h"
 #include "server.h"
 #include "config.h"
 #include <string.h>
@@ -42,19 +42,19 @@ void odbcutil_reset_connection(void) {
     }
 }
 
-void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
+void odbcutil_set_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
     SQLCHAR sqlState[6], msg[SQL_MAX_MESSAGE_LENGTH];
     SQLINTEGER nativeError;
     SQLSMALLINT msgLen;
 
     if (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
-        LOG_ERROR("%s | ODBC Error [%s]: %s", context_msg, sqlState, msg);
+        set_thread_error(TL_ERR_ERROR, "%s | ODBC Error [%s]: %s", context_msg, sqlState, msg);
         if (strncmp((char*)sqlState, "08S01", 5) == 0 || strncmp((char*)sqlState, "08003", 5) == 0) {
-            LOG_ERROR("Database connection lost. Resetting thread-local connection pool.");
+            set_thread_error(TL_ERR_ERROR, "Database connection lost. Resetting thread-local connection pool.");
             odbcutil_reset_connection();
         }
     } else {
-        LOG_ERROR("%s | Unknown ODBC Error", context_msg);
+        set_thread_error(TL_ERR_ERROR, "%s | Unknown ODBC Error", context_msg);
     }
 }
 
@@ -64,7 +64,7 @@ SQLHDBC odbcutil_connect(void) {
     }
     
     if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &tl_hdbc))) {
-        odbcutil_log_error(SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
+        odbcutil_set_error(SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
         return SQL_NULL_HDBC;
     }
     
@@ -77,7 +77,7 @@ SQLHDBC odbcutil_connect(void) {
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
     SQLSMALLINT out_conn_len;
     if (!SQL_SUCCEEDED(SQLDriverConnect(tl_hdbc, nullptr, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT))) {
-        odbcutil_log_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");
+        odbcutil_set_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");
         odbcutil_reset_connection();
         return SQL_NULL_HDBC;
     }
@@ -97,7 +97,7 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
     if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt))) {
         char context_msg[256];
         snprintf(context_msg, sizeof(context_msg), "Failed to allocate ODBC statement handle in %s", func_name);
-        odbcutil_log_error(SQL_HANDLE_DBC, hdbc, context_msg);
+        odbcutil_set_error(SQL_HANDLE_DBC, hdbc, context_msg);
         odbcutil_reset_connection();
         return SQL_NULL_HSTMT;
     }
@@ -136,7 +136,7 @@ bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct ev
             if (ret == SQL_ERROR) {
                 char err_msg[256];
                 snprintf(err_msg, sizeof(err_msg), "SQLGetData failed for %s", func_name);
-                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
                 return false;
             }
             
@@ -177,7 +177,7 @@ bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct ev
     if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
         fetch_success = false;
     }
     
@@ -227,13 +227,13 @@ bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count
                 break;
             }
             default:
-                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
+                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
                 odbcutil_disconnect(hdbc, hstmt);
                 return false;
         }
 
         if (!SQL_SUCCEEDED(bind_ret)) {
-            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
+            odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
             odbcutil_disconnect(hdbc, hstmt);
             return false;
         }
@@ -246,7 +246,7 @@ bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
     }
     
     odbcutil_disconnect(hdbc, hstmt);
@@ -332,7 +332,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
     SQLRETURN ret = SQLNumResultCols(hstmt, &num_cols);
     
     if (!SQL_SUCCEEDED(ret)) {
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to retrieve result set column count.");
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to retrieve result set column count.");
         return false;
     }
 
@@ -359,7 +359,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
                              nullptr, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
 
         if (!SQL_SUCCEEDED(ret)) {
-            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
+            odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
             return false;
         }
 
@@ -379,7 +379,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
         ret = SQLBindCol(hstmt, i + 1, SQL_C_CHAR, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
 
         if (!SQL_SUCCEEDED(ret)) {
-            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to bind column.");
+            odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to bind column.");
             return false;
         }
     }
@@ -453,7 +453,7 @@ bool odbcutil_fetch_rs2json(SQLHSTMT hstmt, const char* func_name, struct evbuff
     if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
         return false;
     }
 
@@ -499,13 +499,13 @@ bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_co
                 break;
             }
             default:
-                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
+                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
                 odbcutil_disconnect(hdbc, hstmt);
                 return false;
         }
 
         if (!SQL_SUCCEEDED(bind_ret)) {
-            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
+            odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
             odbcutil_disconnect(hdbc, hstmt);
             return false;
         }
@@ -518,7 +518,7 @@ bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_co
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
-        odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
+        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
     }
     
     odbcutil_disconnect(hdbc, hstmt);

@@ -6,7 +6,7 @@
 #include <json-c/json.h>
 #include "http_client.h"
 #include "customer.h"
-#include "logger.h"
+#include "thread_error.h"
 #include "config.h"
 
 #include "jwt.h"
@@ -34,7 +34,7 @@ static struct json_object* execute_login_request(void) {
     char body_str[512];
     int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", api_user, api_pass);
     if (len >= (int)sizeof(body_str)) {
-        LOG_ERROR("Login payload truncated");
+        set_thread_error(TL_ERR_ERROR, "Login payload truncated");
         return nullptr;
     }
     
@@ -56,7 +56,7 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
         const char* id_token = json_object_get_string(token_obj);
         if (id_token) {
             if (strlen(id_token) >= sizeof(cache->token)) {
-                LOG_ERROR("Remote token exceeds %zu bytes", sizeof(cache->token) - 1);
+                set_thread_error(TL_ERR_ERROR, "Remote token exceeds %zu bytes", sizeof(cache->token) - 1);
                 return;
             }
             snprintf(cache->token, sizeof(cache->token), "%s", id_token);
@@ -96,7 +96,7 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     pthread_mutex_unlock(&jwt_cache_lock);
     
-    LOG_WARN("[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
+    set_thread_error(TL_ERR_WARN, "[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
     
     struct json_object* login_response = execute_login_request();
     

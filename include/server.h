@@ -30,7 +30,7 @@ void server_shutdown_workers(void);
 /** \brief Safely cleans up all global resources deterministically without relying on atexit */
 void server_cleanup_globals(void);
 
-typedef void (*handler_fn)(struct json_object* body, void* user_arg, int* out_status, const char** out_status_txt, struct evbuffer* out_buf);
+typedef void (*handler_fn)(struct json_object* body, void* user_arg, int* out_status, struct evbuffer* out_buf);
 
 typedef enum {
     AUTH_NONE = 0,

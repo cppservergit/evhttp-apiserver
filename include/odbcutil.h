@@ -46,7 +46,7 @@ bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct ev
 bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Extracts and logs ODBC diagnostic records. */
-void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
+void odbcutil_set_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name);

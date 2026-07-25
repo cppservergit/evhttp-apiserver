@@ -35,21 +35,6 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
         case ERR_UNKNOWN_TYPE:
             snprintf(err_buf, err_len, "Internal error: Unknown validation type configured.");
             break;
-        case ERR_NEGATIVE_AMOUNT:
-            snprintf(err_buf, err_len, "Field error: Amount on '%s' cannot be negative.", arg ? arg : "");
-            break;
-        case ERR_START_AFTER_END:
-            snprintf(err_buf, err_len, "Business rule violation: 'start_date' must be strictly before 'end_date'.");
-            break;
-        case ERR_INVALID_CUSTOMER_ID:
-            snprintf(err_buf, err_len, "Field error: Customer ID '%s' is invalid.", arg ? arg : "");
-            break;
-        case ERR_DATE_TOO_EARLY:
-            snprintf(err_buf, err_len, "no data before that year");
-            break;
-        case ERR_DATE_TOO_LATE:
-            snprintf(err_buf, err_len, "no data after that year");
-            break;
         default:
             snprintf(err_buf, err_len, "Unknown error code: %d", code);
             break;

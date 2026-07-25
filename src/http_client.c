@@ -4,7 +4,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <event2/http.h>
-#include "logger.h"
+#include "thread_error.h"
 
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
@@ -87,7 +87,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
 
     chunk->memory = malloc(4096);
     if (!chunk->memory) {
-        LOG_ERROR("Out of memory allocating initial chunk memory in do_http_request");
+        set_thread_error(TL_ERR_ERROR, "Out of memory allocating initial chunk memory in do_http_request");
         return nullptr;
     }
     chunk->size = 0;
@@ -122,14 +122,14 @@ static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const c
         if (out_http_code) *out_http_code = http_code;
         
         if (http_code >= 400) {
-            LOG_ERROR("HTTP %ld from %s | Response: %s", http_code, url, chunk->memory ? chunk->memory : "<empty>");
+            set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, chunk->memory ? chunk->memory : "<empty>");
         }
         
         if (chunk->size > 0) {
             json_response = json_tokener_parse(chunk->memory);
         }
     } else {
-        LOG_ERROR("libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
+        set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
         if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
     }
     return json_response;
@@ -149,7 +149,7 @@ static struct json_object* do_http_request(const char* base_url, const char* uri
     }
     
     if (written < 0 || written >= (int)sizeof(url)) {
-        LOG_ERROR("URL truncation error");
+        set_thread_error(TL_ERR_ERROR, "URL truncation error");
         if (out_http_code) *out_http_code = HTTP_INTERNAL;
         return nullptr;
     }
