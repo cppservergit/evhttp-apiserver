@@ -67,13 +67,12 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
 }
 
 static bool login_and_get_token(char* out_token, size_t max_len) {
-    time_t now;
     struct jwt_cache* cache = get_jwt_cache();
     
     pthread_mutex_lock(&jwt_cache_lock);
     
     while (1) {
-        now = time(nullptr);
+        time_t now = time(nullptr);
         if (cache->token[0] != '\0' && now < cache->expires_at) {
             size_t cpy_len = strlen(cache->token);
             if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;

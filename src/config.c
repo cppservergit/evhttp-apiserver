@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <pthread.h>
+
 #include <unistd.h>
 #include <libgen.h>
 #include <linux/limits.h>
@@ -64,9 +64,9 @@ static bool load_env_file(const char* filepath) {
 
 static bool locate_and_load_env(void) {
     char exe_path[PATH_MAX] = {0};
-    char env_path[PATH_MAX] = {0};
     if (readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1) != -1) {
-        char* dir = dirname(exe_path);
+        char env_path[PATH_MAX] = {0};
+        const char* dir = dirname(exe_path);
         (void)snprintf(env_path, sizeof(env_path), "%s/apiserver.env", dir);
         if (load_env_file(env_path)) return true;
     }
@@ -120,7 +120,7 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
         is_first_load = false;
         LOG_INFO("Configuration loaded successfully on startup.");
     } else {
-        if (g_num_threads != num_threads && (g_num_threads != 0 || num_threads != 0)) {
+        if (g_num_threads != num_threads) {
             LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
         }
         
