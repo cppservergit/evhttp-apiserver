@@ -1,3 +1,4 @@
+#define HTTP_CLIENT_CHUNK_SIZE 4096
 #include "http_client.h"
 #include <curl/curl.h>
 #include <stdlib.h>
@@ -85,7 +86,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     curl_easy_reset(curl);
     apply_curl_defaults(curl);
 
-    chunk->memory = malloc(4096);
+    chunk->memory = malloc(HTTP_CLIENT_CHUNK_SIZE);
     if (!chunk->memory) {
         set_thread_error(TL_ERR_ERROR, "Out of memory allocating initial chunk memory in do_http_request");
         return nullptr;

@@ -1,3 +1,4 @@
+#define ODBC_MAX_COL_SIZE 65536
 #include "odbcutil.h"
 #include "raii.h"
 #include "thread_error.h"
@@ -345,7 +346,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
     }
 
     meta->hstmt = hstmt;
-    meta->cols = calloc(num_cols, sizeof(ColumnDescriptor));
+    meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
     if (!meta->cols) return false;
     meta->count = num_cols;
 
@@ -355,7 +356,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
         SQLULEN col_size = 0;
         SQLSMALLINT digits = 0, nullable = 0;
 
-        ret = SQLDescribeCol(hstmt, i + 1, meta->cols[i].name, sizeof(meta->cols[i].name),
+        ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
                              nullptr, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
 
         if (!SQL_SUCCEEDED(ret)) {
@@ -363,7 +364,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
             return false;
         }
 
-        meta->cols[i].alloc_size = (col_size == 0 || col_size > 65536) ? 65536 : (col_size + 64);
+        meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
         total_arena_size += meta->cols[i].alloc_size;
     }
 
@@ -376,7 +377,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
         meta->cols[i].buffer = meta->arena + current_offset;
         current_offset += meta->cols[i].alloc_size;
 
-        ret = SQLBindCol(hstmt, i + 1, SQL_C_CHAR, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
+        ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_CHAR, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
 
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to bind column.");

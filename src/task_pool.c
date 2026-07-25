@@ -68,7 +68,7 @@ http_task_t* task_pool_alloc(void) {
         if (batch > 0) {
             for (size_t i = 0; i < batch; i++) {
                 http_task_t* t = g_free_stack[--g_stack_top];
-                size_t idx = t - g_task_slab;
+                size_t idx = (size_t)(t - g_task_slab);
                 g_is_free_flag[idx] = false;
                 tl_cache[tl_cache_count++] = t;
             }
@@ -107,7 +107,7 @@ void task_pool_free(http_task_t* task) {
         }
         for (size_t i = 0; i < flush_count; i++) {
             http_task_t* t = tl_cache[i];
-            size_t idx = t - g_task_slab;
+            size_t idx = (size_t)(t - g_task_slab);
             if (g_is_free_flag[idx]) {
                 (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
                 abort();

@@ -197,26 +197,22 @@ void config_get_login_uri(char* out, size_t max_len) {
 
 void config_get_jwt_secret(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    strncpy(out, g_jwt_secret, max_len - 1);
-    out[max_len - 1] = '\0';
+    (void)snprintf(out, max_len, "%s", g_jwt_secret);
 }
 
 void config_get_remote_api_key(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    strncpy(out, g_remote_api_key, max_len - 1);
-    out[max_len - 1] = '\0';
+    (void)snprintf(out, max_len, "%s", g_remote_api_key);
 }
 
 void config_get_telemetry_api_key(char* out, size_t max_len) {
     if (!out || max_len == 0) return;
-    strncpy(out, g_telemetry_api_key, max_len - 1);
-    out[max_len - 1] = '\0';
+    (void)snprintf(out, max_len, "%s", g_telemetry_api_key);
 }
 
 void config_get_trust_proxy_ip(char* buf, size_t max_len) {
     if (!buf || max_len == 0) return;
-    strncpy(buf, g_trust_proxy_ip, max_len - 1);
-    buf[max_len - 1] = '\0';
+    (void)snprintf(buf, max_len, "%s", g_trust_proxy_ip);
 }
 
 long config_get_jwt_timeout_seconds(void) {

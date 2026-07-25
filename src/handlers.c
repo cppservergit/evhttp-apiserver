@@ -310,7 +310,7 @@ static bool validate_sales_start_date(
     size_t err_len
 ) {
     const char *date_str = json_object_get_string((json_object *)obj);
-    int year = atoi(date_str);
+    int year = (int)strtol(date_str, NULL, 10);
     if (year <= 1993) {
         (void)snprintf(err_buf, err_len, "Start date is too early (min 1994)");
         return false;
@@ -326,7 +326,7 @@ static bool validate_sales_end_date(
     size_t err_len
 ) {
     const char *date_str = json_object_get_string((json_object *)obj);
-    int year = atoi(date_str);
+    int year = (int)strtol(date_str, NULL, 10);
     if (year >= 1997) {
         (void)snprintf(err_buf, err_len, "End date is too late (max 1996)");
         return false;

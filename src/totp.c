@@ -28,7 +28,7 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
         SQLRETURN fetch_ret = SQLFetch(hstmt);
         if (fetch_ret == SQL_SUCCESS || fetch_ret == SQL_SUCCESS_WITH_INFO) {
             SQLLEN len = 0;
-            SQLRETURN get_ret = SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, max_len, &len);
+            SQLRETURN get_ret = SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, (SQLLEN)max_len, &len);
             if (get_ret == SQL_SUCCESS) {
                 if (len != SQL_NULL_DATA && len > 0) {
                     status = HTTP_OK;

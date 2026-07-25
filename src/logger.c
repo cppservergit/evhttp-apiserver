@@ -89,8 +89,7 @@ static _Thread_local char tl_request_id[128] = {0};
 
 void logger_set_request_id(const char* req_id) {
     if (req_id) {
-        strncpy(tl_request_id, req_id, sizeof(tl_request_id) - 1);
-        tl_request_id[sizeof(tl_request_id) - 1] = '\0';
+        (void)snprintf(tl_request_id, sizeof(tl_request_id), "%s", req_id);
     } else {
         tl_request_id[0] = '\0';
     }
