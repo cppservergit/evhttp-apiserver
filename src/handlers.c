@@ -222,14 +222,6 @@ const ValidationContext CustomerContext = {
     .global_validator = nullptr
 };
 
-static thread_local SQLLEN cb_nts = SQL_NTS;
-
-static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
-    const char* customer_id = json_get_string(body, "id");
-    size_t len = customer_id ? strlen(customer_id) : 0;
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, len, 0, (SQLPOINTER)customer_id, len, &cb_nts);
-}
-
 void rcustomer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
@@ -269,7 +261,13 @@ void customer_handler(
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", customer_bind_cb, body, out_buf, __func__)) {
+    
+    const char* customer_id = json_get_string(body, "id");
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = customer_id }
+    };
+    
+    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }
@@ -348,16 +346,6 @@ const ValidationContext SalesContext = {
     .global_validator = sales_invariant_validator
 };
 
-static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
-    const char* start_date = json_get_string(body, "start_date");
-    const char* end_date = json_get_string(body, "end_date");
-    
-    size_t start_len = start_date ? strlen(start_date) : 0;
-    size_t end_len = end_date ? strlen(end_date) : 0;
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, start_len, 0, (SQLPOINTER)start_date, start_len, &cb_nts);
-    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, end_len, 0, (SQLPOINTER)end_date, end_len, &cb_nts);
-}
-
 void sales_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
@@ -367,7 +355,15 @@ void sales_handler(
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", sales_bind_cb, body, out_buf, __func__)) {
+    
+    const char* start_date = json_get_string(body, "start_date");
+    const char* end_date = json_get_string(body, "end_date");
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = start_date },
+        { .type = PARAM_STRING, .value = end_date }
+    };
+    
+    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }
@@ -391,7 +387,7 @@ void shippers_handler(
               user ? user : "unknown", 
               session ? session : "unknown");
               
-    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, nullptr, out_buf, __func__)) {
+    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }
@@ -404,7 +400,7 @@ void products_handler(
     [[maybe_unused]] const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
-    if (!odbcutil_get_json("{CALL sp_products_view}", nullptr, nullptr, out_buf, __func__)) {
+    if (!odbcutil_get_json("{CALL sp_products_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
         const char* err = "{\"error\":\"Database error\"}";

@@ -14,7 +14,22 @@ struct evbuffer;
 #define MAX_ODBC_CONN_STR_LEN 1024
 #define ODBC_FETCH_CHUNK_SIZE 4096
 
-typedef void (*odbc_bind_fn)(struct json_object* body, SQLHSTMT hstmt);
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
+typedef enum {
+    PARAM_STRING,
+    PARAM_INT,
+    PARAM_DOUBLE,
+    PARAM_NULL
+} ParamType;
+
+typedef struct {
+    ParamType   type;
+    const void *value;
+    SQLLEN      ind; // Preserves stack liveness during SQLExecute
+} QueryParam;
 
 /** \brief Retrieves a new database connection from the driver pool. \return The ODBC connection handle. */
 SQLHDBC odbcutil_connect(void);
@@ -22,10 +37,10 @@ SQLHDBC odbcutil_connect(void);
 #include <stdbool.h>
 
 /** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
-bool odbcutil_get_json(const char* query, odbc_bind_fn binder, struct json_object* body, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
-/** \brief Extracts JSON data using batch fetching (4 rows at a time). \param hstmt The executed statement. */
-bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf);
+/** \brief Extracts JSON data using native JSON streaming. \param hstmt The executed statement. */
+bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf);
 
 /** \brief Extracts and logs ODBC diagnostic records. */
 void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);

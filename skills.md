@@ -49,26 +49,9 @@ const ValidationContext CustomerContext = {
 
 ---
 
-## Step 2: Write the ODBC Parameter Binder
+## Step 2: Implement the Handler Function
 
-Create a lightweight callback function that maps the validated JSON payload into your SQL Server Stored Procedure parameters.
-
-```c
-static void customer_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
-    // 1. Safely extract the pre-validated string
-    const char* customer_id = json_get_string(body, "id");
-    size_t len = customer_id ? strlen(customer_id) : 0;
-    
-    // 2. Bind it to the prepared statement
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, len, 0, (SQLPOINTER)customer_id, len, &cb_nts);
-}
-```
-
----
-
-## Step 3: Implement the Handler Function
-
-The handler function orchestrates the request. By using the `odbcutil_get_json` abstraction, you eliminate all boilerplate connection handling, fetching, and memory allocation.
+The handler function orchestrates the request. By using the `odbcutil_get_json` abstraction and a `QueryParam` array, you eliminate all boilerplate connection handling, fetching, and memory allocation.
 
 ```c
 void customer_handler(
@@ -82,9 +65,17 @@ void customer_handler(
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
     
-    // Execute the stored procedure and stream the results DIRECTLY to the network buffer.
+    // 1. Safely extract the pre-validated string
+    const char* customer_id = json_get_string(body, "id");
+    
+    // 2. Map the payload into your SQL Server Stored Procedure parameters
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = customer_id }
+    };
+    
+    // 3. Execute the stored procedure and stream the results DIRECTLY to the network buffer.
     // The macro __func__ injects the caller name for robust telemetry.
-    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", customer_bind_cb, body, out_buf, __func__)) {
+    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }
@@ -123,7 +114,7 @@ If your endpoint doesn't accept a JSON payload and simply retrieves global data 
 You do **not** need a schema, `ValidationContext`, or parameter binder callback.
 
 ### The Handler
-Pass `nullptr` for the binder and body in `odbcutil_get_json`:
+Pass `nullptr` and `0` for the parameter arguments in `odbcutil_get_json`:
 
 ```c
 void shippers_handler(
@@ -137,7 +128,7 @@ void shippers_handler(
     *out_status_txt = "OK";
         
     // Execute parameterless query and stream directly to client
-    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, nullptr, out_buf, __func__)) {
+    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }

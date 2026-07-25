@@ -203,21 +203,10 @@ For a comprehensive guide on writing database API handlers, please see the [Deve
 
 Below is a complete example of how the framework handles a POST request to `/sales`, streaming the response directly from ODBC into the network socket without intermediate heap allocations.
 
-### 1. The Parameter Binder & Request Handler (`src/handlers.c`)
-Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters and calls the `odbcutil` streaming abstraction:
+### 1. The Request Handler (`src/handlers.c`)
+Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters into a `QueryParam` array and calls the `odbcutil` streaming abstraction:
 
 ```c
-static void sales_bind_cb(struct json_object* body, SQLHSTMT hstmt) {
-    const char* start_date = json_get_string(body, "start_date");
-    const char* end_date = json_get_string(body, "end_date");
-    
-    size_t start_len = start_date ? strlen(start_date) : 0;
-    size_t end_len = end_date ? strlen(end_date) : 0;
-    
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, start_len, 0, (SQLPOINTER)start_date, start_len, &cb_nts);
-    SQLBindParameter(hstmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, end_len, 0, (SQLPOINTER)end_date, end_len, &cb_nts);
-}
-
 void sales_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
@@ -227,7 +216,16 @@ void sales_handler(
 ) {
     *out_status = HTTP_OK;
     *out_status_txt = "OK";
-    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", sales_bind_cb, body, out_buf, __func__)) {
+    
+    const char* start_date = json_get_string(body, "start_date");
+    const char* end_date = json_get_string(body, "end_date");
+    
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = start_date },
+        { .type = PARAM_STRING, .value = end_date }
+    };
+    
+    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
         *out_status_txt = "Internal Server Error";
     }

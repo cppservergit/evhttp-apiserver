@@ -46,7 +46,7 @@ void odbcutil_log_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* c
     SQLINTEGER nativeError;
     SQLSMALLINT msgLen;
 
-    if (SQLGetDiagRec(handle_type, handle, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen) == SQL_SUCCESS) {
+    if (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
         LOG_ERROR("%s | ODBC Error [%s]: %s", context_msg, sqlState, msg);
         if (strncmp((char*)sqlState, "08S01", 5) == 0 || strncmp((char*)sqlState, "08003", 5) == 0) {
             LOG_ERROR("Database connection lost. Resetting thread-local connection pool.");
@@ -62,7 +62,7 @@ SQLHDBC odbcutil_connect(void) {
         return tl_hdbc;
     }
     
-    if (SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &tl_hdbc) != SQL_SUCCESS) {
+    if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_DBC, server_get_odbc_env(), &tl_hdbc))) {
         odbcutil_log_error(SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
         return SQL_NULL_HDBC;
     }
@@ -75,9 +75,7 @@ SQLHDBC odbcutil_connect(void) {
     
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
     SQLSMALLINT out_conn_len;
-    SQLRETURN ret = SQLDriverConnect(tl_hdbc, nullptr, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT);
-    
-    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+    if (!SQL_SUCCEEDED(SQLDriverConnect(tl_hdbc, nullptr, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT))) {
         odbcutil_log_error(SQL_HANDLE_DBC, tl_hdbc, "Failed to connect to database");
         odbcutil_reset_connection();
         return SQL_NULL_HDBC;
@@ -95,7 +93,7 @@ SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name) {
     }
 
     SQLHSTMT hstmt = SQL_NULL_HSTMT;
-    if (SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt) != SQL_SUCCESS) {
+    if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt))) {
         char context_msg[256];
         snprintf(context_msg, sizeof(context_msg), "Failed to allocate ODBC statement handle in %s", func_name);
         odbcutil_log_error(SQL_HANDLE_DBC, hdbc, context_msg);
@@ -119,23 +117,20 @@ void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     }
 }
 
-bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
     SQLRETURN ret;
     char chunk[ODBC_FETCH_CHUNK_SIZE];
     SQLLEN indicator;
     
     bool has_rows = false;
+    bool has_data_written = false;
     bool fetch_success = true;
 
-    while ((ret = SQLFetch(hstmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+    while (SQL_SUCCEEDED(ret = SQLFetch(hstmt))) {
         has_rows = true;
                 
         while (true) {
             ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
-            
-            if (ret == SQL_NO_DATA || indicator == SQL_NULL_DATA) {
-                break;
-            }
             
             if (ret == SQL_ERROR) {
                 char err_msg[256];
@@ -144,15 +139,32 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
                 return false;
             }
             
-            size_t chunk_len = 0;
-            if (indicator >= 0 && (size_t)indicator < sizeof(chunk)) {
-                chunk_len = (size_t)indicator;
-            } else {
-                // Truncated or SQL_NO_TOTAL, we must rely on the null terminator
-                chunk_len = sizeof(chunk) - 1;
+            if (indicator == SQL_NULL_DATA) {
+                if (!has_data_written) {
+                    evbuffer_add(out_buf, "null", 4);
+                    has_data_written = true;
+                }
+                break;
             }
-            if (chunk_len > 0) {
-                evbuffer_add(out_buf, chunk, chunk_len);
+
+            if (ret == SQL_NO_DATA) {
+                break;
+            }
+            
+            size_t bytes_to_write = 0;
+            size_t max_payload = sizeof(chunk) - 1;
+
+            if (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) {
+                bytes_to_write = max_payload;
+            } else if (indicator >= 0) {
+                bytes_to_write = (size_t)indicator;
+            } else {
+                bytes_to_write = strlen(chunk);
+            }
+            
+            if (bytes_to_write > 0) {
+                evbuffer_add(out_buf, chunk, bytes_to_write);
+                has_data_written = true;
             }
             
             if (ret == SQL_SUCCESS) {
@@ -161,7 +173,7 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
         }
     }
     
-    if (ret != SQL_NO_DATA && ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+    if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
         odbcutil_log_error(SQL_HANDLE_STMT, hstmt, err_msg);
@@ -176,22 +188,60 @@ bool odbcutil_fetch_json_batch(SQLHSTMT hstmt, const char* func_name, struct evb
 }
 
 
-bool odbcutil_get_json(const char* query, odbc_bind_fn binder, struct json_object* body, struct evbuffer* out_buf, const char* func_name) {
+bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
     SQLHDBC hdbc = odbcutil_connect();
     if (hdbc == SQL_NULL_HDBC) return false;
     
     SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, func_name);
     if (!hstmt) return false;
     
-    if (binder) {
-        binder(body, hstmt);
+    for (size_t i = 0; i < param_count; ++i) {
+        SQLRETURN bind_ret;
+        SQLUSMALLINT param_idx = (SQLUSMALLINT)(i + 1);
+
+        switch (params[i].type) {
+            case PARAM_STRING: {
+                const char *str = (const char *)params[i].value;
+                params[i].ind = str ? SQL_NTS : SQL_NULL_DATA;
+                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+                                       str ? strlen(str) : 0, 0, (SQLPOINTER)str, 0, &params[i].ind);
+                break;
+            }
+            case PARAM_INT: {
+                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
+                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
+                break;
+            }
+            case PARAM_DOUBLE: {
+                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
+                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
+                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
+                break;
+            }
+            case PARAM_NULL: {
+                params[i].ind = SQL_NULL_DATA;
+                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+                                       0, 0, nullptr, 0, &params[i].ind);
+                break;
+            }
+            default:
+                odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
+                odbcutil_disconnect(hdbc, hstmt);
+                return false;
+        }
+
+        if (!SQL_SUCCEEDED(bind_ret)) {
+            odbcutil_log_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
+            odbcutil_disconnect(hdbc, hstmt);
+            return false;
+        }
     }
     
-    SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS);
     bool success = false;
     
-    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        success = odbcutil_fetch_json_batch(hstmt, func_name, out_buf);
+    if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS))) {
+        success = odbcutil_fetch_json_native(hstmt, func_name, out_buf);
     } else {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
