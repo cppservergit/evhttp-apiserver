@@ -193,7 +193,7 @@ int server_init_globals(size_t num_reactors) {
     time_t now = time(nullptr);
     struct tm tm_info;
     localtime_r(&now, &tm_info);
-    strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", &tm_info);
+    (void)strftime(g_start_time, sizeof(g_start_time), "%Y-%m-%dT%H:%M:%S", &tm_info);
     
     if (sodium_init() < 0) {
         LOG_FATAL("Failed to initialize libsodium");

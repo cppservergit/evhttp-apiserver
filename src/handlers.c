@@ -440,13 +440,13 @@ static _Thread_local char tl_uri[1024] = {0};
 static _Thread_local char tl_content_type[128] = {0};
 
 void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri) {
-    if (user) snprintf(tl_user, sizeof(tl_user), "%s", user);
+    if (user) (void)snprintf(tl_user, sizeof(tl_user), "%s", user);
     else tl_user[0] = '\0';
-    if (session) snprintf(tl_session, sizeof(tl_session), "%s", session);
+    if (session) (void)snprintf(tl_session, sizeof(tl_session), "%s", session);
     else tl_session[0] = '\0';
-    if (client_ip) snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
+    if (client_ip) (void)snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
     else tl_client_ip[0] = '\0';
-    if (uri) snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
+    if (uri) (void)snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
     else tl_uri[0] = '\0';
 }
 
@@ -463,7 +463,7 @@ static const char* get_session_id(void) { return tl_session[0] ? tl_session : nu
 static const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
 
 static void set_content_type(const char* ctype) {
-    if (ctype) snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
+    if (ctype) (void)snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
     else tl_content_type[0] = '\0';
 }
 

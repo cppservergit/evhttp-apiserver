@@ -58,7 +58,7 @@ static bool load_env_file(const char* filepath) {
             }
         }
     }
-    fclose(f);
+    (void)fclose(f);
     return true;
 }
 
@@ -87,24 +87,24 @@ static bool is_first_load = true;
 static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
 
     if (is_first_load) {
-        if (getenv("ODBC_CONN_STR")) snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
-        if (getenv("API_URL")) snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
-        if (getenv("API_USER")) snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
-        if (getenv("API_PASS")) snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
+        if (getenv("ODBC_CONN_STR")) (void)snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
+        if (getenv("API_URL")) (void)snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
+        if (getenv("API_USER")) (void)snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
+        if (getenv("API_PASS")) (void)snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
         
-        if (getenv("LOGIN_PROVIDER")) snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
-        if (getenv("LOGIN_URI")) snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
-        if (getenv("JWT_SECRET")) snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
-        if (getenv("REMOTE_API_KEY")) snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
+        if (getenv("LOGIN_PROVIDER")) (void)snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
+        if (getenv("LOGIN_URI")) (void)snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
+        if (getenv("JWT_SECRET")) (void)snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+        if (getenv("REMOTE_API_KEY")) (void)snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
         else g_remote_api_key[0] = '\0';
         
-        if (getenv("TELEMETRY_API_KEY")) snprintf(g_telemetry_api_key, sizeof(g_telemetry_api_key), "%s", getenv("TELEMETRY_API_KEY"));
+        if (getenv("TELEMETRY_API_KEY")) (void)snprintf(g_telemetry_api_key, sizeof(g_telemetry_api_key), "%s", getenv("TELEMETRY_API_KEY"));
         else g_telemetry_api_key[0] = '\0';
         
-        if (getenv("TRUST_PROXY_IP")) snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
+        if (getenv("TRUST_PROXY_IP")) (void)snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
         else g_trust_proxy_ip[0] = '\0';
         
-        if (getenv("CORS_ALLOWED_ORIGINS")) snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
+        if (getenv("CORS_ALLOWED_ORIGINS")) (void)snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
         else g_allowed_origin[0] = '\0';
         
         if (getenv("JWT_TIMEOUT_SECONDS")) {
