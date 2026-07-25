@@ -118,7 +118,7 @@ void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     }
 }
 
-bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+static bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
     SQLRETURN ret;
     char chunk[ODBC_FETCH_CHUNK_SIZE];
     SQLLEN indicator;

@@ -283,7 +283,7 @@ void server_shutdown_workers(void) {
     }
 }
 
-void server_record_request_stats(long long elapsed_ms, bool is_fast) {
+static void server_record_request_stats(long long elapsed_ms, bool is_fast) {
     if (g_reactor_stats) {
         if (is_fast) {
             atomic_fetch_add_explicit(&g_reactor_stats[tl_reactor_id].total_requests_fast, 1, memory_order_relaxed);

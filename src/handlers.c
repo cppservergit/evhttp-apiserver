@@ -12,9 +12,13 @@
 #include "jwt.h"
 #include "odbcutil.h"
 #include <unistd.h>
-#include <time.h>
-#include <stdio.h>
 #include <string.h>
+
+static const char* get_client_ip(void);
+static const char* get_session_id(void);
+static void set_content_type(const char* ctype);
+
+#include <time.h>
 #include <ctype.h>
 #include <sodium.h>
 #include "json_util.h"
@@ -455,11 +459,10 @@ void handlers_clear_context(void) {
 }
 
 const char* get_user(void) { return tl_user[0] ? tl_user : nullptr; }
-const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
-const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
-const char* get_uri(void) { return tl_uri[0] ? tl_uri : nullptr; }
+static const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
+static const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
 
-void set_content_type(const char* ctype) {
+static void set_content_type(const char* ctype) {
     if (ctype) snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
     else tl_content_type[0] = '\0';
 }

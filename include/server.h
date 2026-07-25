@@ -55,7 +55,7 @@ const char* get_server_version(void);
 void server_notify_task_done(void* task);
 
 /** \brief Records telemetry for a processed HTTP request. \param elapsed_ms Processing time in milliseconds. \param is_fast True if processed in fast pool. */
-void server_record_request_stats(long long elapsed_ms, bool is_fast);
+
 
 typedef struct {
     uint64_t total_requests;

@@ -31,13 +31,11 @@ void login_handler(struct json_object* body, void* arg, int* out_status, struct 
 extern const ValidationContext LoginContext;
 
 /** \brief Extracts the client IP from the request, favoring X-Forwarded-For if present. */
-const char* get_client_ip(void);
 
 /** \brief Retrieves the internal JWT-authenticated username, if present. */
 const char* get_user(void);
 
 /** \brief Retrieves the internal JWT-authenticated session ID, if present. */
-const char* get_session_id(void);
 
 /** \brief Sets the authenticated identity for the current thread context. */
 void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri);
@@ -46,13 +44,11 @@ void handlers_set_context(const char* user, const char* session, const char* cli
 void handlers_clear_context(void);
 
 /** \brief Sets the response content type. */
-void set_content_type(const char* ctype);
 
 /** \brief Gets the response content type set by the handler. */
 const char* get_content_type(void);
 
 /** \brief Retrieves the requested URI. */
-const char* get_uri(void);
 /** \brief Handles /customer requests (external REST integration). */
 void rcustomer_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 

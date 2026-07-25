@@ -23,7 +23,7 @@ typedef enum {
 #define LOG_AUDIT(...) logger_log(LOG_LEVEL_AUDIT, __VA_ARGS__)
 #define LOG_ERROR(...) logger_log(LOG_LEVEL_ERROR, __VA_ARGS__)
 #define LOG_FATAL(...) logger_log(LOG_LEVEL_FATAL, __VA_ARGS__)
-#define LOG_DEBUG(...) logger_log(LOG_LEVEL_DEBUG, __VA_ARGS__)
+
 
 /**
  * \brief Writes a structured JSON log entry to stderr.

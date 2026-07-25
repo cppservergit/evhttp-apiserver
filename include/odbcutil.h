@@ -40,7 +40,6 @@ SQLHDBC odbcutil_connect(void);
 bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Extracts JSON data using native JSON streaming. \param hstmt The executed statement. */
-bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf);
 
 /** \brief Executes query and converts traditional resultset to JSON array of objects. */
 bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);

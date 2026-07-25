@@ -60,7 +60,7 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
         } else {
             char jwt_secret[MAX_CONFIG_STR];
             config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
-            int jwt_res = jwt_verify(auth_hdr + 7, jwt_secret, task->username, sizeof(task->username), task->session_id, sizeof(task->session_id));
+            int jwt_res = jwt_verify(&auth_hdr[7], jwt_secret, task->username, sizeof(task->username), task->session_id, sizeof(task->session_id));
             sodium_memzero(jwt_secret, sizeof(jwt_secret));
             
             if (jwt_res == JWT_ERR_EXPIRED) {
@@ -75,6 +75,8 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
                 const char* msg = "{\"error\":\"Invalid token\"}";
                 evbuffer_add(task->worker_buf, msg, strlen(msg));
                 return false;
+            } else {
+                // MISRA 15.7: Fallback else
             }
         }
         handlers_set_context(task->username, task->session_id, task->client_ip, task->uri);
@@ -161,7 +163,7 @@ static void* worker_thread_main(void* arg) {
         
         http_task_t* task = pool->head;
         pool->head = task->next;
-        if (pool->head == nullptr) pool->tail = nullptr;
+        if (pool->head == nullptr) { pool->tail = nullptr; }
         pool->size--;
         pthread_mutex_unlock(&pool->mutex);
         
@@ -190,6 +192,8 @@ static void* worker_thread_main(void* arg) {
                 LOG_WARN("Request warning for URI %s: %s", task->uri, get_thread_error_msg());
             } else if (task->status_code >= 500) {
                 LOG_ERROR("Request failed with status %d for URI %s", task->status_code, task->uri);
+            } else {
+                // MISRA 15.7: Fallback else
             }
             clear_thread_error();
             
