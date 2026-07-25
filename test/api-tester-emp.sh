@@ -63,7 +63,7 @@ run_test() {
 
 # 4. Execute the Test Cases
 run_test "Correct Case" '{"id": 1}' "$TOKEN1" "200"
-run_test "Correct Case 2" '{"id": 5}' "$TOKEN1" "200"
+run_test "Correct Case (enc. resp.)" '{"id": 5}' "$TOKEN1" "200"
 run_test "Missing argument" '{"other": 5}' "$TOKEN1" "400"
 run_test "Invalid type (string)" '{"id": "1"}' "$TOKEN1" "400"
 run_test "Invalid type (array)" '{"id": []}' "$TOKEN1" "400"
