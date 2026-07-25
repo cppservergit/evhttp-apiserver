@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 #include <json-c/json.h>
 #include "validation.h"
 
@@ -99,6 +100,10 @@ static bool validate_type_int(const json_object *obj, const char *name, char *er
 
 static bool validate_type_double(const json_object *obj, const char *name, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_double) && !json_object_is_type(obj, json_type_int)) {
+        return emit_error(err, len, ERR_NOT_DOUBLE, name);
+    }
+    double val = json_object_get_double(obj);
+    if (isnan(val) || isinf(val)) {
         return emit_error(err, len, ERR_NOT_DOUBLE, name);
     }
     return true;

@@ -7,6 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <math.h>
 #include "validation.h"
 
 // --- Custom Validators for Test ---
@@ -20,9 +21,9 @@
     do { \
         err_buf[0] = '\0'; \
         assert(validate_json((ctx), (root), err_buf, sizeof(err_buf)) == false); \
-        if (strstr(err_buf, (expected_str)) == NULL) { \
+        if (strstr(err_buf, (expected_str)) == nullptr) { \
             fprintf(stderr, "Assertion failed: expected error containing '%s', got '%s'\n", (expected_str), err_buf); \
-            assert(strstr(err_buf, (expected_str)) != NULL); \
+            assert(strstr(err_buf, (expected_str)) != nullptr); \
         } \
     } while (0)
 
@@ -105,6 +106,18 @@ static void test_coverage(void) {
     
     assert(json_get_double(root, "d") == 3.14);
     assert(json_get_double(root, "missing") == 0.0);
+    json_object_put(root);
+
+    // Math Safety: NAN and INFINITY
+    root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"count\": 10, \"name\": \"test\"}");
+    json_object_object_add(root, "amount", json_object_new_double(NAN));
+    // We expect the validation engine to reject NANs as invalid doubles (if it does?) or we just assert something happens.
+    assert_validation_error(&TestContext, root, "numeric decimal");
+    json_object_put(root);
+    
+    root = json_tokener_parse("{\"start_date\":\"2024-01-01\", \"end_date\":\"2024-12-31\", \"count\": 10, \"name\": \"test\"}");
+    json_object_object_add(root, "amount", json_object_new_double(INFINITY));
+    assert_validation_error(&TestContext, root, "numeric decimal");
     json_object_put(root);
 
     // Test valid schema
@@ -322,7 +335,7 @@ static void* fuzz_thread(void* arg) {
             json_object_put(root);
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 int main(void) {
@@ -334,10 +347,10 @@ int main(void) {
     
     printf("Starting %d fuzzing threads (%d iterations each)...\n", num_threads, iterations_per_thread);
     for (int i = 0; i < num_threads; i++) {
-        pthread_create(&threads[i], NULL, fuzz_thread, (void*)(intptr_t)iterations_per_thread);
+        pthread_create(&threads[i], nullptr, fuzz_thread, (void*)(intptr_t)iterations_per_thread);
     }
     for (int i = 0; i < num_threads; i++) {
-        pthread_join(threads[i], NULL);
+        pthread_join(threads[i], nullptr);
     }
     printf("Multithreaded fuzzing complete.\n");
     return 0;
