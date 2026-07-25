@@ -29,6 +29,7 @@ flowchart TD
 * **Zero-Allocation Intrusive Queues:** Eliminates `malloc`/`free` bottlenecks on the critical request path by embedding intrusive linked-list pointers directly into the task state. This prevents memory fragmentation, OOM crashes under extreme load, and glibc lock contention.
 * **Object Pool / Slab Allocator:** Pre-allocates request task structures at startup and manages an O(1) Mutex-guarded free-list stack. This guarantees exactly zero dynamic heap allocations on the critical path, acting as a natural backpressure valve if traffic surges beyond bounds.
 * **Event Coalescing:** Eliminates "System Call Storms" by intelligently coalescing `eventfd` signals on asynchronous pipe boundaries, mathematically reducing kernel context switches under high load.
+* **High-Performance Asynchronous Logging:** Implements a dedicated background logger thread utilizing a mutex-guarded ring buffer and a pre-allocated object pool. Workers seamlessly offload `STDERR` I/O without synchronous blocking, utilizing POSIX atomic guarantees (`PIPE_BUF`) to ensure thread-safe, non-interleaved log streams.
 * **Optimized Thread Signaling:** Utilizes the "Unlock-before-Signal" pattern to prevent spurious wait-morphing overhead and lock contention when waking sleeping background workers.
 * **Performance & Scalability:** Engineered for high-throughput, utilizing non-blocking `epoll` I/O.
 * **Hardware-Aware Affinity:** Uses `SO_REUSEPORT` with thread-per-core affinity to automatically adapt to available CPU cores for zero-contention network routing.
