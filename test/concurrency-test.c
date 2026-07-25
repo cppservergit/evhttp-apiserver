@@ -21,8 +21,8 @@ void dummy_cb(struct evhttp_request *req, void *arg) {
     (void)arg;
 }
 
-void dummy_handler(struct json_object *body, void *arg, int *status_code, const char **status_txt, struct evbuffer *out_buf) {
-    (void)body; (void)arg; (void)status_code; (void)status_txt; (void)out_buf;
+void dummy_handler(struct json_object *body, void *arg, int *status_code, struct evbuffer *out_buf) {
+    (void)body; (void)arg; (void)status_code; (void)out_buf;
     char buf[1024];
     config_get_odbc_conn_str(buf, sizeof(buf));
     config_get_api_url(buf, sizeof(buf));
