@@ -211,11 +211,9 @@ void sales_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     const char* start_date = json_get_string(body, "start_date");
     const char* end_date = json_get_string(body, "end_date");
@@ -227,7 +225,6 @@ void sales_handler(
     
     if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 ```

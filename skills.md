@@ -21,11 +21,13 @@ static bool customer_id_validator(
 ) {
     const char *id = json_object_get_string((json_object *)obj);
     if (!id || strlen(id) != 5) {
-        return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id ? id : "null");
+        snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
+        return false;
     }
     for (int i = 0; i < 5; ++i) {
         if (!isalpha((unsigned char)id[i])) {
-            return emit_error(err_buf, err_len, ERR_INVALID_CUSTOMER_ID, id);
+            snprintf(err_buf, err_len, "Invalid customer ID character: %s", id);
+            return false;
         }
     }
     return true;
@@ -58,12 +60,10 @@ void customer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     // Set default success headers
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
     
     // 1. Safely extract the pre-validated string
     const char* customer_id = json_get_string(body, "id");
@@ -77,7 +77,6 @@ void customer_handler(
     // The macro __func__ injects the caller name for robust telemetry.
     if (!odbcutil_get_json("{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 ```
@@ -121,16 +120,13 @@ void shippers_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
-    const char** out_status_txt,
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
-    *out_status_txt = "OK";
         
     // Execute parameterless query and stream directly to client
     if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        *out_status_txt = "Internal Server Error";
     }
 }
 ```
@@ -157,3 +153,27 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
 2. **Lock-Free by Design:** The hot-path architecture has been deliberately designed to avoid Read/Write locks. Do not introduce global state mutexes in your handlers.
 3. **Implicit Cleanup:** Connections are tied to the worker thread's lifetime, and the HTTP request lifecycle is managed by `libevent`. Your handler simply returns, and all state (including the parsed input body) is automatically freed by the router.
 4. **100% SQL Injection Protection:** By exclusively using ODBC Prepared Statements (`SQLBindParameter`) to map JSON inputs to Stored Procedure variables, the API is natively immune to all SQL Injection attacks. Input values are never concatenated into the query string.
+
+---
+
+## Internals: Separation of Concerns, Thread Safety, and Error Logging
+
+The architecture of EvHttp guarantees zero data races, use-after-free protection, and centralizes side effects like logging. Here's how a request flows through the system securely:
+
+### 1. The Reactor Thread (Network I/O)
+The `libevent` reactor threads exclusively handle non-blocking TCP socket I/O. When a complete HTTP request is received:
+1. The reactor parses the headers and the body.
+2. **Memory Safety**: The reactor calls `evhttp_request_own(req)` to officially steal ownership of the request memory from `libevent`. This is critical. If the client abruptly disconnects or times out, `libevent` will NOT free the request out from under the background worker thread, completely preventing Use-After-Free vulnerabilities.
+3. The reactor packages the request into a task and enqueues it into the Global Inbound Queue for the worker pool, then immediately returns to epoll to serve more clients.
+
+### 2. The Worker Thread (The Orchestrator)
+The worker thread wakes up, dequeues the task, and executes `worker_thread_main()`. This function is the central orchestrator:
+1. **Middleware & Validation**: It executes authorization checks (JWT) and schema validation (our `ValidationContext`).
+2. **Handler Execution**: It invokes your concise, domain-specific handler (e.g., `customer_handler`).
+3. **Response Status Extraction**: Once the handler returns, it inspects the modified integer `task->status_code` (e.g., `200` or `500`). The worker thread handles translating this into the standard HTTP string via `get_http_status_text(code)`.
+4. **Centralized Error Logging**: Instead of handlers or low-level services (like `odbcutil` or `http_client`) spamming the global logger directly, they use `set_thread_error(...)`. The worker thread pulls this contextual error string via `get_thread_error_level()` and logs it cleanly as `LOG_ERROR` or `LOG_WARN`. This preserves strict separation of concerns and allows 100% unit testing of backend services.
+5. **Completion Signaling**: It signals the completion queue and wakes the reactor thread via `eventfd`.
+
+### 3. Thread-Local Error Engine
+To maintain strict thread safety across all layers without acquiring mutexes, the error engine relies on `_Thread_local` storage inside `thread_error.c`.
+When `odbcutil` loses a database connection, it calls `set_thread_error(TL_ERR_ERROR, "Database connection lost")`. Because the storage is `_Thread_local`, this completely avoids data races between concurrent workers. The `worker_thread_main` orchestration loop inspects and clears this error at the end of every task boundary.
