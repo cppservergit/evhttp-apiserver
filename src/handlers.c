@@ -684,3 +684,34 @@ void prodget_handler(
         *out_status = HTTP_INTERNAL;
     }
 }
+
+// --- Customers Handler & Schema ---
+
+static const FieldValidator CustomersSchema[] = {
+    {.field_name = "filter", .type = TYPE_STRING, .is_required = false, .custom_validator = nullptr}
+};
+
+const ValidationContext CustomersContext = {
+    .schema = CustomersSchema,
+    .schema_count = sizeof(CustomersSchema) / sizeof(CustomersSchema[0]),
+    .global_validator = nullptr
+};
+
+void customers_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    
+    const char* filter = json_get_string(body, "filter");
+    
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = filter }
+    };
+    
+    if (!odbcutil_get_json("{CALL sp_customers_like(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}

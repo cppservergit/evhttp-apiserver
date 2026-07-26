@@ -134,9 +134,9 @@ static bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, st
         while (true) {
             ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
             
-            if (ret == SQL_ERROR) {
+            if (!SQL_SUCCEEDED(ret) && ret != SQL_NO_DATA) {
                 char err_msg[256];
-                (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed for %s", func_name);
+                (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed (code %d) for %s", ret, func_name);
                 odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
                 return false;
             }
@@ -213,9 +213,10 @@ static bool odbcutil_execute_and_fetch(
         switch (params[i].type) {
             case PARAM_STRING: {
                 const char *str = (const char *)params[i].value;
-                params[i].ind = str ? SQL_NTS : SQL_NULL_DATA;
+                size_t len = str ? strlen(str) : 0;
+                params[i].ind = (str && len > 0) ? SQL_NTS : SQL_NULL_DATA;
                 bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                       str ? strlen(str) : 0, 0, (SQLPOINTER)str, 0, &params[i].ind);
+                                       len > 0 ? len : 1, 0, (SQLPOINTER)str, 0, &params[i].ind);
                 break;
             }
             case PARAM_INT: {
@@ -227,7 +228,7 @@ static bool odbcutil_execute_and_fetch(
             case PARAM_DOUBLE: {
                 params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
                 bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
+                                       15, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
                 break;
             }
             case PARAM_NULL: {
