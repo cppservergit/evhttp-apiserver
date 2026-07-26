@@ -73,3 +73,7 @@ void getqr_handler(struct json_object* body, void* arg, int* out_status, struct 
 /** \brief Handles /employee requests. */
 void employee_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 extern const ValidationContext EmployeeContext;
+
+/** \brief Handles /prodget requests. */
+void prodget_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+extern const ValidationContext ProdgetContext;

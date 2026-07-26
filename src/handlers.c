@@ -638,3 +638,49 @@ void employee_handler(
         *out_status = HTTP_INTERNAL;
     }
 }
+
+// --- Prodget Handler & Schema ---
+
+static bool prodget_id_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    [[maybe_unused]] const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    int id = (int)json_object_get_int((struct json_object *)obj);
+    if (id <= 0 || id >= 30) {
+        (void)snprintf(err_buf, err_len, "Invalid id: %d (must be > 0 and < 30)", id);
+        return false;
+    }
+    return true;
+}
+
+static const FieldValidator ProdgetSchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .custom_validator = prodget_id_validator}
+};
+
+const ValidationContext ProdgetContext = {
+    .schema = ProdgetSchema,
+    .schema_count = sizeof(ProdgetSchema) / sizeof(ProdgetSchema[0]),
+    .global_validator = nullptr
+};
+
+void prodget_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    if (!odbcutil_get_rs2json("{CALL product_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}

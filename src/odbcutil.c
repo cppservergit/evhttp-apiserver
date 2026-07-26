@@ -190,7 +190,16 @@ static bool odbcutil_fetch_json_native(SQLHSTMT hstmt, const char* func_name, st
 }
 
 
-bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
+typedef bool (*odbc_fetch_cb)(SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf);
+
+static bool odbcutil_execute_and_fetch(
+    const char* query, 
+    QueryParam* params, 
+    size_t param_count, 
+    struct evbuffer* out_buf, 
+    const char* func_name,
+    odbc_fetch_cb fetch_cb
+) {
     SQLHDBC hdbc = odbcutil_connect();
     if (hdbc == SQL_NULL_HDBC) return false;
     
@@ -243,7 +252,7 @@ bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count
     bool success = false;
     
     if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS))) {
-        success = odbcutil_fetch_json_native(hstmt, func_name, out_buf);
+        success = fetch_cb(hstmt, func_name, out_buf);
     } else {
         char err_msg[256];
         (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
@@ -254,8 +263,13 @@ bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count
     return success;
 }
 
+bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
+    return odbcutil_execute_and_fetch(query, params, param_count, out_buf, func_name, odbcutil_fetch_json_native);
+}
+
 typedef struct {
     SQLCHAR     name[128];
+    SQLSMALLINT name_len;
     SQLSMALLINT sql_type;
     char       *buffer;
     size_t      alloc_size;
@@ -293,12 +307,13 @@ static bool is_json_number_type(SQLSMALLINT sql_type) {
     }
 }
 
-static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str) {
+static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, size_t len) {
     evbuffer_add(buf, "\"", 1);
     const char *start = str;
+    const char *end = str + len;
     const char *p;
 
-    for (p = str; *p != '\0'; ++p) {
+    for (p = str; p < end; ++p) {
         if (*p == '"' || *p == '\\' || (unsigned char)*p < 0x20) {
             size_t clean_len = (size_t)(p - start);
             if (clean_len > 0) {
@@ -357,7 +372,7 @@ static bool odbc_bind_resultset_metadata(SQLHSTMT hstmt, [[maybe_unused]] const 
         SQLSMALLINT digits = 0, nullable = 0;
 
         ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
-                             nullptr, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
+                             &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
 
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
@@ -399,23 +414,34 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
         }
 
         evbuffer_add(buf, "\"", 1);
-        evbuffer_add(buf, col->name, strlen((char*)col->name));
+        evbuffer_add(buf, col->name, col->name_len);
         evbuffer_add(buf, "\":", 2);
 
         if (col->ind == SQL_NULL_DATA) {
             evbuffer_add(buf, "null", 4);
-        } else if (col->sql_type == SQL_BIT) {
-            bool val = (col->buffer[0] == '1' || strcasecmp(col->buffer, "true") == 0);
-            evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
-        } else if (is_json_number_type(col->sql_type)) {
-            // Prevent invalid JSON if driver returns an empty string for a numeric column
-            if (col->buffer[0] == '\0') {
-                evbuffer_add(buf, "null", 4);
-            } else {
-                evbuffer_add(buf, col->buffer, strlen(col->buffer));
-            }
         } else {
-            evbuffer_append_escaped_str(buf, col->buffer);
+            size_t val_len = 0;
+            if (col->ind == SQL_NO_TOTAL) {
+                val_len = strlen(col->buffer);
+            } else if ((size_t)col->ind >= col->alloc_size) {
+                val_len = col->alloc_size - 1;
+            } else {
+                val_len = (size_t)col->ind;
+            }
+
+            if (col->sql_type == SQL_BIT) {
+                bool val = (col->buffer[0] == '1' || strcasecmp(col->buffer, "true") == 0);
+                evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
+            } else if (is_json_number_type(col->sql_type)) {
+                // Prevent invalid JSON if driver returns an empty string for a numeric column
+                if (val_len == 0) {
+                    evbuffer_add(buf, "null", 4);
+                } else {
+                    evbuffer_add(buf, col->buffer, val_len);
+                }
+            } else {
+                evbuffer_append_escaped_str(buf, col->buffer, val_len);
+            }
         }
 
         if (i < meta->count - 1) {
@@ -463,65 +489,5 @@ bool odbcutil_fetch_rs2json(SQLHSTMT hstmt, const char* func_name, struct evbuff
 }
 
 bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
-    SQLHDBC hdbc = odbcutil_connect();
-    if (hdbc == SQL_NULL_HDBC) return false;
-    
-    SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, func_name);
-    if (!hstmt) return false;
-    
-    for (size_t i = 0; i < param_count; ++i) {
-        SQLRETURN bind_ret;
-        SQLUSMALLINT param_idx = (SQLUSMALLINT)(i + 1);
-
-        switch (params[i].type) {
-            case PARAM_STRING: {
-                const char *str = (const char *)params[i].value;
-                params[i].ind = str ? SQL_NTS : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                       str ? strlen(str) : 0, 0, (SQLPOINTER)str, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_INT: {
-                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
-                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_DOUBLE: {
-                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_NULL: {
-                params[i].ind = SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                       0, 0, nullptr, 0, &params[i].ind);
-                break;
-            }
-            default:
-                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
-                odbcutil_disconnect(hdbc, hstmt);
-                return false;
-        }
-
-        if (!SQL_SUCCEEDED(bind_ret)) {
-            odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
-            odbcutil_disconnect(hdbc, hstmt);
-            return false;
-        }
-    }
-    
-    bool success = false;
-    
-    if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS))) {
-        success = odbcutil_fetch_rs2json(hstmt, func_name, out_buf);
-    } else {
-        char err_msg[256];
-        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
-        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, err_msg);
-    }
-    
-    odbcutil_disconnect(hdbc, hstmt);
-    return success;
+    return odbcutil_execute_and_fetch(query, params, param_count, out_buf, func_name, odbcutil_fetch_rs2json);
 }
