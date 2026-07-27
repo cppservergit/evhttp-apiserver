@@ -199,7 +199,7 @@ static bool customer_id_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *id = json_object_get_string((json_object *)obj);
+    const char *id = json_object_get_string((struct json_object *)obj);
     if (!id || strlen(id) != 5) {
         (void)snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
         return false;
@@ -602,7 +602,7 @@ static bool employee_id_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    int id = json_object_get_int((json_object *)obj);
+    int id = json_object_get_int(obj);
     if (id <= 0 || id >= 10) {
         (void)snprintf(err_buf, err_len, "Employee ID must be greater than 0 and less than 10");
         return false;
@@ -648,7 +648,7 @@ static bool prodget_id_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    int id = (int)json_object_get_int((struct json_object *)obj);
+    int id = json_object_get_int(obj);
     if (id <= 0 || id >= 30) {
         (void)snprintf(err_buf, err_len, "Invalid id: %d (must be > 0 and < 30)", id);
         return false;

@@ -233,7 +233,7 @@ int server_init_globals(size_t num_reactors) {
         pthread_mutex_init(&g_reactor_queues[i].lock, nullptr);
         int efd = eventfd(0, EFD_NONBLOCK);
         if (efd < 0) {
-            LOG_FATAL("Failed to create eventfd for Worker %zu", i);
+            LOG_FATAL("Failed to create eventfd for Reactor %zu", i);
             server_cleanup_globals();
             return -1;
         }
@@ -758,24 +758,24 @@ void* reactor_thread_logic(void* arg) {
 
     evutil_socket_t fd = create_and_bind_socket((uint16_t)SERVER_PORT, SERVER_ADDR);
     if (fd < 0) {
-        LOG_FATAL("Failed to bind socket for Worker %zu", worker_id);
+        LOG_FATAL("Failed to bind socket for Reactor %zu", worker_id);
         return nullptr;
     }
 
     raii_evhttp http = configure_http_server(base, fd, g_routes, g_route_count);
     if (http == nullptr) {
-        LOG_FATAL("Failed to configure HTTP server for Worker %zu", worker_id);
+        LOG_FATAL("Failed to configure HTTP server for Reactor %zu", worker_id);
         close(fd);
         return nullptr;
     }
 
     unsigned long long tid = (unsigned long long)pthread_self();
     (void)snprintf(tl_tid_str, sizeof(tl_tid_str), "0x%llx", tid);
-    LOG_INFO("Worker %zu started", worker_id);
+    LOG_INFO("Reactor %zu started", worker_id);
     
     event_base_dispatch(base);
 
-    LOG_INFO("Worker %zu stopped", worker_id);
+    LOG_INFO("Reactor %zu stopped", worker_id);
     event_free(efd_ev);
     close(efd);
     return nullptr;

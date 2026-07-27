@@ -91,7 +91,7 @@ time_t jwt_get_expiration(const char* jwt) {
     if (jwt_obj) {
         struct json_object* exp_obj;
         if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
-            exp = (time_t)json_object_get_int64(exp_obj);
+            exp = json_object_get_int64(exp_obj);
         }
         json_object_put(jwt_obj);
     }
@@ -224,7 +224,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     if (jwt_obj) {
         struct json_object* exp_obj;
         if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
-            time_t exp = (time_t)json_object_get_int64(exp_obj);
+            time_t exp = json_object_get_int64(exp_obj);
             if (time(nullptr) > exp) {
                 ret = JWT_ERR_EXPIRED;
             } else {
