@@ -89,7 +89,7 @@ void customer_handler(
 
 ## Step 4: Register the Route
 
-Finally, wire the handler into the `libevent` routing table inside `server.c`. You map the URI to your handler and validation schema, and specify security context flags.
+Finally, wire the handler into the `libevent` routing table inside `server.c`. To do this, the variable `g_routes[]` must be modified to add the route in `server.c`. You map the URI to your handler and validation schema, and specify security context flags.
 
 ```c
 // Inside server.c (e.g., in a route configuration function)
