@@ -106,6 +106,7 @@ cd evhttp-apiserver
 
 ### 3. Configure the Environment
 The server requires an `apiserver.env` configuration file in the `bin/` directory.
+Consider using `openssl rand -hex 32` to generate the JWT secret and the API KEY for the built-in telemetry endpoints.
 
 ```bash
 mkdir -p bin
