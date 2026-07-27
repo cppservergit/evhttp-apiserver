@@ -99,6 +99,26 @@ for i in $(seq 1 $NUM_REQUESTS); do
             -H "Authorization: Bearer $TOKEN" \
             -d '{"id": 1}'
 
+        curl -s -o /dev/null -X POST "$API_URL/prodget" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"id": 26}'
+
+        curl -s -o /dev/null -X POST "$API_URL/customers" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"filter": "f"}'
+
+        curl -s -o /dev/null -X POST "$API_URL/customers" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"filter": "s"}'
+
+        curl -s -o /dev/null -X POST "$API_URL/customers" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"filter": "a"}'
+
         # Request to /shippers (JWT)
         curl -s -o /dev/null -X GET "$API_URL/shippers" -H "Authorization: Bearer $TOKEN"
 

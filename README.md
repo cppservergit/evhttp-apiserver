@@ -38,7 +38,8 @@ flowchart TD
 * **LXD Edge-Ready:** Ideal for bare-metal deployments inside LXD native Linux containers positioned behind an HAProxy TLS termination edge.
 * **Ultra-Lightweight Footprint:** The compiled binary weighs approximately ~70KB and consumes less than 1% of RAM under extreme stress loads (tested on an 8GB VM).
 * **Extensive Code Examples:** Out-of-the-box templates and reference implementations for building API endpoints that execute ODBC queries and orchestrate external downstream REST services.
-* **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error, and highly optimized `SQLGetData` stream-reading to seamlessly process infinitely large JSON database payloads with virtually zero memory overhead.
+* **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error, and highly optimized `SQLGetData` stream-reading to seamlessly process JSON database payloads with virtually zero memory overhead.
+* **Built-in JWT support:** Stateless security model that generates and validates JWT tokens.
 
 ## Clean C Design
 
@@ -99,7 +100,7 @@ sudo apt-get install -y build-essential gcc make \
 
 ### 2. Clone the Repository
 ```bash
-git clone git@github.com:cppservergit/evhttp-apiserver.git
+git clone https://github.com/cppservergit/evhttp-apiserver.git
 cd evhttp-apiserver
 ```
 
