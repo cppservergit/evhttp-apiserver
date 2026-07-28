@@ -111,8 +111,8 @@ Consider using `openssl rand -hex 32` to generate the JWT secret and the API KEY
 ```bash
 mkdir -p bin
 cat <<EOF > bin/apiserver.env
-# database access
-ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+# database access - you can define up to DB_3
+DB_0=Driver=FreeTDS;SERVER=DatabaseServerAddr;PORT=1433;DATABASE=demodb;UID=YourUsername;PWD=YourPassword;APP=apiserver;Encryption=off;ClientCharset=UTF-8
 
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
