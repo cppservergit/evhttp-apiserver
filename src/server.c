@@ -171,7 +171,7 @@ static void odbc_cleanup(void) {
     }
 }
 
-int server_init_globals(size_t num_reactors) {
+static int init_server_metadata(size_t num_reactors) {
     g_num_reactors = num_reactors;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
         (void)snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
@@ -201,40 +201,45 @@ int server_init_globals(size_t num_reactors) {
     g_page_size = sysconf(_SC_PAGE_SIZE);
     long pages = sysconf(_SC_PHYS_PAGES);
     g_total_ram_kb = (uint64_t)((pages * g_page_size) / 1024);
-    
-    size_t configured_threads = config_get_num_threads();
-    size_t bg_workers_count = (configured_threads > 0) ? configured_threads : (num_reactors * 2);
-    size_t q_size = config_get_max_queue_size();
-    
-    // Scale task pool to safely accommodate:
-    // 2x MAX_QUEUE_SIZE (fast + slow queues) + background workers + generous buffer for reactor completion queues
-    size_t safe_q_size = (q_size == 0) ? 100000 : q_size;
-    size_t slab_size = (safe_q_size * 2) + bg_workers_count + 10000;
-    if (task_pool_init(slab_size) != 0) {
-        server_cleanup_globals();
-        return -1;
-    }
+    return 0;
+}
+
+static int init_reactor_queues(size_t bg_workers_count) {
     g_reactor_stats = calloc(g_num_reactors, sizeof(struct reactor_stats));
     g_reactor_bases = calloc(g_num_reactors, sizeof(_Atomic(struct event_base*)));
     g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
     
-    if (g_reactor_stats == nullptr || g_reactor_bases == nullptr || g_reactor_queues == nullptr) {
-        server_cleanup_globals();
-        return -1;
-    }
+    if (!g_reactor_stats || !g_reactor_bases || !g_reactor_queues) return -1;
     
     for (size_t i = 0; i < g_num_reactors; ++i) {
         pthread_mutex_init(&g_reactor_queues[i].lock, nullptr);
         int efd = eventfd(0, EFD_NONBLOCK);
         if (efd < 0) {
             LOG_FATAL("Failed to create eventfd for Reactor %zu", i);
-            server_cleanup_globals();
             return -1;
         }
         g_reactor_queues[i].eventfd = efd;
     }
 
-    if (worker_pool_init(bg_workers_count) != 0) {
+    if (worker_pool_init(bg_workers_count) != 0) return -1;
+    return 0;
+}
+
+int server_init_globals(size_t num_reactors) {
+    if (init_server_metadata(num_reactors) != 0) return -1;
+    
+    size_t configured_threads = config_get_num_threads();
+    size_t bg_workers_count = (configured_threads > 0) ? configured_threads : (num_reactors * 2);
+    size_t q_size = config_get_max_queue_size();
+    
+    size_t safe_q_size = (q_size == 0) ? 100000 : q_size;
+    size_t slab_size = (safe_q_size * 2) + bg_workers_count + 10000;
+    if (task_pool_init(slab_size) != 0) {
+        server_cleanup_globals();
+        return -1;
+    }
+    
+    if (init_reactor_queues(bg_workers_count) != 0) {
         server_cleanup_globals();
         return -1;
     }
@@ -426,34 +431,7 @@ static void cleanup_cancelled_task(http_task_t* task) {
     task_pool_free(task);
 }
 
-static void process_completed_task(http_task_t* task) {
-    evhttp_request_set_on_complete_cb(task->req, nullptr, nullptr);
-    
-    struct timespec end_time;
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
-    long long elapsed_ms = measure_elapsed_ms(&task->start_time, &end_time);
-    const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
-    bool is_fast = ctx ? ctx->is_fast : false;
-    server_record_request_stats(elapsed_ms, is_fast);
-    
-    const char* client_ip = task->client_ip;
-    const char* req_id = task->request_id;
-    
-    logger_set_request_id(req_id);
-    
-    if (config_get_access_log()) {
-        LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", client_ip, task->uri, elapsed_ms);
-    }
-    
-    struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
-    
-    if (task->worker_buf && evbuffer_get_length(task->worker_buf) > 0) {
-        evbuffer_add_buffer(out_buf, task->worker_buf);
-    }
-    
-    bool has_body = (evbuffer_get_length(out_buf) > 0);
-    struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-
+static void send_http_reply(http_task_t* task, struct evbuffer* out_buf, struct evkeyvalq* headers, bool has_body) {
     if (has_body) {
         if (task->out_content_type[0] != '\0') {
             evhttp_add_header(headers, "Content-Type", task->out_content_type);
@@ -462,9 +440,7 @@ static void process_completed_task(http_task_t* task) {
         }
         evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
     } else if (task->status_code >= 400) {
-        if (!evhttp_find_header(headers, "Content-Type")) {
-            evhttp_add_header(headers, "Content-Type", "application/json");
-        }
+        if (!evhttp_find_header(headers, "Content-Type")) evhttp_add_header(headers, "Content-Type", "application/json");
         char err_str[256];
         if (task->status_code != HTTP_INTERNAL) {
             int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
@@ -478,6 +454,29 @@ static void process_completed_task(http_task_t* task) {
     } else {
         evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
     }
+}
+
+static void process_completed_task(http_task_t* task) {
+    evhttp_request_set_on_complete_cb(task->req, nullptr, nullptr);
+    
+    struct timespec end_time;
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    long long elapsed_ms = measure_elapsed_ms(&task->start_time, &end_time);
+    const middleware_ctx_t* ctx = (const middleware_ctx_t*)task->middleware_ctx;
+    server_record_request_stats(elapsed_ms, ctx ? ctx->is_fast : false);
+    
+    logger_set_request_id(task->request_id);
+    if (config_get_access_log()) LOG_INFO("clientIP=%s uri=%s elapsed_ms=%lld", task->client_ip, task->uri, elapsed_ms);
+    
+    struct evbuffer* out_buf = evhttp_request_get_output_buffer(task->req);
+    if (task->worker_buf && evbuffer_get_length(task->worker_buf) > 0) {
+        evbuffer_add_buffer(out_buf, task->worker_buf);
+    }
+    
+    bool has_body = (evbuffer_get_length(out_buf) > 0);
+    struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+
+    send_http_reply(task, out_buf, headers, has_body);
     
     if (task->parsed_body) json_object_put(task->parsed_body);
     logger_clear_request_id();

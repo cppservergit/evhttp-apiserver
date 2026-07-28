@@ -118,59 +118,45 @@ void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
     }
 }
 
-static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
-    SQLRETURN ret;
+static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf, bool* has_data_written) {
     char chunk[ODBC_FETCH_CHUNK_SIZE];
     SQLLEN indicator;
-    
-    bool has_rows = false;
-    bool has_data_written = false;
-    bool fetch_success = true;
+    SQLRETURN ret;
+    while (true) {
+        ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
+        if (!SQL_SUCCEEDED(ret) && ret != SQL_NO_DATA) {
+            char err_msg[256];
+            (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed (code %d) for %s", ret, func_name);
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+            return false;
+        }
+        if (indicator == SQL_NULL_DATA) {
+            if (!*has_data_written) { evbuffer_add(out_buf, "null", 4); *has_data_written = true; }
+            break;
+        }
+        if (ret == SQL_NO_DATA) break;
+        
+        size_t max_payload = sizeof(chunk) - 1;
+        size_t bytes_to_write = (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) ? max_payload : 
+                                (indicator >= 0 ? (size_t)indicator : strlen(chunk));
+        
+        if (bytes_to_write > 0) {
+            evbuffer_add(out_buf, chunk, bytes_to_write);
+            *has_data_written = true;
+        }
+        if (ret == SQL_SUCCESS) break;
+    }
+    return true;
+}
+
+static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+    SQLRETURN ret;
+    bool has_rows = false, fetch_success = true, has_data_written = false;
 
     while (SQL_SUCCEEDED(ret = SQLFetch(hstmt))) {
         has_rows = true;
-                
-        while (true) {
-            ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
-            
-            if (!SQL_SUCCEEDED(ret) && ret != SQL_NO_DATA) {
-                char err_msg[256];
-                (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed (code %d) for %s", ret, func_name);
-                odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
-                return false;
-            }
-            
-            if (indicator == SQL_NULL_DATA) {
-                if (!has_data_written) {
-                    evbuffer_add(out_buf, "null", 4);
-                    has_data_written = true;
-                }
-                break;
-            }
-
-            if (ret == SQL_NO_DATA) {
-                break;
-            }
-            
-            size_t bytes_to_write = 0;
-            size_t max_payload = sizeof(chunk) - 1;
-
-            if (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) {
-                bytes_to_write = max_payload;
-            } else if (indicator >= 0) {
-                bytes_to_write = (size_t)indicator;
-            } else {
-                bytes_to_write = strlen(chunk);
-            }
-            
-            if (bytes_to_write > 0) {
-                evbuffer_add(out_buf, chunk, bytes_to_write);
-                has_data_written = true;
-            }
-            
-            if (ret == SQL_SUCCESS) {
-                break;
-            }
+        if (!fetch_json_native_col_loop(db_id, hstmt, func_name, out_buf, &has_data_written)) {
+            return false;
         }
     }
     
@@ -181,10 +167,7 @@ static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, con
         fetch_success = false;
     }
     
-    if (!has_rows) {
-        evbuffer_add(out_buf, "[]", 2);
-    }
-    
+    if (!has_rows) evbuffer_add(out_buf, "[]", 2);
     return fetch_success;
 }
 
@@ -347,64 +330,52 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
     evbuffer_add(buf, "\"", 1);
 }
 
-static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, [[maybe_unused]] const char* func_name, ResultSetMetadata *meta) {
-    SQLSMALLINT num_cols = 0;
-    SQLRETURN ret = SQLNumResultCols(hstmt, &num_cols);
-    
-    if (!SQL_SUCCEEDED(ret)) {
-        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to retrieve result set column count.");
-        return false;
-    }
-
-    if (num_cols == 0) {
-        meta->count = 0;
-        meta->cols = nullptr;
-        meta->arena = nullptr;
-        meta->hstmt = SQL_NULL_HSTMT;
-        return true;
-    }
-
+static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols) {
     meta->hstmt = hstmt;
     meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
     if (!meta->cols) return false;
     meta->count = num_cols;
 
     size_t total_arena_size = 0;
-
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         SQLULEN col_size = 0;
-        SQLSMALLINT digits = 0;
-        SQLSMALLINT nullable = 0;
-
-        ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
-                             &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
-
+        SQLSMALLINT digits = 0, nullable = 0;
+        SQLRETURN ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
+                                       &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
             return false;
         }
-
         meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
         total_arena_size += meta->cols[i].alloc_size;
     }
-
     meta->arena = malloc(total_arena_size);
-    if (!meta->arena) return false;
+    return meta->arena != nullptr;
+}
+
+static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, [[maybe_unused]] const char* func_name, ResultSetMetadata *meta) {
+    SQLSMALLINT num_cols = 0;
+    SQLRETURN ret = SQLNumResultCols(hstmt, &num_cols);
+    if (!SQL_SUCCEEDED(ret)) {
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to retrieve result set column count.");
+        return false;
+    }
+    if (num_cols == 0) {
+        meta->count = 0; meta->cols = nullptr; meta->arena = nullptr; meta->hstmt = SQL_NULL_HSTMT;
+        return true;
+    }
+    if (!alloc_metadata_cols(db_id, hstmt, meta, num_cols)) return false;
 
     size_t current_offset = 0;
-
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         meta->cols[i].buffer = meta->arena + current_offset;
         current_offset += meta->cols[i].alloc_size;
-
         ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_CHAR, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
-
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind column.");
             return false;
         }
     }
-
     return true;
 }
 
