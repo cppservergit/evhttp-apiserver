@@ -33,7 +33,7 @@ size_t config_get_fast_pool_percentage(void);
  * \param out Buffer to copy the string into.
  * \param max_len Size of the buffer.
  */
-void config_get_odbc_conn_str(char* out, size_t max_len);
+void config_get_odbc_conn_str(int db_id, char* out, size_t max_len);
 
 /** 
  * \brief Safely retrieves the remote API URL.

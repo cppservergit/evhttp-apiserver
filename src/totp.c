@@ -8,10 +8,10 @@
 #include <sodium.h>
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
-    SQLHDBC hdbc = odbcutil_connect();
+    SQLHDBC hdbc = odbcutil_connect(DB_0);
     if (hdbc == SQL_NULL_HDBC) return HTTP_INTERNAL;
     
-    SQLHSTMT hstmt = odbcutil_alloc_stmt(hdbc, __func__);
+    SQLHSTMT hstmt = odbcutil_alloc_stmt(DB_0, hdbc, __func__);
     if (!hstmt) {
         odbcutil_disconnect(hdbc, nullptr);
         return HTTP_INTERNAL;
@@ -34,11 +34,11 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
                     status = HTTP_OK;
                 }
             } else if (get_ret == SQL_SUCCESS_WITH_INFO) {
-                odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
+                odbcutil_set_error(DB_0, SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
             }
         }
     } else {
-        odbcutil_set_error(SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
+        odbcutil_set_error(DB_0, SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
         status = HTTP_INTERNAL;
     }
     

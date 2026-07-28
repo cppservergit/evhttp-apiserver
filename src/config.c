@@ -11,7 +11,7 @@
 #include <stdatomic.h>
 #include <ctype.h>
 
-static char g_odbc_conn_str[MAX_CONFIG_STR] = {0};
+static char g_odbc_conn_strs[4][MAX_CONFIG_STR] = {0};
 static char g_api_url[MAX_CONFIG_STR] = {0};
 static char g_api_user[MAX_CONFIG_STR] = {0};
 static char g_api_pass[MAX_CONFIG_STR] = {0};
@@ -87,7 +87,14 @@ static bool is_first_load = true;
 static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
 
     if (is_first_load) {
-        if (getenv("ODBC_CONN_STR")) (void)snprintf(g_odbc_conn_str, sizeof(g_odbc_conn_str), "%s", getenv("ODBC_CONN_STR"));
+        for (int i = 0; i < 4; i++) {
+            char env_key[8];
+            (void)snprintf(env_key, sizeof(env_key), "DB_%d", i);
+            const char* val = getenv(env_key);
+            if (val) {
+                (void)snprintf(g_odbc_conn_strs[i], sizeof(g_odbc_conn_strs[i]), "%s", val);
+            }
+        }
         if (getenv("API_URL")) (void)snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
         if (getenv("API_USER")) (void)snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
         if (getenv("API_PASS")) (void)snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
@@ -132,13 +139,13 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
 void config_reload(void) {
     locate_and_load_env();
 
-    const char* env_odbc = getenv("ODBC_CONN_STR");
+    const char* env_odbc = getenv("DB_0");
     const char* env_url = getenv("API_URL");
     const char* env_user = getenv("API_USER");
     const char* env_pass = getenv("API_PASS");
 
     if (!env_odbc || !env_url || !env_user || !env_pass) {
-        if (!env_odbc) LOG_ERROR("Missing required config: ODBC_CONN_STR");
+        if (!env_odbc) LOG_ERROR("Missing required config: DB_0");
         if (!env_url)  LOG_ERROR("Missing required config: API_URL");
         if (!env_user) LOG_ERROR("Missing required config: API_USER");
         if (!env_pass) LOG_ERROR("Missing required config: API_PASS");
@@ -164,9 +171,9 @@ void config_init(void) {
     config_reload();
 }
 
-void config_get_odbc_conn_str(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_odbc_conn_str);
+void config_get_odbc_conn_str(int db_id, char* out, size_t max_len) {
+    if (!out || max_len == 0 || db_id < 0 || db_id >= 4) return;
+    (void)snprintf(out, max_len, "%s", g_odbc_conn_strs[db_id]);
 }
 
 void config_get_api_url(char* out, size_t max_len) {

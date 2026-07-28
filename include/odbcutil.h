@@ -31,24 +31,35 @@ typedef struct {
     SQLLEN      ind; // Preserves stack liveness during SQLExecute
 } QueryParam;
 
-/** \brief Retrieves a new database connection from the driver pool. \return The ODBC connection handle. */
-SQLHDBC odbcutil_connect(void);
+typedef enum {
+    DB_0 = 0,
+    DB_1,
+    DB_2,
+    DB_3,
+    MAX_DB_CONNECTIONS
+} DbConnectionId;
+
+/** \brief Retrieves a new database connection from the driver pool. 
+ * \param db_id The database connection ID.
+ * \return The ODBC connection handle.
+ */
+SQLHDBC odbcutil_connect(DbConnectionId db_id);
 
 #include <stdbool.h>
 
 /** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
-bool odbcutil_get_json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Extracts JSON data using native JSON streaming. \param hstmt The executed statement. */
 
 /** \brief Executes query and converts traditional resultset to JSON array of objects. */
-bool odbcutil_get_rs2json(const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Extracts and logs ODBC diagnostic records. */
-void odbcutil_set_error(SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
+void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
-SQLHSTMT odbcutil_alloc_stmt(SQLHDBC hdbc, const char* func_name);
+SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);
 
 /** \brief Frees the statement and returns the connection to the thread-local pool. The connection remains open by design. */
 void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt);
