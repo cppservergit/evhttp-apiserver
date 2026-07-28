@@ -137,6 +137,20 @@ static const TypeValidatorFunc TYPE_VALIDATOR_MAP[TYPE_MAX_TYPES] = {
 
 // --- Engine Core Validation ---
 
+static bool check_field_empty(json_object *field_obj) {
+    if (json_object_is_type(field_obj, json_type_string)) {
+        const char* str = json_object_get_string(field_obj);
+        return (!str || str[0] == '\0');
+    }
+    if (json_object_is_type(field_obj, json_type_array)) {
+        return (json_object_array_length(field_obj) == 0);
+    }
+    if (json_object_is_type(field_obj, json_type_object)) {
+        return (json_object_object_length(field_obj) == 0);
+    }
+    return false;
+}
+
 bool validate_json(const ValidationContext *ctx, const json_object *root, char *err_buf, size_t err_len) {
     if (!ctx || !root || !err_buf || err_len == 0) return false;
     
@@ -152,26 +166,12 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
         bool exists = json_object_object_get_ex(root, field->field_name, &field_obj);
 
         if (!exists || !field_obj) {
-            if (field->is_required) {
-                return emit_error(err_buf, err_len, ERR_REQUIRED, field->field_name);
-            }
+            if (field->is_required) return emit_error(err_buf, err_len, ERR_REQUIRED, field->field_name);
             continue;
         }
 
-        if (field->is_required) {
-            bool is_empty = false;
-            if (json_object_is_type(field_obj, json_type_string)) {
-                const char* str = json_object_get_string(field_obj);
-                if (!str || str[0] == '\0') is_empty = true;
-            } else if (json_object_is_type(field_obj, json_type_array)) {
-                if (json_object_array_length(field_obj) == 0) is_empty = true;
-            } else if (json_object_is_type(field_obj, json_type_object)) {
-                if (json_object_object_length(field_obj) == 0) is_empty = true;
-            }
-            
-            if (is_empty) {
-                return emit_error(err_buf, err_len, ERR_REQUIRED, field->field_name);
-            }
+        if (field->is_required && check_field_empty(field_obj)) {
+            return emit_error(err_buf, err_len, ERR_REQUIRED, field->field_name);
         }
 
         if (field->type >= TYPE_MAX_TYPES || !TYPE_VALIDATOR_MAP[field->type]) {
@@ -187,9 +187,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
         }
     }
 
-    if (ctx->global_validator && !ctx->global_validator(ctx, root, nullptr, err_buf, err_len)) {
-        return false;
-    }
+    if (ctx->global_validator && !ctx->global_validator(ctx, root, nullptr, err_buf, err_len)) return false;
 
     return true;
 }

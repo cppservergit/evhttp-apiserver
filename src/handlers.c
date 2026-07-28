@@ -39,7 +39,11 @@ void version_handler(struct json_object* body, void* arg, int* out_status,  stru
     
     *out_status = HTTP_OK;
     
-    char esc_version[64], esc_compiler[256], esc_date[128], esc_hostname[256], esc_os[256];
+    char esc_version[64];
+    char esc_compiler[256];
+    char esc_date[128];
+    char esc_hostname[256];
+    char esc_os[256];
     json_encode_string(get_server_version(), esc_version, sizeof(esc_version));
     json_encode_string(__VERSION__, esc_compiler, sizeof(esc_compiler));
     json_encode_string(__DATE__ " " __TIME__, esc_date, sizeof(esc_date));
@@ -71,7 +75,8 @@ void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  stru
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
     double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
     
-    char esc_start[128], esc_hostname[256];
+    char esc_start[128];
+    char esc_hostname[256];
     json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
     json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
 

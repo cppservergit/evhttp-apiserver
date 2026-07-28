@@ -101,51 +101,9 @@ void logger_clear_request_id(void) {
 
 
 
-void logger_log(LogLevel level, const char* format, ...) {
-    if (tl_logger_tid[0] == '\0') {
-        (void)snprintf(tl_logger_tid, sizeof(tl_logger_tid), "0x%lx", pthread_self());
-    }
-
-    log_entry_t* entry = NULL;
-    if (g_logger_running) {
-        pthread_mutex_lock(&g_free_mutex);
-        if (g_free_top > 0) {
-            entry = g_free_stack[--g_free_top];
-        }
-        pthread_mutex_unlock(&g_free_mutex);
-    }
-
-    char msg_buf[2048];
-    va_list args;
-    va_start(args, format);
-    int written = vsnprintf(msg_buf, sizeof(msg_buf), format, args);
-    va_end(args);
-    
-    if (written < 0 || written >= (int)sizeof(msg_buf)) {
-        // Handle truncation explicitly
-        const char trunc_msg[] = "... [TRUNCATED]";
-        size_t trunc_len = sizeof(trunc_msg) - 1;
-        if (sizeof(msg_buf) > trunc_len) {
-            memcpy(msg_buf + sizeof(msg_buf) - trunc_len - 1, trunc_msg, trunc_len + 1);
-        }
-    }
-
-    // Worst-case JSON escape expansion is 6x (\uXXXX for every char). 
-    // msg_buf is 2048 bytes, so we need 2048 * 6 = 12288 bytes.
-    static _Thread_local char escaped_msg[12288];
-    json_encode_string(msg_buf, escaped_msg, sizeof(escaped_msg));
-
-    char* target_buf;
-    int target_size;
-    static _Thread_local char sync_buf[12800];
-    
-    if (entry) {
-        target_buf = entry->data;
-        target_size = sizeof(entry->data);
-    } else {
-        target_buf = sync_buf;
-        target_size = sizeof(sync_buf);
-    }
+static void logger_format_message(log_entry_t* entry, char* sync_buf, LogLevel level, const char* escaped_msg, int* out_to_write) {
+    char* target_buf = entry ? entry->data : sync_buf;
+    int target_size = entry ? (int)sizeof(entry->data) : 12800; // sizeof(sync_buf) is 12800
 
     int len;
     if (tl_request_id[0] != '\0') {
@@ -159,33 +117,73 @@ void logger_log(LogLevel level, const char* format, ...) {
     }
     
     if (len > 0) {
-        int to_write = len < target_size ? len : target_size - 1;
-        
-        if (entry) {
-            entry->len = to_write;
-            pthread_mutex_lock(&g_log_mutex);
-            int next_head = (g_log_head + 1) % RING_SIZE;
-            if (next_head != g_log_tail) {
-                g_log_queue[g_log_head] = entry;
-                g_log_head = next_head;
-                pthread_cond_signal(&g_log_cond);
-                entry = NULL; // Successfully queued, do not free it
-            }
-            pthread_mutex_unlock(&g_log_mutex);
+        *out_to_write = len < target_size ? len : target_size - 1;
+    } else {
+        *out_to_write = 0;
+    }
+}
+
+static bool logger_enqueue_entry(log_entry_t* entry, int to_write) {
+    entry->len = to_write;
+    pthread_mutex_lock(&g_log_mutex);
+    int next_head = (g_log_head + 1) % RING_SIZE;
+    if (next_head != g_log_tail) {
+        g_log_queue[g_log_head] = entry;
+        g_log_head = next_head;
+        pthread_cond_signal(&g_log_cond);
+        pthread_mutex_unlock(&g_log_mutex);
+        return true;
+    }
+    pthread_mutex_unlock(&g_log_mutex);
+    return false;
+}
+
+void logger_log(LogLevel level, const char* format, ...) {
+    if (tl_logger_tid[0] == '\0') {
+        (void)snprintf(tl_logger_tid, sizeof(tl_logger_tid), "0x%lx", pthread_self());
+    }
+
+    log_entry_t* entry = NULL;
+    if (g_logger_running) {
+        pthread_mutex_lock(&g_free_mutex);
+        if (g_free_top > 0) entry = g_free_stack[--g_free_top];
+        pthread_mutex_unlock(&g_free_mutex);
+    }
+
+    char msg_buf[2048];
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(msg_buf, sizeof(msg_buf), format, args);
+    va_end(args);
+    
+    if (written < 0 || written >= (int)sizeof(msg_buf)) {
+        const char trunc_msg[] = "... [TRUNCATED]";
+        size_t trunc_len = sizeof(trunc_msg) - 1;
+        if (sizeof(msg_buf) > trunc_len) {
+            memcpy(msg_buf + sizeof(msg_buf) - trunc_len - 1, trunc_msg, trunc_len + 1);
+        }
+    }
+
+    static _Thread_local char escaped_msg[12288];
+    json_encode_string(msg_buf, escaped_msg, sizeof(escaped_msg));
+
+    static _Thread_local char sync_buf[12800];
+    int to_write = 0;
+    logger_format_message(entry, sync_buf, level, escaped_msg, &to_write);
+    
+    if (to_write > 0) {
+        if (entry && logger_enqueue_entry(entry, to_write)) {
+            entry = NULL;
         } else {
-            // Fallback to synchronous write if no free buffer or logger not running
-            if (write(STDERR_FILENO, target_buf, (size_t)to_write)) {}
+            if (write(STDERR_FILENO, entry ? entry->data : sync_buf, (size_t)to_write)) {}
         }
     }
     
     if (entry) {
-        // We grabbed a buffer but failed to queue it (or formatting failed), return it
         pthread_mutex_lock(&g_free_mutex);
         g_free_stack[g_free_top++] = entry;
         pthread_mutex_unlock(&g_free_mutex);
     }
     
-    if (level == LOG_LEVEL_FATAL) {
-        exit(EXIT_FAILURE);
-    }
+    if (level == LOG_LEVEL_FATAL) exit(EXIT_FAILURE);
 }

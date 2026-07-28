@@ -26,7 +26,9 @@ static struct jwt_cache* get_jwt_cache(void) {
 }
 
 static struct json_object* execute_login_request(void) {
-    char api_user[MAX_CONFIG_STR], api_pass[MAX_CONFIG_STR], api_url[MAX_CONFIG_STR];
+    char api_user[MAX_CONFIG_STR];
+    char api_pass[MAX_CONFIG_STR];
+    char api_url[MAX_CONFIG_STR];
     config_get_api_user(api_user, sizeof(api_user));
     config_get_api_pass(api_pass, sizeof(api_pass));
     config_get_api_url(api_url, sizeof(api_url));
@@ -66,6 +68,14 @@ static void update_jwt_cache(struct jwt_cache* cache, struct json_object* login_
     }
 }
 
+static void copy_token_safely(char* out_token, size_t max_len, const char* src_token) {
+    if (max_len == 0) return;
+    size_t cpy_len = strlen(src_token);
+    if (cpy_len >= max_len) cpy_len = max_len - 1;
+    memcpy(out_token, src_token, cpy_len);
+    out_token[cpy_len] = '\0';
+}
+
 static bool login_and_get_token(char* out_token, size_t max_len) {
     struct jwt_cache* cache = get_jwt_cache();
     
@@ -74,12 +84,7 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     while (1) {
         time_t now = time(nullptr);
         if (cache->token[0] != '\0' && now < cache->expires_at) {
-            size_t cpy_len = strlen(cache->token);
-            if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
-            if (max_len > 0) {
-                memcpy(out_token, cache->token, cpy_len);
-                out_token[cpy_len] = '\0';
-            }
+            copy_token_safely(out_token, max_len, cache->token);
             pthread_mutex_unlock(&jwt_cache_lock);
             return true;
         }
@@ -112,12 +117,7 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     bool success = false;
     if (cache->token[0] != '\0') {
-        size_t cpy_len = strlen(cache->token);
-        if (cpy_len >= max_len) cpy_len = max_len > 0 ? max_len - 1 : 0;
-        if (max_len > 0) {
-            memcpy(out_token, cache->token, cpy_len);
-            out_token[cpy_len] = '\0';
-        }
+        copy_token_safely(out_token, max_len, cache->token);
         success = true;
     }
     pthread_mutex_unlock(&jwt_cache_lock);

@@ -94,38 +94,32 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
     struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
     const char* x_forwarded_for = evhttp_find_header(headers, "X-Forwarded-For");
 
-    if (x_forwarded_for) {
-        if (is_trusted_proxy(req, nullptr)) {
-            const char* last_comma = strrchr(x_forwarded_for, ',');
-            if (last_comma) {
-                static _Thread_local char parsed_ip[INET6_ADDRSTRLEN];
-                
-                // The IP starts after the comma
-                const char* start = last_comma + 1;
-                
-                // Skip leading spaces after the comma
-                while (*start == ' ') {
-                    start++;
-                }
-                
-                size_t len = strlen(start);
-                if (len >= sizeof(parsed_ip)) len = sizeof(parsed_ip) - 1;
-                
-                memcpy(parsed_ip, start, len);
-                parsed_ip[len] = '\0';
-                return parsed_ip;
-            }
-            return x_forwarded_for;
-        } else {
-            // Log untrusted proxy attempt handled later in middleware wrapper
+    if (!x_forwarded_for || !is_trusted_proxy(req, nullptr)) {
+        struct evhttp_connection* evcon = evhttp_request_get_connection(req);
+        if (evcon) {
+            return server_get_client_ip_fast(evcon);
         }
+        return "unknown";
     }
 
-    struct evhttp_connection* evcon = evhttp_request_get_connection(req);
-    if (evcon) {
-        return server_get_client_ip_fast(evcon);
+    const char* last_comma = strrchr(x_forwarded_for, ',');
+    if (!last_comma) {
+        return x_forwarded_for;
     }
-    return "unknown";
+
+    static _Thread_local char parsed_ip[INET6_ADDRSTRLEN];
+    const char* start = last_comma + 1;
+    
+    while (*start == ' ') {
+        start++;
+    }
+    
+    size_t len = strlen(start);
+    if (len >= sizeof(parsed_ip)) len = sizeof(parsed_ip) - 1;
+    
+    memcpy(parsed_ip, start, len);
+    parsed_ip[len] = '\0';
+    return parsed_ip;
 }
 
 static _Atomic(struct event_base*) *g_reactor_bases = nullptr;
@@ -260,16 +254,18 @@ void server_cleanup_globals(void) {
         free(g_reactor_bases);
         g_reactor_bases = nullptr;
     }
-    if (g_reactor_queues) {
-        for (size_t i = 0; i < g_num_reactors; ++i) {
-            if (g_reactor_queues[i].eventfd > 0) {
-                close(g_reactor_queues[i].eventfd);
-            }
-            pthread_mutex_destroy(&g_reactor_queues[i].lock);
-        }
-        free(g_reactor_queues);
-        g_reactor_queues = nullptr;
+    if (!g_reactor_queues) {
+        odbc_cleanup();
+        return;
     }
+    for (size_t i = 0; i < g_num_reactors; ++i) {
+        if (g_reactor_queues[i].eventfd > 0) {
+            close(g_reactor_queues[i].eventfd);
+        }
+        pthread_mutex_destroy(&g_reactor_queues[i].lock);
+    }
+    free(g_reactor_queues);
+    g_reactor_queues = nullptr;
     odbc_cleanup();
 }
 
@@ -328,32 +324,37 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
         *total_ram_kb = g_total_ram_kb;
     }
     
-    if (mem_usage_kb) {
-        uint64_t mem_usage = 0;
-        int fd = open("/proc/self/statm", O_RDONLY);
-        if (fd >= 0) {
-            char buf[128];
-            ssize_t bytes = read(fd, buf, sizeof(buf) - 1);
-            if (bytes > 0) {
-                buf[bytes] = '\0';
-                char* p = buf;
-                // Skip first field (size)
-                while (*p && *p != ' ') p++;
-                if (*p == ' ') {
-                    p++;
-                    // Read second field (resident)
-                    long resident = 0;
-                    while (*p >= '0' && *p <= '9') {
-                        resident = resident * 10 + (*p - '0');
-                        p++;
-                    }
-                    mem_usage = (uint64_t)((resident * g_page_size) / 1024);
-                }
-            }
-            close(fd);
-        }
-        *mem_usage_kb = mem_usage;
+    if (!mem_usage_kb) return;
+    
+    uint64_t mem_usage = 0;
+    *mem_usage_kb = mem_usage;
+    
+    int fd = open("/proc/self/statm", O_RDONLY);
+    if (fd < 0) return;
+    
+    char buf[128];
+    ssize_t bytes = read(fd, buf, sizeof(buf) - 1);
+    if (bytes <= 0) {
+        close(fd);
+        return;
     }
+    
+    buf[bytes] = '\0';
+    char* p = buf;
+    while (*p && *p != ' ') p++;
+    if (*p != ' ') {
+        close(fd);
+        return;
+    }
+    
+    p++;
+    long resident = 0;
+    while (*p >= '0' && *p <= '9') {
+        resident = resident * 10 + (*p - '0');
+        p++;
+    }
+    *mem_usage_kb = (uint64_t)((resident * g_page_size) / 1024);
+    close(fd);
 }
 
 // middleware_ctx_t now in server.h
@@ -450,34 +451,32 @@ static void process_completed_task(http_task_t* task) {
         evbuffer_add_buffer(out_buf, task->worker_buf);
     }
     
-    if (evbuffer_get_length(out_buf) > 0) {
-        struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+    bool has_body = (evbuffer_get_length(out_buf) > 0);
+    struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+
+    if (has_body) {
         if (task->out_content_type[0] != '\0') {
             evhttp_add_header(headers, "Content-Type", task->out_content_type);
         } else if (!evhttp_find_header(headers, "Content-Type")) {
             evhttp_add_header(headers, "Content-Type", "application/json");
         }
         evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
-    } else {
-        if (task->status_code >= 400) {
-            struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-            if (!evhttp_find_header(headers, "Content-Type")) {
-                evhttp_add_header(headers, "Content-Type", "application/json");
-            }
-            
-            char err_str[256];
-            if (task->status_code != HTTP_INTERNAL) {
-                int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
-                evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
-                evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
-            } else {
-                int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"Internal Server Error\"}");
-                evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
-                evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", nullptr);
-            }
-        } else {
-            evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+    } else if (task->status_code >= 400) {
+        if (!evhttp_find_header(headers, "Content-Type")) {
+            evhttp_add_header(headers, "Content-Type", "application/json");
         }
+        char err_str[256];
+        if (task->status_code != HTTP_INTERNAL) {
+            int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
+            evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
+            evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+        } else {
+            int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"Internal Server Error\"}");
+            evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
+            evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", nullptr);
+        }
+    } else {
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
     }
     
     if (task->parsed_body) json_object_put(task->parsed_body);

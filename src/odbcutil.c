@@ -47,7 +47,8 @@ void odbcutil_reset_connection(DbConnectionId db_id) {
 }
 
 void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
-    SQLCHAR sqlState[6], msg[SQL_MAX_MESSAGE_LENGTH];
+    SQLCHAR sqlState[6];
+    SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH];
     SQLINTEGER nativeError;
     SQLSMALLINT msgLen;
 
@@ -190,6 +191,47 @@ static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, con
 
 typedef bool (*odbc_fetch_cb)(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf);
 
+static bool odbcutil_bind_param(DbConnectionId db_id, SQLHSTMT hstmt, SQLUSMALLINT param_idx, QueryParam* param) {
+    SQLRETURN bind_ret;
+    switch (param->type) {
+        case PARAM_STRING: {
+            const char *str = (const char *)param->value;
+            size_t len = str ? strlen(str) : 0;
+            param->ind = (str && len > 0) ? SQL_NTS : SQL_NULL_DATA;
+            bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+                                   len > 0 ? len : 1, 0, (SQLPOINTER)str, 0, &param->ind);
+            break;
+        }
+        case PARAM_INT: {
+            param->ind = param->value ? 0 : SQL_NULL_DATA;
+            bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+                                   0, 0, (SQLPOINTER)param->value, 0, &param->ind);
+            break;
+        }
+        case PARAM_DOUBLE: {
+            param->ind = param->value ? 0 : SQL_NULL_DATA;
+            bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
+                                   15, 0, (SQLPOINTER)param->value, 0, &param->ind);
+            break;
+        }
+        case PARAM_NULL: {
+            param->ind = SQL_NULL_DATA;
+            bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+                                   0, 0, nullptr, 0, &param->ind);
+            break;
+        }
+        default:
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
+            return false;
+    }
+
+    if (!SQL_SUCCEEDED(bind_ret)) {
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
+        return false;
+    }
+    return true;
+}
+
 static bool odbcutil_execute_and_fetch(
     DbConnectionId db_id, const char* query, 
     QueryParam* params, 
@@ -205,44 +247,7 @@ static bool odbcutil_execute_and_fetch(
     if (!hstmt) return false;
     
     for (size_t i = 0; i < param_count; ++i) {
-        SQLRETURN bind_ret;
-        SQLUSMALLINT param_idx = (SQLUSMALLINT)(i + 1);
-
-        switch (params[i].type) {
-            case PARAM_STRING: {
-                const char *str = (const char *)params[i].value;
-                size_t len = str ? strlen(str) : 0;
-                params[i].ind = (str && len > 0) ? SQL_NTS : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                       len > 0 ? len : 1, 0, (SQLPOINTER)str, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_INT: {
-                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
-                                       0, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_DOUBLE: {
-                params[i].ind = params[i].value ? 0 : SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                                       15, 0, (SQLPOINTER)params[i].value, 0, &params[i].ind);
-                break;
-            }
-            case PARAM_NULL: {
-                params[i].ind = SQL_NULL_DATA;
-                bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                       0, 0, nullptr, 0, &params[i].ind);
-                break;
-            }
-            default:
-                odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Unsupported parameter type");
-                odbcutil_disconnect(hdbc, hstmt);
-                return false;
-        }
-
-        if (!SQL_SUCCEEDED(bind_ret)) {
-            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind parameter");
+        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &params[i])) {
             odbcutil_disconnect(hdbc, hstmt);
             return false;
         }
@@ -313,26 +318,26 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
     const char *p;
 
     for (p = str; p < end; ++p) {
-        if (*p == '"' || *p == '\\' || (unsigned char)*p < 0x20) {
-            size_t clean_len = (size_t)(p - start);
-            if (clean_len > 0) {
-                evbuffer_add(buf, start, clean_len);
-            }
+        if (*p != '"' && *p != '\\' && (unsigned char)*p >= 0x20) continue;
 
-            switch (*p) {
-                case '"':  evbuffer_add(buf, "\\\"", 2); break;
-                case '\\': evbuffer_add(buf, "\\\\", 2); break;
-                case '\b': evbuffer_add(buf, "\\b",  2); break;
-                case '\f': evbuffer_add(buf, "\\f",  2); break;
-                case '\n': evbuffer_add(buf, "\\n",  2); break;
-                case '\r': evbuffer_add(buf, "\\r",  2); break;
-                case '\t': evbuffer_add(buf, "\\t",  2); break;
-                default:
-                    evbuffer_add_printf(buf, "\\u%04x", (unsigned char)*p);
-                    break;
-            }
-            start = p + 1;
+        size_t clean_len = (size_t)(p - start);
+        if (clean_len > 0) {
+            evbuffer_add(buf, start, clean_len);
         }
+
+        switch (*p) {
+            case '"':  evbuffer_add(buf, "\\\"", 2); break;
+            case '\\': evbuffer_add(buf, "\\\\", 2); break;
+            case '\b': evbuffer_add(buf, "\\b",  2); break;
+            case '\f': evbuffer_add(buf, "\\f",  2); break;
+            case '\n': evbuffer_add(buf, "\\n",  2); break;
+            case '\r': evbuffer_add(buf, "\\r",  2); break;
+            case '\t': evbuffer_add(buf, "\\t",  2); break;
+            default:
+                evbuffer_add_printf(buf, "\\u%04x", (unsigned char)*p);
+                break;
+        }
+        start = p + 1;
     }
 
     size_t remaining_len = (size_t)(p - start);
@@ -368,7 +373,8 @@ static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, [
 
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         SQLULEN col_size = 0;
-        SQLSMALLINT digits = 0, nullable = 0;
+        SQLSMALLINT digits = 0;
+        SQLSMALLINT nullable = 0;
 
         ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
                              &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
@@ -402,15 +408,38 @@ static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, [
     return true;
 }
 
+static void append_col_value(struct evbuffer *buf, const ColumnDescriptor *col) {
+    size_t val_len = 0;
+    if (col->ind == SQL_NO_TOTAL) {
+        val_len = strlen(col->buffer);
+    } else if ((size_t)col->ind >= col->alloc_size) {
+        val_len = col->alloc_size - 1;
+    } else {
+        val_len = (size_t)col->ind;
+    }
+
+    if (col->sql_type == SQL_BIT) {
+        bool val = (col->buffer[0] == '1' || strcasecmp(col->buffer, "true") == 0);
+        evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
+        return;
+    }
+
+    if (is_json_number_type(col->sql_type)) {
+        if (val_len == 0) {
+            evbuffer_add(buf, "null", 4);
+        } else {
+            evbuffer_add(buf, col->buffer, val_len);
+        }
+        return;
+    }
+
+    evbuffer_append_escaped_str(buf, col->buffer, val_len);
+}
+
 static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMetadata *meta) {
     evbuffer_add(buf, "{", 1);
     for (SQLSMALLINT i = 0; i < meta->count; ++i) {
         const ColumnDescriptor *col = &meta->cols[i];
-
-        // Force null termination within the allocated bounds to protect against buggy ODBC drivers
-        if (col->ind != SQL_NULL_DATA && col->alloc_size > 0) {
-            col->buffer[col->alloc_size - 1] = '\0';
-        }
 
         evbuffer_add(buf, "\"", 1);
         evbuffer_add(buf, col->name, col->name_len);
@@ -419,28 +448,10 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
         if (col->ind == SQL_NULL_DATA) {
             evbuffer_add(buf, "null", 4);
         } else {
-            size_t val_len = 0;
-            if (col->ind == SQL_NO_TOTAL) {
-                val_len = strlen(col->buffer);
-            } else if ((size_t)col->ind >= col->alloc_size) {
-                val_len = col->alloc_size - 1;
-            } else {
-                val_len = (size_t)col->ind;
+            if (col->alloc_size > 0) {
+                col->buffer[col->alloc_size - 1] = '\0';
             }
-
-            if (col->sql_type == SQL_BIT) {
-                bool val = (col->buffer[0] == '1' || strcasecmp(col->buffer, "true") == 0);
-                evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
-            } else if (is_json_number_type(col->sql_type)) {
-                // Prevent invalid JSON if driver returns an empty string for a numeric column
-                if (val_len == 0) {
-                    evbuffer_add(buf, "null", 4);
-                } else {
-                    evbuffer_add(buf, col->buffer, val_len);
-                }
-            } else {
-                evbuffer_append_escaped_str(buf, col->buffer, val_len);
-            }
+            append_col_value(buf, col);
         }
 
         if (i < meta->count - 1) {

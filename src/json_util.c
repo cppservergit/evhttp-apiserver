@@ -4,7 +4,8 @@
 void json_encode_string(const char* src, char* dest, size_t dest_size) {
     if (!src || !dest || dest_size == 0) return;
     
-    size_t i = 0, j = 0;
+    size_t i = 0;
+    size_t j = 0;
     while (src[i] && j < dest_size - 7) { 
         switch (src[i]) {
             case '"':  dest[j++] = '\\'; dest[j++] = '"'; break;

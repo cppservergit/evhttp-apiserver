@@ -43,11 +43,17 @@ int task_pool_init(size_t pool_size) {
 }
 
 void task_pool_shutdown(void) {
-    if (g_task_slab) {
-        for (size_t i = 0; i < g_pool_size; i++) {
-            if (g_task_slab[i].worker_buf) {
-                evbuffer_free(g_task_slab[i].worker_buf);
-            }
+    if (!g_task_slab) {
+        free(g_free_stack);
+        free(g_is_free_flag);
+        g_free_stack = nullptr;
+        g_is_free_flag = nullptr;
+        return;
+    }
+    
+    for (size_t i = 0; i < g_pool_size; i++) {
+        if (g_task_slab[i].worker_buf) {
+            evbuffer_free(g_task_slab[i].worker_buf);
         }
     }
     free(g_free_stack);
@@ -65,27 +71,27 @@ http_task_t* task_pool_alloc(void) {
     } else {
         pthread_mutex_lock(&g_pool_mutex);
         size_t batch = (g_stack_top < TL_CACHE_SIZE) ? g_stack_top : TL_CACHE_SIZE;
+        for (size_t i = 0; i < batch; i++) {
+            http_task_t* t = g_free_stack[--g_stack_top];
+            size_t idx = (size_t)(t - g_task_slab);
+            g_is_free_flag[idx] = false;
+            tl_cache[tl_cache_count++] = t;
+        }
         if (batch > 0) {
-            for (size_t i = 0; i < batch; i++) {
-                http_task_t* t = g_free_stack[--g_stack_top];
-                size_t idx = (size_t)(t - g_task_slab);
-                g_is_free_flag[idx] = false;
-                tl_cache[tl_cache_count++] = t;
-            }
             task = tl_cache[--tl_cache_count];
         }
         pthread_mutex_unlock(&g_pool_mutex);
     }
     
-    if (task) {
-        struct evbuffer* cached_buf = task->worker_buf;
-        memset(task, 0, sizeof(http_task_t));
-        if (cached_buf) {
-            evbuffer_drain(cached_buf, evbuffer_get_length(cached_buf));
-            task->worker_buf = cached_buf;
-        } else {
-            task->worker_buf = evbuffer_new();
-        }
+    if (!task) return nullptr;
+    
+    struct evbuffer* cached_buf = task->worker_buf;
+    memset(task, 0, sizeof(http_task_t));
+    if (cached_buf) {
+        evbuffer_drain(cached_buf, evbuffer_get_length(cached_buf));
+        task->worker_buf = cached_buf;
+    } else {
+        task->worker_buf = evbuffer_new();
     }
     return task;
 }
@@ -93,33 +99,34 @@ http_task_t* task_pool_alloc(void) {
 void task_pool_free(http_task_t* task) {
     if (!task) return;
     
-    if (task >= g_task_slab && task < (g_task_slab + g_pool_size)) {
-        if (tl_cache_count < TL_CACHE_SIZE) {
-            tl_cache[tl_cache_count++] = task;
-            return;
-        }
-        
-        pthread_mutex_lock(&g_pool_mutex);
-        size_t flush_count = tl_cache_count;
-        if (g_stack_top + flush_count > g_pool_size) {
-            (void)fprintf(stderr, "FATAL: task_pool stack overflow\n");
+    if (task < g_task_slab || task >= (g_task_slab + g_pool_size)) {
+        free(task);
+        return;
+    }
+
+    if (tl_cache_count < TL_CACHE_SIZE) {
+        tl_cache[tl_cache_count++] = task;
+        return;
+    }
+    
+    pthread_mutex_lock(&g_pool_mutex);
+    size_t flush_count = tl_cache_count;
+    if (g_stack_top + flush_count > g_pool_size) {
+        (void)fprintf(stderr, "FATAL: task_pool stack overflow\n");
+        abort();
+    }
+    for (size_t i = 0; i < flush_count; i++) {
+        http_task_t* t = tl_cache[i];
+        size_t idx = (size_t)(t - g_task_slab);
+        if (g_is_free_flag[idx]) {
+            (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
             abort();
         }
-        for (size_t i = 0; i < flush_count; i++) {
-            http_task_t* t = tl_cache[i];
-            size_t idx = (size_t)(t - g_task_slab);
-            if (g_is_free_flag[idx]) {
-                (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
-                abort();
-            }
-            g_is_free_flag[idx] = true;
-            g_free_stack[g_stack_top++] = t;
-        }
-        pthread_mutex_unlock(&g_pool_mutex);
-        
-        tl_cache_count = 0;
-        tl_cache[tl_cache_count++] = task;
-    } else {
-        free(task);
+        g_is_free_flag[idx] = true;
+        g_free_stack[g_stack_top++] = t;
     }
+    pthread_mutex_unlock(&g_pool_mutex);
+    
+    tl_cache_count = 0;
+    tl_cache[tl_cache_count++] = task;
 }
