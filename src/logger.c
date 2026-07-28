@@ -56,7 +56,7 @@ static void* logger_thread_func(void* arg) {
         g_free_stack[g_free_top++] = entry;
         pthread_mutex_unlock(&g_free_mutex);
     }
-    return NULL;
+    return nullptr;
 }
 
 void logger_init(void) {
@@ -66,7 +66,7 @@ void logger_init(void) {
         }
         g_free_top = POOL_SIZE;
         g_logger_running = true;
-        pthread_create(&g_logger_thread, NULL, logger_thread_func, NULL);
+        pthread_create(&g_logger_thread, nullptr, logger_thread_func, nullptr);
     }
 }
 
@@ -76,7 +76,7 @@ void logger_shutdown(void) {
         g_logger_running = false;
         pthread_cond_broadcast(&g_log_cond);
         pthread_mutex_unlock(&g_log_mutex);
-        pthread_join(g_logger_thread, NULL);
+        pthread_join(g_logger_thread, nullptr);
     }
 }
 
@@ -143,7 +143,7 @@ void logger_log(LogLevel level, const char* format, ...) {
         (void)snprintf(tl_logger_tid, sizeof(tl_logger_tid), "0x%lx", pthread_self());
     }
 
-    log_entry_t* entry = NULL;
+    log_entry_t* entry = nullptr;
     if (g_logger_running) {
         pthread_mutex_lock(&g_free_mutex);
         if (g_free_top > 0) entry = g_free_stack[--g_free_top];
@@ -173,7 +173,7 @@ void logger_log(LogLevel level, const char* format, ...) {
     
     if (to_write > 0) {
         if (entry && logger_enqueue_entry(entry, to_write)) {
-            entry = NULL;
+            entry = nullptr;
         } else {
             if (write(STDERR_FILENO, entry ? entry->data : sync_buf, (size_t)to_write)) {}
         }

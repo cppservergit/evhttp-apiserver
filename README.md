@@ -113,7 +113,7 @@ mkdir -p bin
 cat <<EOF > bin/apiserver.env
 # ODBC connection strings - you can define from DB_0 to DB_3
 DB_0=Driver=FreeTDS;SERVER=DatabaseServerAddr;PORT=1433;DATABASE=demodb;UID=YourUsername;PWD=YourPassword;APP=apiserver;Encryption=off;ClientCharset=UTF-8
-#DB_1=Driver={PostgreSQL Unicode};Server=demodb.mshome.net;Port=5432;Database=testdb;Username=postgres;Password=basica;ConnSettings=SET application_name='apiserver';TextAsLongVarchar=1;MaxLongVarcharSize=0;BoolsAsChar=0;
+#DB_1=Driver={PostgreSQL Unicode};Server=DatabaseServerAddr;Port=5432;Database=testdb;Username=YourUsername;Password=YourPassword;ConnSettings=SET application_name='apiserver';TextAsLongVarchar=1;MaxLongVarcharSize=0;BoolsAsChar=0;
 
 
 # enable access logs - can be changed on the fly and supports service reload

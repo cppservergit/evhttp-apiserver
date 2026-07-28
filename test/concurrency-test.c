@@ -50,7 +50,7 @@ void* producer_thread(void* arg) {
             continue;
         }
         
-        struct evhttp_request* req = evhttp_request_new(dummy_cb, NULL);
+        struct evhttp_request* req = evhttp_request_new(dummy_cb, nullptr);
         
         task->req = req;
         task->middleware_ctx = &mock_ctx;
@@ -59,7 +59,7 @@ void* producer_thread(void* arg) {
             sched_yield();
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 void* reloader_thread(void* arg) {
@@ -68,7 +68,7 @@ void* reloader_thread(void* arg) {
         usleep(10000); // 10ms
         config_reload();
     }
-    return NULL;
+    return nullptr;
 }
 
 void server_notify_task_done(void* t) {
@@ -81,7 +81,7 @@ void server_notify_task_done(void* t) {
 
 void handlers_set_context(const char* username, const char* session_id, const char* client_ip, const char* uri) { (void)username; (void)session_id; (void)client_ip; (void)uri; }
 void handlers_clear_context(void) {}
-const char* get_content_type(void) { return NULL; }
+const char* get_content_type(void) { return nullptr; }
 void http_client_init_thread(void) {}
 void http_client_cleanup_thread(void) {}
 int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
@@ -106,16 +106,16 @@ int main() {
     pthread_t producers[NUM_PRODUCERS];
     pthread_t reloader;
     
-    pthread_create(&reloader, NULL, reloader_thread, NULL);
+    pthread_create(&reloader, nullptr, reloader_thread, nullptr);
     
     for (int i = 0; i < NUM_PRODUCERS; ++i) {
-        pthread_create(&producers[i], NULL, producer_thread, (void*)(intptr_t)i);
+        pthread_create(&producers[i], nullptr, producer_thread, (void*)(intptr_t)i);
     }
     
     for (int i = 0; i < NUM_PRODUCERS; ++i) {
-        pthread_join(producers[i], NULL);
+        pthread_join(producers[i], nullptr);
     }
-    pthread_join(reloader, NULL);
+    pthread_join(reloader, nullptr);
     
     worker_pool_shutdown();
     task_pool_shutdown();
