@@ -72,7 +72,7 @@ void* reloader_thread(void* arg) {
 }
 
 void server_notify_task_done(void* t) {
-    http_task_t* task = (http_task_t*)t;
+    http_task_t* task = t;
     if (task->req) {
         evhttp_request_free(task->req);
     }

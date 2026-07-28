@@ -394,7 +394,7 @@ static long long measure_elapsed_ms(const struct timespec* start, const struct t
 }
 
 void server_notify_task_done(void* arg) {
-    http_task_t* task = (http_task_t*)arg;
+    http_task_t* task = arg;
     size_t rid = task->reactor_id;
     if (rid >= g_num_reactors) return;
     
@@ -422,7 +422,7 @@ void server_notify_task_done(void* arg) {
 
 static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
     (void)req;
-    http_task_t* task = (http_task_t*)arg;
+    http_task_t* task = arg;
     atomic_store(&task->cancelled, true);
 }
 
@@ -606,6 +606,21 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
         return;
     }
     
+    const char* raw_uri = evhttp_request_get_uri(req);
+    const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+    
+    if (strlen(raw_uri) >= sizeof(task->uri) || 
+        (req_id && strlen(req_id) >= sizeof(task->request_id)) ||
+        (extracted_client_ip && strlen(extracted_client_ip) >= sizeof(task->client_ip))) {
+        
+        task_pool_free(task);
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Request Headers or URI Too Long\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", nullptr);
+        return;
+    }
+
     task->req = req;
     task->parsed_body = nullptr;
     task->middleware_ctx = ctx;
@@ -614,9 +629,7 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
     task->username[0] = '\0';
     task->session_id[0] = '\0';
     (void)snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
-    (void)snprintf(task->uri, sizeof(task->uri), "%s", evhttp_request_get_uri(req));
-    
-    const char* req_id = evhttp_find_header(in_headers, "X-Request-Id");
+    (void)snprintf(task->uri, sizeof(task->uri), "%s", raw_uri);
     (void)snprintf(task->request_id, sizeof(task->request_id), "%s", req_id ? req_id : "");
     
     atomic_store_explicit(&task->cancelled, false, memory_order_release);

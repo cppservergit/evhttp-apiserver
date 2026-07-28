@@ -35,7 +35,7 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
 }
 
 static void curl_thread_destructor(void* val) {
-    CURL* curl = (CURL*)val;
+    CURL* curl = val;
     if (curl) curl_easy_cleanup(curl);
 }
 
@@ -68,7 +68,7 @@ static void apply_curl_defaults(CURL* curl) {
 
 static CURL* get_thread_curl(void) {
     pthread_once(&g_curl_tls_once, curl_init_tls_key);
-    CURL* curl = (CURL*)pthread_getspecific(g_curl_tls_key);
+    CURL* curl = pthread_getspecific(g_curl_tls_key);
     if (!curl) {
         curl = curl_easy_init();
         if (curl) {

@@ -186,7 +186,7 @@ static void worker_process_task(http_task_t* task) {
 }
 
 static void* worker_thread_main(void* arg) {
-    pool_t* pool = (pool_t*)arg;
+    pool_t* pool = arg;
     http_client_init_thread();
     
     while (1) {

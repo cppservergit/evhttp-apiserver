@@ -209,11 +209,15 @@ static int jwt_parse_payload(const char* payload_json, char* out_username, size_
         if (ret == JWT_OK) {
             struct json_object* sub_obj;
             if (json_object_object_get_ex(jwt_obj, "username", &sub_obj) && out_username) {
-                (void)snprintf(out_username, out_uname_size, "%s", json_object_get_string(sub_obj));
+                const char* uname = json_object_get_string(sub_obj);
+                if (uname && strlen(uname) >= out_uname_size) ret = JWT_ERR_INVALID;
+                else (void)snprintf(out_username, out_uname_size, "%s", uname ? uname : "");
             }
             struct json_object* jti_obj;
             if (json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj) && out_session_id) {
-                (void)snprintf(out_session_id, out_sess_size, "%s", json_object_get_string(jti_obj));
+                const char* sess = json_object_get_string(jti_obj);
+                if (sess && strlen(sess) >= out_sess_size) ret = JWT_ERR_INVALID;
+                else (void)snprintf(out_session_id, out_sess_size, "%s", sess ? sess : "");
             }
         }
         json_object_put(jwt_obj);
