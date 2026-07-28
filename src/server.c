@@ -380,7 +380,8 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
     { .path = "/employee", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = employee_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = prodget_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = customers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT }
+    { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = customers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_pgsql_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 

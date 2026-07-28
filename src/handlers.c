@@ -720,3 +720,23 @@ void customers_handler(
         *out_status = HTTP_INTERNAL;
     }
 }
+
+void sales_pgsql_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    [[maybe_unused]] int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    
+    const char* start_date = json_get_string(body, "start_date");
+    const char* end_date = json_get_string(body, "end_date");
+    QueryParam params[] = {
+        { .type = PARAM_STRING, .value = start_date },
+        { .type = PARAM_STRING, .value = end_date }
+    };
+    
+    if (!odbcutil_get_json(DB_1, "select get_sales_by_category(?, ?)", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
