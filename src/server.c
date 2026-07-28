@@ -365,23 +365,23 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
 // middleware_ctx_t now in server.h
 
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
-    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = version_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
-    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = sysinfo_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
-    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = rsysinfo_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
-    { .path = "/rcustomer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = rcustomer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = shippers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = products_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = uuid_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
-    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = login_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_NONE },
-    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = getqr_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
-    { .path = "/employee", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = employee_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = prodget_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = customers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_pgsql_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &version_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &sysinfo_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &rsysinfo_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/rcustomer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &rcustomer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customer_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &shippers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &products_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &uuid_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = &login_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_NONE },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &getqr_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/employee", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &employee_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = &prodget_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = &customers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_pgsql_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 

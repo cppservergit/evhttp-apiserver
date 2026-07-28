@@ -13,16 +13,22 @@ void json_encode_string(const char* src, char* dest, size_t dest_size) {
             case '\n': dest[j++] = '\\'; dest[j++] = 'n'; break;
             case '\r': dest[j++] = '\\'; dest[j++] = 'r'; break;
             case '\t': dest[j++] = '\\'; dest[j++] = 't'; break;
-            default:
-                if ((unsigned char)src[i] < 0x20) {
-                    int written = snprintf(&dest[j], dest_size - j, "\\u%04x", (unsigned char)src[i]);
-                    if (written > 0 && written < (int)(dest_size - j)) {
-                        j += (size_t)written;
-                    }
-                } else {
-                    dest[j++] = src[i];
+            default: {
+                unsigned char c = (unsigned char)src[i];
+                if (c >= 0x20) {
+                    dest[j++] = (char)c;
+                    break;
                 }
+                
+                const char hex[] = "0123456789abcdef";
+                dest[j++] = '\\';
+                dest[j++] = 'u';
+                dest[j++] = '0';
+                dest[j++] = '0';
+                dest[j++] = hex[c >> 4];
+                dest[j++] = hex[c & 0x0F];
                 break;
+            }
         }
         i++;
     }

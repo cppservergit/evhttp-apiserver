@@ -150,25 +150,26 @@ static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, con
 }
 
 static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
-    SQLRETURN ret;
-    bool has_rows = false, fetch_success = true, has_data_written = false;
+    bool has_rows = false, has_data_written = false;
 
-    while (SQL_SUCCEEDED(ret = SQLFetch(hstmt))) {
+    while (true) {
+        SQLRETURN ret = SQLFetch(hstmt);
+        if (ret == SQL_NO_DATA) break;
+        if (!SQL_SUCCEEDED(ret)) {
+            char err_msg[256];
+            (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+            return false;
+        }
+
         has_rows = true;
         if (!fetch_json_native_col_loop(db_id, hstmt, func_name, out_buf, &has_data_written)) {
             return false;
         }
     }
     
-    if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
-        char err_msg[256];
-        (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
-        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
-        fetch_success = false;
-    }
-    
     if (!has_rows) evbuffer_add(out_buf, "[]", 2);
-    return fetch_success;
+    return true;
 }
 
 
@@ -446,23 +447,24 @@ bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* fu
 
     evbuffer_add(out_buf, "[", 1);
 
-    SQLRETURN ret;
     bool first_row = true;
 
-    while (SQL_SUCCEEDED(ret = SQLFetch(hstmt))) {
+    while (true) {
+        SQLRETURN ret = SQLFetch(hstmt);
+        if (ret == SQL_NO_DATA) break;
+        if (!SQL_SUCCEEDED(ret)) {
+            char err_msg[256];
+            (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+            return false;
+        }
+
         if (!first_row) {
             evbuffer_add(out_buf, ",", 1);
         }
         first_row = false;
 
         evbuffer_append_row_object(out_buf, &meta);
-    }
-    
-    if (ret != SQL_NO_DATA && !SQL_SUCCEEDED(ret)) {
-        char err_msg[256];
-        (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
-        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
-        return false;
     }
 
     evbuffer_add(out_buf, "]", 1);

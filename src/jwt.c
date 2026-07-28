@@ -40,29 +40,34 @@ void generate_uuidv4(char out[37]) {
 static bool b64_decode_segment(const char* start, size_t len, char* out, size_t out_maxlen) {
     if (!out || out_maxlen == 0) return false;
     
-    size_t i = 0;
     size_t j = 0;
-    while (i < len) {
-        unsigned int n = 0;
-        int chars = 0;
-        for (int k = 0; k < 4; ++k) {
-            n <<= 6;
-            if (i < len && start[i] != '=') {
-                unsigned char val = b64_lookup((unsigned char)start[i]);
-                if (val == 255) {
-                    return false;
-                }
-                n |= val;
-                chars++;
-                i++;
-            } else if (i < len && start[i] == '=') {
-                i++; // Skip padding to prevent infinite loop
-            }
+    unsigned int n = 0;
+    int k = 0;
+    
+    for (size_t i = 0; i < len; i++) {
+        if (start[i] == '=') continue;
+        
+        unsigned char val = b64_lookup((unsigned char)start[i]);
+        if (val == 255) return false;
+        
+        n = (n << 6) | val;
+        k++;
+        
+        if (k == 4) {
+            if (j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
+            if (j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
+            if (j < out_maxlen - 1) out[j++] = (char)(n & 0xFF);
+            n = 0;
+            k = 0;
         }
-        if (chars > 1 && j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
-        if (chars > 2 && j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
-        if (chars > 3 && j < out_maxlen - 1) out[j++] = (char)(n & 0xFF);
     }
+    
+    if (k > 0) {
+        n <<= 6 * (4 - k);
+        if (k > 1 && j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
+        if (k > 2 && j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
+    }
+    
     out[j] = '\0';
     return true;
 }
