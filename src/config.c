@@ -10,6 +10,37 @@
 #include <linux/limits.h>
 #include <stdatomic.h>
 #include <ctype.h>
+#include <errno.h>
+
+static unsigned long safe_strtoul_env(const char* env_val, unsigned long default_val, unsigned long max_val) {
+    if (!env_val || !*env_val) return default_val;
+    char* endptr = nullptr;
+    errno = 0;
+    unsigned long val = strtoul(env_val, &endptr, 10);
+    if (errno != 0 || *endptr != '\0') {
+        LOG_WARN("Malformed numeric configuration '%s'. Using default %lu.", env_val, default_val);
+        return default_val;
+    }
+    if (val > max_val) {
+        LOG_WARN("Configuration value %lu exceeds maximum %lu. Clamping.", val, max_val);
+        return max_val;
+    }
+    return val;
+}
+
+static long safe_strtol_env(const char* env_val, long default_val, long min_val, long max_val) {
+    if (!env_val || !*env_val) return default_val;
+    char* endptr = nullptr;
+    errno = 0;
+    long val = strtol(env_val, &endptr, 10);
+    if (errno != 0 || *endptr != '\0') {
+        LOG_WARN("Malformed numeric configuration '%s'. Using default %ld.", env_val, default_val);
+        return default_val;
+    }
+    if (val < min_val) return min_val;
+    if (val > max_val) return max_val;
+    return val;
+}
 
 static char g_odbc_conn_strs[4][MAX_CONFIG_STR] = {0};
 static char g_api_url[MAX_CONFIG_STR] = {0};
@@ -114,7 +145,7 @@ static void apply_initial_config_vars(void) {
     else g_allowed_origin[0] = '\0';
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
-        g_jwt_timeout_seconds = strtol(getenv("JWT_TIMEOUT_SECONDS"), nullptr, 10);
+        g_jwt_timeout_seconds = safe_strtol_env(getenv("JWT_TIMEOUT_SECONDS"), 3600, 1, 86400 * 30);
     }
 }
 
@@ -161,10 +192,9 @@ void config_reload(void) {
         }
     }
     
-    size_t num_threads = getenv("NUM_THREADS") ? strtoul(getenv("NUM_THREADS"), nullptr, 10) : 0;
-    size_t max_queue = getenv("MAX_QUEUE_SIZE") ? strtoul(getenv("MAX_QUEUE_SIZE"), nullptr, 10) : 10000;
-    size_t fast_pool = getenv("FAST_POOL_PERCENTAGE") ? strtoul(getenv("FAST_POOL_PERCENTAGE"), nullptr, 10) : 25;
-    if (fast_pool > 100) fast_pool = 100;
+    size_t num_threads = (size_t)safe_strtoul_env(getenv("NUM_THREADS"), 0, 1024);
+    size_t max_queue = (size_t)safe_strtoul_env(getenv("MAX_QUEUE_SIZE"), 10000, 1000000);
+    size_t fast_pool = (size_t)safe_strtoul_env(getenv("FAST_POOL_PERCENTAGE"), 25, 100);
     
     bool access_log = parse_boolean_env(getenv("ACCESS_LOG"), true);
     

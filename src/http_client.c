@@ -107,7 +107,15 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     
     struct curl_slist* chunk_headers = nullptr;
     for (int i = 0; i < num_headers; ++i) {
-        chunk_headers = curl_slist_append(chunk_headers, headers[i]);
+        struct curl_slist* temp = curl_slist_append(chunk_headers, headers[i]);
+        if (!temp) {
+            curl_slist_free_all(chunk_headers);
+            free(chunk->memory);
+            chunk->memory = nullptr;
+            set_thread_error(TL_ERR_ERROR, "Out of memory allocating curl headers");
+            return nullptr;
+        }
+        chunk_headers = temp;
     }
     
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk_headers);
