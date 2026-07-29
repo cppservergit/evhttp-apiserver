@@ -97,6 +97,7 @@ sudo apt-get install -y build-essential gcc make \
                         unixodbc-dev \
                         libsodium-dev \
                         libqrencode-dev \
+                        liboath-dev \
                         tdsodbc
 ```
 **Note:** The package `tdsodbc` installs SQLServer/Sybase open source drivers because the examples provided use an [SQL Server database](https://github.com/cppservergit/apiserver2/blob/main/docs/sqlserver.md), but APIServer only depends on `unixodbc`.
