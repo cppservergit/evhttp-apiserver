@@ -397,12 +397,9 @@ void products_handler(
     [[maybe_unused]] int* out_status, 
     struct evbuffer* out_buf
 ) {
+    *out_status = HTTP_OK;
     if (!odbcutil_get_json(DB_0, "{CALL sp_products_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
-        const char* err = "{\"error\":\"Database error\"}";
-        evbuffer_add(out_buf, err, strlen(err));
-    } else {
-        *out_status = HTTP_OK;
     }
 }
 
