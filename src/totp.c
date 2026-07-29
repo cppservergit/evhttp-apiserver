@@ -59,6 +59,24 @@ static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
     }
 }
 
+static void totp_urlencode(const char* src, char* dest, size_t dest_size) {
+    if (!src || !dest || dest_size == 0) return;
+    size_t j = 0;
+    const char hex[] = "0123456789ABCDEF";
+    for (size_t i = 0; src[i] && j < dest_size - 3; ++i) {
+        unsigned char c = (unsigned char)src[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || 
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+            dest[j++] = (char)c;
+        } else {
+            dest[j++] = '%';
+            dest[j++] = hex[c >> 4];
+            dest[j++] = hex[c & 0x0F];
+        }
+    }
+    dest[j] = '\0';
+}
+
 void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_buf) {
     if (!user) {
         *out_status = HTTP_BADREQUEST;
@@ -73,12 +91,16 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
         return;
     }
 
-    char uri[256];
-    (void)snprintf(uri, sizeof(uri), "otpauth://totp/apiserver:%s?secret=%s&issuer=apiserver&algorithm=SHA256&digits=6&period=30", user, secret);
+    char escaped_user[256];
+    totp_urlencode(user, escaped_user, sizeof(escaped_user));
+
+    char uri[512];
+    (void)snprintf(uri, sizeof(uri), "otpauth://totp/apiserver:%s?secret=%s&issuer=apiserver&algorithm=SHA256&digits=6&period=30", escaped_user, secret);
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     
     sodium_memzero(secret, sizeof(secret));
+    sodium_memzero(escaped_user, sizeof(escaped_user));
     sodium_memzero(uri, sizeof(uri));
 
     if (!qrcode) {
