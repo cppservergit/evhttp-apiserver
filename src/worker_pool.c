@@ -16,15 +16,16 @@
 #include "thread_error.h"
 
 typedef struct {
+    pthread_cond_t cond;
+    pthread_mutex_t mutex;
     http_task_t* head;
     http_task_t* tail;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    pthread_t* workers;
     size_t size;
     size_t num_workers;
-    pthread_t* workers;
     bool shutdown;
     bool initialized;
+    char _padding[6];
 } pool_t;
 
 static pool_t g_fast_pool = {0};

@@ -130,6 +130,7 @@ typedef struct {
     http_task_t* tail;
     pthread_mutex_t lock;
     int eventfd;
+    char _padding[4];
 } reactor_queue_t;
 
 static reactor_queue_t* g_reactor_queues = nullptr;
@@ -150,6 +151,7 @@ struct reactor_stats {
     _Atomic uint64_t total_time_fast_ms;
     _Atomic uint64_t total_requests_slow;
     _Atomic uint64_t total_time_slow_ms;
+    char _padding[32];
 } __attribute__((aligned(64)));
 
 static struct reactor_stats* g_reactor_stats = nullptr;

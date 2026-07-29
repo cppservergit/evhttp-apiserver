@@ -12,28 +12,24 @@
  */
 
 typedef struct http_task_s {
+    struct timespec start_time;
     struct evhttp_request* req;
     struct json_object* parsed_body;
     const void* middleware_ctx;
-    struct timespec start_time;
-    size_t reactor_id;
-    _Atomic bool cancelled;
-    
-    // Output fields
-    int status_code;
     const char* status_txt;
     struct evbuffer* worker_buf;
-    char out_content_type[128];
+    struct http_task_s* next;
+    size_t reactor_id;
+    int status_code;
+    _Atomic bool cancelled;
     
-    // Authenticated identity & Request Data
+    char out_content_type[128];
     char username[33];
     char session_id[37];
     char client_ip[64];
-    char uri[1024];
     char request_id[64];
-
-    // Intrusive queue pointer (Zero-allocation queues)
-    struct http_task_s* next;
+    char uri[1024];
+    char _padding[5];
 } http_task_t;
 
 /** \brief Initializes the worker thread pools, splitting them into fast and slow pools (Bulkheading). */

@@ -33,9 +33,10 @@ typedef bool (*CustomValidatorFunc)(const ValidationContext *ctx, const json_obj
 /** \brief Defines a schema rule for a single JSON field. */
 typedef struct {
     const char *field_name;
+    CustomValidatorFunc custom_validator;
     FieldType type;
     bool is_required;
-    CustomValidatorFunc custom_validator;
+    char _padding[3];
 } FieldValidator;
 
 /** \brief Holds an entire JSON validation schema. */

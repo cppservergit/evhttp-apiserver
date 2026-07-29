@@ -256,19 +256,21 @@ bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* para
 }
 
 typedef struct {
-    SQLCHAR     name[128];
-    SQLSMALLINT name_len;
-    SQLSMALLINT sql_type;
     char       *buffer;
     size_t      alloc_size;
     SQLLEN      ind;
+    SQLCHAR     name[128];
+    SQLSMALLINT name_len;
+    SQLSMALLINT sql_type;
+    char        _padding[4];
 } ColumnDescriptor;
 
 typedef struct {
     ColumnDescriptor *cols;
     char             *arena;
-    SQLSMALLINT       count;
     SQLHSTMT          hstmt;
+    SQLSMALLINT       count;
+    char              _padding[6];
 } ResultSetMetadata;
 
 static void metadata_destroy(ResultSetMetadata *meta) {

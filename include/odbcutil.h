@@ -26,9 +26,10 @@ typedef enum {
 } ParamType;
 
 typedef struct {
-    ParamType   type;
     const void *value;
     SQLLEN      ind; // Preserves stack liveness during SQLExecute
+    ParamType   type;
+    char        _padding[4];
 } QueryParam;
 
 typedef enum {

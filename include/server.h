@@ -40,12 +40,13 @@ typedef enum {
 
 typedef struct {
     const char* path;
-    enum evhttp_cmd_type allowed_method;
     const ValidationContext* validation_ctx;
     handler_fn handler;
     void* user_arg;
-    bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
+    enum evhttp_cmd_type allowed_method;
     auth_mode_t auth_mode; /**< \brief Security enforcement mode for this route. */
+    bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */
+    char _padding[7];
 } middleware_ctx_t;
 
 /** \brief Retrieves the hardcoded server version string. */
