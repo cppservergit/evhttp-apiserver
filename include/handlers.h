@@ -70,6 +70,9 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status, struc
 /** \brief Handles /getqr requests for TOTP registration. */
 void getqr_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 
+/** \brief Handles /verifytotp requests for TOTP validation. */
+void verifytotp_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+
 /** \brief Handles /employee requests. */
 void employee_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 extern const ValidationContext EmployeeContext;

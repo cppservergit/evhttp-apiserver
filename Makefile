@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=gnu2x -Wall -Wextra -Wdangling-pointer=2 -Wreturn-local-addr -Wpedantic -Wshadow -Werror -Wformat=2 -Wvla -Wimplicit-fallthrough -Wnull-dereference -Wundef -O3 -D_GNU_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -march=x86-64-v3 -fPIE -Iinclude
-LDFLAGS = -levent_pthreads -levent -ljson-c -lcurl -lodbc -lpthread -lsodium -lqrencode -pie -Wl,-z,relro,-z,now
+LDFLAGS = -levent_pthreads -levent -ljson-c -lcurl -lodbc -lpthread -lsodium -lqrencode -loath -pie -Wl,-z,relro,-z,now
 
 SRC = src/main.c src/server.c src/handlers.c src/http_client.c src/customer.c src/validation.c src/jwt.c src/odbcutil.c src/logger.c src/config.c src/worker_pool.c src/task_pool.c src/login.c src/totp.c src/json_util.c src/thread_error.c
 OBJ = $(patsubst src/%.c,obj/%.o,$(SRC))

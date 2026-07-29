@@ -420,6 +420,47 @@ void getqr_handler(
     }
 }
 
+void verifytotp_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    if (!body) {
+        *out_status = HTTP_BADREQUEST;
+        return;
+    }
+
+    struct json_object* j_totp = NULL;
+    if (!json_object_object_get_ex(body, "totp", &j_totp)) {
+        *out_status = HTTP_BADREQUEST;
+        return;
+    }
+
+    const char* totp_str = json_object_get_string(j_totp);
+    
+    struct json_object* j_user = NULL;
+    const char* user = NULL;
+    if (json_object_object_get_ex(body, "username", &j_user)) {
+        user = json_object_get_string(j_user);
+    } else {
+        user = get_user();
+    }
+
+    if (!user || !totp_str) {
+        *out_status = HTTP_BADREQUEST;
+        return;
+    }
+
+    if (is_valid_totp(user, totp_str)) {
+        *out_status = HTTP_OK;
+        const char* msg = "{\"status\":\"OK\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+    } else {
+        *out_status = 401;
+    }
+}
+
 void uuid_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 

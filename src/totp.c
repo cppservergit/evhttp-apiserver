@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sodium.h>
+#include <stdbool.h>
+#include <liboath/oath.h>
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLHDBC hdbc = odbcutil_connect(DB_0);
@@ -126,4 +128,34 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
     QRcode_free(qrcode);
 
     *out_status = HTTP_OK;
+}
+
+bool is_valid_totp(const char* username, const char* totp_code) {
+    if (!username || !totp_code) return false;
+
+    char secret_b32[128] = {0};
+    if (get_secret(username, secret_b32, sizeof(secret_b32)) != HTTP_OK) {
+        return false;
+    }
+
+    char* secret_bin = NULL;
+    size_t secret_bin_len = 0;
+    
+    int decode_ret = oath_base32_decode(secret_b32, strlen(secret_b32), &secret_bin, &secret_bin_len);
+    if (decode_ret != OATH_OK) {
+        sodium_memzero(secret_b32, sizeof(secret_b32));
+        return false;
+    }
+
+    oath_init();
+    
+    int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, 0, 30, 0, 2, NULL, NULL, OATH_TOTP_HMAC_SHA256, totp_code);
+    
+    oath_done();
+    
+    sodium_memzero(secret_b32, sizeof(secret_b32));
+    sodium_memzero(secret_bin, secret_bin_len);
+    free(secret_bin);
+    
+    return (validate_ret >= 0);
 }
