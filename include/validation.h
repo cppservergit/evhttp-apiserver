@@ -8,6 +8,7 @@
  * \brief JSON schema validation framework.
  */
 
+/** \brief Enumerates standard validation error codes. */
 typedef enum {
     ERR_REQUIRED,
     ERR_NOT_INT,
@@ -19,6 +20,7 @@ typedef enum {
     ERR_MAX_ERRORS
 } ErrorCode;
 
+/** \brief Enumerates supported primitive JSON data types. */
 typedef enum {
     TYPE_INT,
     TYPE_DOUBLE,
@@ -27,7 +29,10 @@ typedef enum {
     TYPE_MAX_TYPES
 } FieldType;
 
+/** \brief Forward declaration for the schema validation context. */
 typedef struct ValidationContext ValidationContext;
+
+/** \brief Function pointer definition for a custom field validator. */
 typedef bool (*CustomValidatorFunc)(const ValidationContext *ctx, const json_object *obj, const char *field_name, char *err_buf, size_t err_len);
 
 /** \brief Defines a schema rule for a single JSON field. */

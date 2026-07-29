@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * \file totp.h
+ * \brief TOTP generation and validation framework.
+ */
+
 #include <event2/buffer.h>
 #include <event2/http.h>
 #include <json-c/json.h>

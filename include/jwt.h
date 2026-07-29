@@ -38,8 +38,11 @@ void generate_uuidv4(char out[37]);
  */
 bool jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds, char* out_jwt, size_t out_jwt_size);
 
+/** \brief Return code for successful JWT verification. */
 #define JWT_OK 0
+/** \brief Return code for an expired JWT. */
 #define JWT_ERR_EXPIRED 1
+/** \brief Return code for an invalid or malformed JWT. */
 #define JWT_ERR_INVALID 2
 
 /**

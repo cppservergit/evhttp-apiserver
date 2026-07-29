@@ -56,11 +56,22 @@ void config_get_api_user(char* out, size_t max_len);
  */
 void config_get_api_pass(char* out, size_t max_len);
 
+/** \brief Retrieves the remote login provider URL. */
 void config_get_login_provider(char* out, size_t max_len);
+
+/** \brief Retrieves the remote login URI. */
 void config_get_login_uri(char* out, size_t max_len);
+
+/** \brief Retrieves the JWT secret key. */
 void config_get_jwt_secret(char* out, size_t max_len);
+
+/** \brief Retrieves the remote API key. */
 void config_get_remote_api_key(char* out, size_t max_len);
+
+/** \brief Retrieves the telemetry API key. */
 void config_get_telemetry_api_key(char* out, size_t max_len);
+
+/** \brief Retrieves the JWT expiration timeout in seconds. */
 long config_get_jwt_timeout_seconds(void);
 
 /** \brief Retrieves the trusted proxy IP for X-Forwarded-For processing. */

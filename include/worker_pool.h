@@ -11,6 +11,7 @@
  * \\brief Asynchronous worker thread pool and task queue.
  */
 
+/** \brief Represents a single HTTP request task processed by a worker thread. */
 typedef struct http_task_s {
     struct timespec start_time;
     struct evhttp_request* req;

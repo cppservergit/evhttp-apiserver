@@ -30,14 +30,17 @@ void server_shutdown_workers(void);
 /** \brief Safely cleans up all global resources deterministically without relying on atexit */
 void server_cleanup_globals(void);
 
+/** \brief Signature for a libevent HTTP request handler. */
 typedef void (*handler_fn)(struct json_object* body, void* user_arg, int* out_status, struct evbuffer* out_buf);
 
+/** \brief Security enforcement mode for an HTTP route. */
 typedef enum {
     AUTH_NONE = 0,
     AUTH_JWT = 1,
     AUTH_API_KEY = 2
 } auth_mode_t;
 
+/** \brief Middleware configuration context for an HTTP route. */
 typedef struct {
     const char* path;
     const ValidationContext* validation_ctx;
@@ -55,9 +58,7 @@ const char* get_server_version(void);
 /** \brief Notifies the originating reactor that a task is complete. */
 void server_notify_task_done(void* task);
 
-/** \brief Records telemetry for a processed HTTP request. \param elapsed_ms Processing time in milliseconds. \param is_fast True if processed in fast pool. */
-
-
+/** \brief Request telemetry statistics aggregated by the server. */
 typedef struct {
     uint64_t total_requests;
     uint64_t total_requests_fast;
@@ -86,6 +87,3 @@ const char* server_get_hostname(void);
 
 /** \brief Retrieves the OS and Kernel version. */
 const char* server_get_os_version(void);
-
-/** \brief Helper to create standard JSON error payloads */
-

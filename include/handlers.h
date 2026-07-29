@@ -8,7 +8,10 @@
  * \brief HTTP request handlers for the libevent web server.
  */
 
+/** \brief Validation schema context for /customer route. */
 extern const ValidationContext CustomerContext;
+
+/** \brief Validation schema context for /sales route. */
 extern const ValidationContext SalesContext;
 
 /** \brief Handles /ping requests for liveness checks. */
@@ -28,27 +31,9 @@ void uuid_handler(struct json_object* body, void* arg, int* out_status, struct e
 
 /** \brief Handles /login requests. */
 void login_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /login route. */
 extern const ValidationContext LoginContext;
 
-/** \brief Extracts the client IP from the request, favoring X-Forwarded-For if present. */
-
-/** \brief Retrieves the internal JWT-authenticated username, if present. */
-const char* get_user(void);
-
-/** \brief Retrieves the internal JWT-authenticated session ID, if present. */
-
-/** \brief Sets the authenticated identity for the current thread context. */
-void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri);
-
-/** \brief Clears the authenticated identity from the current thread context. */
-void handlers_clear_context(void);
-
-/** \brief Sets the response content type. */
-
-/** \brief Gets the response content type set by the handler. */
-const char* get_content_type(void);
-
-/** \brief Retrieves the requested URI. */
 /** \brief Handles /customer requests (external REST integration). */
 void rcustomer_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 
@@ -72,18 +57,22 @@ void getqr_handler(struct json_object* body, void* arg, int* out_status, struct 
 
 /** \brief Handles /verifytotp requests for TOTP validation. */
 void verifytotp_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /verifytotp route. */
 extern const ValidationContext VerifyTotpContext;
 
 /** \brief Handles /employee requests. */
 void employee_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /employee route. */
 extern const ValidationContext EmployeeContext;
 
 /** \brief Handles /prodget requests. */
 void prodget_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /prodget route. */
 extern const ValidationContext ProdgetContext;
 
 /** \brief Handles /customers requests. */
 void customers_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /customers route. */
 extern const ValidationContext CustomersContext;
 
 /** \brief Handles /sales requests. */

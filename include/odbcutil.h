@@ -18,6 +18,7 @@ struct evbuffer;
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
+/** \brief ODBC query parameter types. */
 typedef enum {
     PARAM_STRING,
     PARAM_INT,
@@ -25,6 +26,7 @@ typedef enum {
     PARAM_NULL
 } ParamType;
 
+/** \brief Structure for binding an ODBC query parameter. */
 typedef struct {
     const void *value;
     SQLLEN      ind; // Preserves stack liveness during SQLExecute
@@ -32,6 +34,7 @@ typedef struct {
     char        _padding[4];
 } QueryParam;
 
+/** \brief Supported database connection identifiers. */
 typedef enum {
     DB_0 = 0,
     DB_1,
@@ -50,8 +53,6 @@ SQLHDBC odbcutil_connect(DbConnectionId db_id);
 
 /** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
 bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
-
-/** \brief Extracts JSON data using native JSON streaming. \param hstmt The executed statement. */
 
 /** \brief Executes query and converts traditional resultset to JSON array of objects. */
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
