@@ -74,7 +74,7 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
     }
 
     char uri[256];
-    (void)snprintf(uri, sizeof(uri), "otpauth://totp/Basica:%s?secret=%s&issuer=Basica", user, secret);
+    (void)snprintf(uri, sizeof(uri), "otpauth://totp/apiserver:%s?secret=%s&issuer=apiserver&algorithm=SHA256&digits=6&period=30", user, secret);
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     
