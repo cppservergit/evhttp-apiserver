@@ -420,43 +420,57 @@ void getqr_handler(
     }
 }
 
+// --- Verify TOTP Handler & Schema ---
+
+static bool totp_custom_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *totp = json_object_get_string((struct json_object*)obj);
+    if (!totp || strlen(totp) != 6) {
+        (void)snprintf(err_buf, err_len, "Field '%s' must be exactly 6 characters.", name ? name : "totp");
+        return false;
+    }
+    for (int i = 0; i < 6; ++i) {
+        if (!isdigit((unsigned char)totp[i])) {
+            (void)snprintf(err_buf, err_len, "Field '%s' must contain only digits.", name ? name : "totp");
+            return false;
+        }
+    }
+    return true;
+}
+
+static const FieldValidator VerifyTotpSchema[] = {
+    {.field_name = "totp", .type = TYPE_STRING, .is_required = true, .custom_validator = totp_custom_validator}
+};
+
+const ValidationContext VerifyTotpContext = {
+    .schema = VerifyTotpSchema,
+    .schema_count = sizeof(VerifyTotpSchema) / sizeof(VerifyTotpSchema[0]),
+    .global_validator = nullptr
+};
+
 void verifytotp_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
     int* out_status, 
     struct evbuffer* out_buf
 ) {
-    if (!body) {
-        *out_status = HTTP_BADREQUEST;
-        return;
-    }
-
-    struct json_object* j_totp = NULL;
-    if (!json_object_object_get_ex(body, "totp", &j_totp)) {
-        *out_status = HTTP_BADREQUEST;
-        return;
-    }
-
-    const char* totp_str = json_object_get_string(j_totp);
+    const char* user = get_user();
+    const char* session = get_session_id();
+    const char* totp_str = json_get_string(body, "totp");
     
-    struct json_object* j_user = NULL;
-    const char* user = NULL;
-    if (json_object_object_get_ex(body, "username", &j_user)) {
-        user = json_object_get_string(j_user);
-    } else {
-        user = get_user();
-    }
-
-    if (!user || !totp_str) {
-        *out_status = HTTP_BADREQUEST;
-        return;
-    }
-
-    if (is_valid_totp(user, totp_str)) {
+    if (totp_str && is_valid_totp(user, totp_str)) {
         *out_status = HTTP_OK;
         const char* msg = "{\"status\":\"OK\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
     } else {
+        LOG_WARN("TOTP validation failed for User: %s, SessionID: %s", 
+            user ? user : "unknown", 
+            session ? session : "unknown");
         *out_status = 401;
     }
 }

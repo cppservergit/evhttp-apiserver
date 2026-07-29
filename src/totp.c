@@ -8,6 +8,7 @@
 #include <sodium.h>
 #include <stdbool.h>
 #include <liboath/oath.h>
+#include <time.h>
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLHDBC hdbc = odbcutil_connect(DB_0);
@@ -149,7 +150,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
 
     oath_init();
     
-    int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, 0, 30, 0, 2, NULL, NULL, OATH_TOTP_HMAC_SHA256, totp_code);
+    int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, time(NULL), 30, 0, 2, NULL, NULL, OATH_TOTP_HMAC_SHA256, totp_code);
     
     oath_done();
     
