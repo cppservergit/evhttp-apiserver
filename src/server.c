@@ -559,7 +559,7 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     char provided_key[MAX_CONFIG_STR] = {0};
     if (auth_header) {
         (void)snprintf(provided_key, sizeof(provided_key), "%s", auth_header);
-    } else if (bearer && strncmp(bearer, "Bearer ", 7) == 0) {
+    } else if (bearer && strncasecmp(bearer, "Bearer ", 7) == 0) {
         (void)snprintf(provided_key, sizeof(provided_key), "%s", bearer + 7);
     }
     

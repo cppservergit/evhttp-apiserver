@@ -56,7 +56,7 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
 
     struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
     const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
-    if (!auth_hdr || strncmp(auth_hdr, "Bearer ", 7) != 0) {
+    if (!auth_hdr || strncasecmp(auth_hdr, "Bearer ", 7) != 0) {
         task->status_code = 401;
         task->status_txt = "Unauthorized";
         const char* msg = "{\"error\":\"Missing or invalid Authorization header\"}";
