@@ -459,15 +459,17 @@ void verifytotp_handler(
     const char* user = get_user();
     const char* session = get_session_id();
     const char* totp_str = json_get_string(body, "totp");
+    const char* client_ip = get_client_ip();
     
     if (totp_str && is_valid_totp(user, totp_str)) {
         *out_status = HTTP_OK;
         const char* msg = "{\"status\":\"OK\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
     } else {
-        LOG_WARN("TOTP validation failed for User: %s, SessionID: %s", 
+        LOG_WARN("TOTP validation failed for User: %s, SessionID: %s from IP: %s", 
             user ? user : "unknown", 
-            session ? session : "unknown");
+            session ? session : "unknown", 
+            client_ip ? client_ip : "unknown");
         *out_status = 401;
     }
 }
@@ -486,6 +488,23 @@ void uuid_handler(
     char buf[128];
     int len = snprintf(buf, sizeof(buf), "{\"uuid\":\"%s\"}", uuid_str);
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+}
+
+void secretb32_handler(
+    [[maybe_unused]] struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    char secret[33];
+    if (totp_generate_base32_secret(secret, sizeof(secret))) {
+        char buf[128];
+        int len = snprintf(buf, sizeof(buf), "{\"secret\":\"%s\"}", secret);
+        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+    } else {
+        *out_status = HTTP_INTERNAL;
+    }
 }
 
 // --- Shared Utilities ---

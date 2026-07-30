@@ -377,6 +377,7 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &shippers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &products_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &uuid_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/secretb32", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &secretb32_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
     { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = &login_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_NONE },
     { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &getqr_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/verifytotp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &VerifyTotpContext, .handler = &verifytotp_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },

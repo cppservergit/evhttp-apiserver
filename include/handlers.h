@@ -29,6 +29,9 @@ void rsysinfo_handler(struct json_object* body, void* arg, int* out_status, stru
 /** \brief Handler to test UUIDv4 generation */
 void uuid_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 
+/** \brief Handler to test base32 secret generation */
+void secretb32_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+
 /** \brief Handles /login requests. */
 void login_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 /** \brief Validation schema context for /login route. */
