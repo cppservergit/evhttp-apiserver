@@ -25,6 +25,9 @@ size_t config_get_num_threads(void);
 /** \brief Retrieves the maximum allowed size of the background task queue. */
 size_t config_get_max_queue_size(void);
 
+/** \brief Retrieves the maximum allowed payload size for HTTP requests/responses. */
+size_t config_get_max_payload_size(void);
+
 /** \brief Retrieves the configured percentage of threads to assign to the fast pool (0-100). */
 size_t config_get_fast_pool_percentage(void);
 

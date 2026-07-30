@@ -58,6 +58,7 @@ static _Atomic bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
+static size_t g_max_payload_size = 5242880; // Default 5MB payload max
 
 static char* trim_whitespace(char* str) {
     while (isspace((unsigned char)*str)) str++;
@@ -149,13 +150,14 @@ static void apply_initial_config_vars(void) {
     }
 }
 
-static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log) {
+static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log, size_t max_payload) {
     if (!is_first_load) {
         if (g_num_threads != num_threads) {
             LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
         }
         atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
-        LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG was updated.");
+        g_max_payload_size = max_payload;
+        LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG and MAX_PAYLOAD_SIZE were updated.");
         return;
     }
 
@@ -164,6 +166,7 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     g_num_threads = num_threads;
     g_max_queue_size = max_queue;
     g_fast_pool_percentage = fast_pool;
+    g_max_payload_size = max_payload;
     
     atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
     
@@ -195,10 +198,11 @@ void config_reload(void) {
     size_t num_threads = (size_t)safe_strtoul_env(getenv("NUM_THREADS"), 0, 1024);
     size_t max_queue = (size_t)safe_strtoul_env(getenv("MAX_QUEUE_SIZE"), 10000, 1000000);
     size_t fast_pool = (size_t)safe_strtoul_env(getenv("FAST_POOL_PERCENTAGE"), 25, 100);
+    size_t max_payload = (size_t)safe_strtoul_env(getenv("MAX_PAYLOAD_SIZE"), 5242880, 104857600);
     
     bool access_log = parse_boolean_env(getenv("ACCESS_LOG"), true);
     
-    apply_config_updates(num_threads, max_queue, fast_pool, access_log);
+    apply_config_updates(num_threads, max_queue, fast_pool, access_log, max_payload);
 }
 
 void config_init(void) {
@@ -274,6 +278,10 @@ size_t config_get_max_queue_size(void) {
 
 size_t config_get_fast_pool_percentage(void) {
     return g_fast_pool_percentage;
+}
+
+size_t config_get_max_payload_size(void) {
+    return g_max_payload_size;
 }
 
 bool config_is_origin_allowed(const char* origin) {

@@ -34,7 +34,6 @@
 #include "task_pool.h"
 #include <sys/eventfd.h>
 
-constexpr size_t MAX_PAYLOAD_SIZE = 5 * 1024 * 1024;
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
 constexpr char SERVER_VERSION[] = "APIServer 1.00";
 
@@ -749,7 +748,7 @@ static struct evhttp* configure_http_server(struct event_base* base, evutil_sock
     struct evhttp* http = evhttp_new(base);
     if (http == nullptr) return nullptr;
 
-    evhttp_set_max_body_size(http, MAX_PAYLOAD_SIZE);
+    evhttp_set_max_body_size(http, config_get_max_payload_size());
     evhttp_set_max_headers_size(http, 8192); // 8KB max header size
     evhttp_set_timeout(http, REQUEST_TIMEOUT_SECONDS); 
     evhttp_set_allowed_methods(http, EVHTTP_REQ_GET | EVHTTP_REQ_POST | EVHTTP_REQ_OPTIONS);

@@ -9,8 +9,7 @@
 
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
-
-#define HTTP_CLIENT_MAX_RESPONSE_SIZE (5 * 1024 * 1024)
+#include "config.h"
 
 struct memory_struct {
     char* memory;
@@ -22,7 +21,7 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
     size_t realsize = size * nmemb;
     struct memory_struct* mem = (struct memory_struct*)userp;
 
-    if (mem->size + realsize > HTTP_CLIENT_MAX_RESPONSE_SIZE) {
+    if (mem->size + realsize > config_get_max_payload_size()) {
         return 0; // Abort transfer, exceeds max size
     }
 
