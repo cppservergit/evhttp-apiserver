@@ -49,7 +49,10 @@ static int spawn_worker_threads(pthread_t* threads, long num_cores) {
         CPU_ZERO(&cpuset);
         // Modulo ensures round-robin affinity if we ever configure num_reactors > num_cores (oversubscription)
         CPU_SET((long)i % num_cores, &cpuset);
-        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+        int aff_ret = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+        if (aff_ret != 0) {
+            LOG_WARN("Could not set CPU affinity for reactor thread %zu (container restriction?). OS will schedule automatically.", i);
+        }
 
         if (pthread_create(&threads[i], &attr, reactor_thread_logic, (void*)i) != 0) {
             LOG_FATAL("Could not bootstrap reactor thread %zu", i);
