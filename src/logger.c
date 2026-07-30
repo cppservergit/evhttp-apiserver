@@ -108,9 +108,11 @@ static void logger_format_message(log_entry_t* entry, char* sync_buf, LogLevel l
 
     int len;
     if (tl_request_id[0] != '\0') {
+        char escaped_req_id[256];
+        json_encode_string(tl_request_id, escaped_req_id, sizeof(escaped_req_id));
         len = snprintf(target_buf, target_size, 
             "{\"level\":\"%s\",\"reqID\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
-            level_strings[level], tl_request_id, escaped_msg, tl_logger_tid);
+            level_strings[level], escaped_req_id, escaped_msg, tl_logger_tid);
     } else {
         len = snprintf(target_buf, target_size, 
             "{\"level\":\"%s\",\"msg\":\"%s\",\"threadID\":\"%s\"}\n", 
@@ -175,7 +177,8 @@ void logger_log(LogLevel level, const char* format, ...) {
     if (to_write > 0) {
         if (entry && logger_enqueue_entry(entry, to_write)) {
             entry = nullptr;
-        } else {
+        } else if (level == LOG_LEVEL_FATAL || level == LOG_LEVEL_ERROR) {
+            // Only fall back to blocking write for critical errors that shouldn't be dropped.
             ssize_t ignored = write(STDERR_FILENO, entry ? entry->data : sync_buf, (size_t)to_write);
             (void)ignored;
         }

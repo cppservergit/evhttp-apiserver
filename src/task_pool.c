@@ -4,13 +4,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include "logger.h"
 #include <event2/buffer.h>
 
 // Slab must never be realloc'd to preserve pointer range checks in task_pool_free.
 static http_task_t* g_task_slab = nullptr;
 static http_task_t** g_free_stack = nullptr;
-static bool* g_is_free_flag = nullptr;
+static _Atomic bool* g_is_free_flag = nullptr;
 static size_t g_stack_top = 0;
 static size_t g_pool_size = 0;
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -24,7 +25,7 @@ int task_pool_init(size_t pool_size) {
     g_pool_size = pool_size;
     g_task_slab = calloc(pool_size, sizeof(http_task_t));
     g_free_stack = malloc(pool_size * sizeof(http_task_t*));
-    g_is_free_flag = calloc(pool_size, sizeof(bool));
+    g_is_free_flag = calloc(pool_size, sizeof(_Atomic bool));
     
     if (!g_task_slab || !g_free_stack || !g_is_free_flag) {
         LOG_FATAL("Out of memory in task_pool_init");
@@ -36,7 +37,7 @@ int task_pool_init(size_t pool_size) {
 
     for (size_t i = 0; i < pool_size; i++) {
         g_free_stack[i] = &g_task_slab[i];
-        g_is_free_flag[i] = true;
+        atomic_init(&g_is_free_flag[i], true);
     }
     g_stack_top = pool_size;
     return 0;
@@ -74,7 +75,7 @@ http_task_t* task_pool_alloc(void) {
         for (size_t i = 0; i < batch; i++) {
             http_task_t* t = g_free_stack[--g_stack_top];
             size_t idx = (size_t)(t - g_task_slab);
-            g_is_free_flag[idx] = false;
+            atomic_store_explicit(&g_is_free_flag[idx], false, memory_order_relaxed);
             tl_cache[tl_cache_count++] = t;
         }
         if (batch > 0) {
@@ -86,7 +87,7 @@ http_task_t* task_pool_alloc(void) {
     if (!task) return nullptr;
     
     size_t idx = (size_t)(task - g_task_slab);
-    g_is_free_flag[idx] = false;
+    atomic_store_explicit(&g_is_free_flag[idx], false, memory_order_relaxed);
     
     struct evbuffer* cached_buf = task->worker_buf;
     memset(task, 0, sizeof(http_task_t));
@@ -108,11 +109,11 @@ void task_pool_free(http_task_t* task) {
     }
 
     size_t idx = (size_t)(task - g_task_slab);
-    if (g_is_free_flag[idx]) {
+    bool expected = false;
+    if (!atomic_compare_exchange_strong_explicit(&g_is_free_flag[idx], &expected, true, memory_order_relaxed, memory_order_relaxed)) {
         (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
         abort();
     }
-    g_is_free_flag[idx] = true;
 
     if (tl_cache_count < TL_CACHE_SIZE) {
         tl_cache[tl_cache_count++] = task;
