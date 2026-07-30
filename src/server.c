@@ -372,6 +372,11 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     }
     
     p++;
+    
+    // NOTE: We intentionally hand-roll this integer parser instead of using `strtoul`.
+    // `strtoul` invokes locale-checking overhead, which degrades performance. Since 
+    // we are parsing simple ASCII digits directly from the kernel (/proc/self/statm),
+    // this manual loop is an intentional, significantly faster low-latency optimization.
     long resident = 0;
     while (*p >= '0' && *p <= '9') {
         resident = resident * 10 + (*p - '0');
