@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include "logger.h"
 #include <event2/buffer.h>
 
@@ -103,8 +104,12 @@ http_task_t* task_pool_alloc(void) {
 void task_pool_free(http_task_t* task) {
     if (!task) return;
     
-    if (task < g_task_slab || task >= (g_task_slab + g_pool_size)) {
-        free(task);
+    uintptr_t t_ptr = (uintptr_t)task;
+    uintptr_t slab_start = (uintptr_t)g_task_slab;
+    uintptr_t slab_end = slab_start + (g_pool_size * sizeof(http_task_t));
+
+    if (t_ptr < slab_start || t_ptr >= slab_end) {
+        LOG_ERROR("Out-of-bounds pointer passed to task_pool_free (%p). Ignoring.", (void*)task);
         return;
     }
 
