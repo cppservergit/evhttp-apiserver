@@ -192,8 +192,20 @@ static int init_server_metadata(size_t num_reactors) {
     }
     
     curl_global_init(CURL_GLOBAL_ALL);
-    SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &g_odbc_env);
-    SQLSetEnvAttr(g_odbc_env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+    
+    SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &g_odbc_env);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        LOG_FATAL("Failed to allocate ODBC environment handle");
+        return -1;
+    }
+    
+    ret = SQLSetEnvAttr(g_odbc_env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        LOG_FATAL("Failed to set ODBC version to v3");
+        SQLFreeHandle(SQL_HANDLE_ENV, g_odbc_env);
+        g_odbc_env = SQL_NULL_HENV;
+        return -1;
+    }
     
     g_page_size = sysconf(_SC_PAGE_SIZE);
     long pages = sysconf(_SC_PHYS_PAGES);
