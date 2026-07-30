@@ -162,9 +162,9 @@ bool is_valid_totp(const char* username, const char* totp_code) {
 }
 
 bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
-    if (!out_secret || out_maxlen < 57) return false;
+    if (!out_secret || out_maxlen < 33) return false;
 
-    unsigned char random_bytes[32];
+    unsigned char random_bytes[20];
     randombytes_buf(random_bytes, sizeof(random_bytes));
 
     char* b32 = NULL;
