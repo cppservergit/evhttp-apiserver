@@ -58,7 +58,7 @@ static _Atomic bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
-static _Atomic size_t g_max_payload_size = 5242880; // Default 5MB payload max
+static size_t g_max_payload_size = 5242880; // Default 5MB payload max
 
 static char* trim_whitespace(char* str) {
     while (isspace((unsigned char)*str)) str++;
@@ -155,9 +155,11 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
         if (g_num_threads != num_threads) {
             LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
         }
+        if (g_max_payload_size != max_payload) {
+            LOG_WARN("MAX_PAYLOAD_SIZE changed from %zu to %zu. Requires full restart.", g_max_payload_size, max_payload);
+        }
         atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
-        atomic_store_explicit(&g_max_payload_size, max_payload, memory_order_relaxed);
-        LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG and MAX_PAYLOAD_SIZE were updated.");
+        LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG was updated.");
         return;
     }
 
@@ -166,7 +168,7 @@ static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fa
     g_num_threads = num_threads;
     g_max_queue_size = max_queue;
     g_fast_pool_percentage = fast_pool;
-    atomic_store_explicit(&g_max_payload_size, max_payload, memory_order_relaxed);
+    g_max_payload_size = max_payload;
     
     atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
     
@@ -281,7 +283,7 @@ size_t config_get_fast_pool_percentage(void) {
 }
 
 size_t config_get_max_payload_size(void) {
-    return atomic_load_explicit(&g_max_payload_size, memory_order_relaxed);
+    return g_max_payload_size;
 }
 
 bool config_is_origin_allowed(const char* origin) {
