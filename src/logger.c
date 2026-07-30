@@ -49,7 +49,8 @@ static void* logger_thread_func(void* arg) {
         g_log_tail = (tail + 1) % RING_SIZE;
         pthread_mutex_unlock(&g_log_mutex);
         
-        if (write(STDERR_FILENO, entry->data, entry->len)) {}
+        ssize_t ignored = write(STDERR_FILENO, entry->data, entry->len);
+        (void)ignored;
         
         // Return pointer to free pool
         pthread_mutex_lock(&g_free_mutex);
@@ -175,7 +176,8 @@ void logger_log(LogLevel level, const char* format, ...) {
         if (entry && logger_enqueue_entry(entry, to_write)) {
             entry = nullptr;
         } else {
-            if (write(STDERR_FILENO, entry ? entry->data : sync_buf, (size_t)to_write)) {}
+            ssize_t ignored = write(STDERR_FILENO, entry ? entry->data : sync_buf, (size_t)to_write);
+            (void)ignored;
         }
     }
     
