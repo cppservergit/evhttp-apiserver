@@ -160,3 +160,34 @@ bool is_valid_totp(const char* username, const char* totp_code) {
     
     return (validate_ret >= 0);
 }
+
+bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
+    if (!out_secret || out_maxlen < 57) return false;
+
+    unsigned char random_bytes[32];
+    randombytes_buf(random_bytes, sizeof(random_bytes));
+
+    char* b32 = NULL;
+    size_t b32_len = 0;
+    int enc_ret = oath_base32_encode((const char*)random_bytes, sizeof(random_bytes), &b32, &b32_len);
+    
+    sodium_memzero(random_bytes, sizeof(random_bytes));
+
+    if (enc_ret != OATH_OK || !b32) {
+        return false;
+    }
+
+    if (b32_len >= out_maxlen) {
+        sodium_memzero(b32, b32_len);
+        free(b32);
+        return false;
+    }
+
+    strncpy(out_secret, b32, out_maxlen);
+    out_secret[out_maxlen - 1] = '\0';
+
+    sodium_memzero(b32, b32_len);
+    free(b32);
+
+    return true;
+}
