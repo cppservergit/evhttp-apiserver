@@ -231,7 +231,7 @@ const ValidationContext CustomerContext = {
 void rcustomer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
+    int* out_status, 
     struct evbuffer* out_buf
 ) {
     const char *customer_id = json_get_string(body, "id");
@@ -259,7 +259,7 @@ void rcustomer_handler(
 void customer_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
+    int* out_status, 
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
@@ -353,7 +353,7 @@ const ValidationContext SalesContext = {
 void sales_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
+    int* out_status, 
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
@@ -394,7 +394,7 @@ void shippers_handler(
 void products_handler(
     [[maybe_unused]] struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
+    int* out_status, 
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
@@ -776,7 +776,7 @@ void customers_handler(
 void sales_pgsql_handler(
     struct json_object* body, 
     [[maybe_unused]] void* arg, 
-    [[maybe_unused]] int* out_status, 
+    int* out_status, 
     struct evbuffer* out_buf
 ) {
     *out_status = HTTP_OK;
