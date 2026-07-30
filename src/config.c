@@ -71,7 +71,10 @@ static char* trim_whitespace(char* str) {
     return str;
 }
 
-static bool load_env_file(const char* filepath) {
+static bool parse_boolean_env(const char* env_val, bool default_val);
+static bool is_first_load = true;
+
+static bool load_env_file(const char* filepath, bool hot_reload) {
     FILE* f = fopen(filepath, "r");
     if (!f) return false;
 
@@ -86,7 +89,13 @@ static bool load_env_file(const char* filepath) {
         *eq = '\0';
         char* key = trim_whitespace(trimmed_line);
         char* val = trim_whitespace(eq + 1);
-        if (key[0] != '\0') {
+        
+        if (hot_reload) {
+            if (strcmp(key, "ACCESS_LOG") == 0) {
+                bool access_log = parse_boolean_env(val, true);
+                atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
+            }
+        } else if (key[0] != '\0') {
             setenv(key, val, 1);
         }
     }
@@ -94,15 +103,15 @@ static bool load_env_file(const char* filepath) {
     return true;
 }
 
-static bool locate_and_load_env(void) {
+static bool locate_and_load_env(bool hot_reload) {
     char exe_path[PATH_MAX] = {0};
     if (readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1) != -1) {
         char env_path[PATH_MAX] = {0};
         const char* dir = dirname(exe_path);
         (void)snprintf(env_path, sizeof(env_path), "%s/apiserver.env", dir);
-        if (load_env_file(env_path)) return true;
+        if (load_env_file(env_path, hot_reload)) return true;
     }
-    return load_env_file("apiserver.env");
+    return load_env_file("apiserver.env", hot_reload);
 }
 
 static bool parse_boolean_env(const char* env_val, bool default_val) {
@@ -114,7 +123,7 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
     return true;
 }
 
-static bool is_first_load = true;
+
 
 static void apply_initial_config_vars(void) {
     for (int i = 0; i < 4; i++) {
@@ -150,34 +159,14 @@ static void apply_initial_config_vars(void) {
     }
 }
 
-static void apply_config_updates(size_t num_threads, size_t max_queue, size_t fast_pool, bool access_log, size_t max_payload) {
+void config_reload(void) {
     if (!is_first_load) {
-        if (g_num_threads != num_threads) {
-            LOG_WARN("NUM_THREADS changed from %zu to %zu. Requires full restart.", g_num_threads, num_threads);
-        }
-        if (g_max_payload_size != max_payload) {
-            LOG_WARN("MAX_PAYLOAD_SIZE changed from %zu to %zu. Requires full restart.", g_max_payload_size, max_payload);
-        }
-        atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
+        locate_and_load_env(true);
         LOG_AUDIT("Configuration hot-reloaded successfully. Only ACCESS_LOG was updated.");
         return;
     }
 
-    apply_initial_config_vars();
-    
-    g_num_threads = num_threads;
-    g_max_queue_size = max_queue;
-    g_fast_pool_percentage = fast_pool;
-    g_max_payload_size = max_payload;
-    
-    atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
-    
-    is_first_load = false;
-    LOG_INFO("Configuration loaded successfully on startup.");
-}
-
-void config_reload(void) {
-    locate_and_load_env();
+    locate_and_load_env(false);
 
     const char* env_odbc = getenv("DB_0");
     const char* env_url = getenv("API_URL");
@@ -189,22 +178,21 @@ void config_reload(void) {
         if (!env_url)  LOG_ERROR("Missing required config: API_URL");
         if (!env_user) LOG_ERROR("Missing required config: API_USER");
         if (!env_pass) LOG_ERROR("Missing required config: API_PASS");
-        if (is_first_load) {
-            LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
-        } else {
-            LOG_ERROR("Missing configuration variables during hot-reload. Keeping previous configuration.");
-            return;
-        }
+        LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
     }
     
-    size_t num_threads = (size_t)safe_strtoul_env(getenv("NUM_THREADS"), 0, 1024);
-    size_t max_queue = (size_t)safe_strtoul_env(getenv("MAX_QUEUE_SIZE"), 10000, 1000000);
-    size_t fast_pool = (size_t)safe_strtoul_env(getenv("FAST_POOL_PERCENTAGE"), 25, 100);
-    size_t max_payload = (size_t)safe_strtoul_env(getenv("MAX_PAYLOAD_SIZE"), 5242880, 104857600);
+    g_num_threads = (size_t)safe_strtoul_env(getenv("NUM_THREADS"), 0, 1024);
+    g_max_queue_size = (size_t)safe_strtoul_env(getenv("MAX_QUEUE_SIZE"), 10000, 1000000);
+    g_fast_pool_percentage = (size_t)safe_strtoul_env(getenv("FAST_POOL_PERCENTAGE"), 25, 100);
+    g_max_payload_size = (size_t)safe_strtoul_env(getenv("MAX_PAYLOAD_SIZE"), 5242880, 104857600);
     
     bool access_log = parse_boolean_env(getenv("ACCESS_LOG"), true);
+    atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
     
-    apply_config_updates(num_threads, max_queue, fast_pool, access_log, max_payload);
+    apply_initial_config_vars();
+    
+    is_first_load = false;
+    LOG_INFO("Configuration loaded successfully on startup.");
 }
 
 void config_init(void) {
