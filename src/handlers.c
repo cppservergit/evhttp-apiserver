@@ -637,8 +637,10 @@ static void handle_login_failure(
             final_error = "Unknown provider error";
         }
         
-        char buf[256];
-        int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", final_error);
+        char escaped_error[256];
+        json_encode_string(final_error, escaped_error, sizeof(escaped_error));
+        char buf[512];
+        int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", escaped_error);
         evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
         json_object_put(remote_response);
     } else {
