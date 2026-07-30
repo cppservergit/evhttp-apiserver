@@ -10,23 +10,36 @@
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
 
+#define HTTP_CLIENT_MAX_RESPONSE_SIZE (5 * 1024 * 1024)
+
 struct memory_struct {
     char* memory;
     size_t size;
+    size_t capacity;
 };
 
 static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t realsize = size * nmemb;
     struct memory_struct* mem = (struct memory_struct*)userp;
 
-    char* ptr = realloc(mem->memory, mem->size + realsize + 1);
-    if (!ptr) {
-        free(mem->memory);
-        mem->memory = nullptr;
-        return 0; // Out of memory
+    if (mem->size + realsize > HTTP_CLIENT_MAX_RESPONSE_SIZE) {
+        return 0; // Abort transfer, exceeds max size
     }
 
-    mem->memory = ptr;
+    if (mem->size + realsize + 1 > mem->capacity) {
+        size_t new_cap = mem->capacity * 2;
+        if (new_cap < mem->size + realsize + 1) {
+            new_cap = mem->size + realsize + 1;
+        }
+        char* ptr = realloc(mem->memory, new_cap);
+        if (!ptr) {
+            free(mem->memory);
+            mem->memory = nullptr;
+            return 0; // Out of memory
+        }
+        mem->memory = ptr;
+        mem->capacity = new_cap;
+    }
     memcpy(&(mem->memory[mem->size]), contents, realsize);
     mem->size += realsize;
     mem->memory[mem->size] = 0;
@@ -92,6 +105,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
         return nullptr;
     }
     chunk->size = 0;
+    chunk->capacity = HTTP_CLIENT_CHUNK_SIZE;
     chunk->memory[0] = '\0';
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
