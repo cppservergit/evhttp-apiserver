@@ -82,11 +82,6 @@ static bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_i
         return true;
     }
     
-    // Always trust localhost proxies implicitly
-    if (strcmp(peer_ip, "127.0.0.1") == 0 || strcmp(peer_ip, "::1") == 0) {
-        return true;
-    }
-    
     return false;
 }
 
