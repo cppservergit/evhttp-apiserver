@@ -168,7 +168,9 @@ static void worker_process_task(http_task_t* task) {
         }
     }
     
-    task->status_txt = get_http_status_text(task->status_code);
+    if (!task->status_txt) {
+        task->status_txt = get_http_status_text(task->status_code);
+    }
 
     ThreadErrorLevel err_lvl = get_thread_error_level();
     if (err_lvl == TL_ERR_ERROR) {
