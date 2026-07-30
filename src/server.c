@@ -812,6 +812,5 @@ void* reactor_thread_logic(void* arg) {
 
     LOG_INFO("Reactor %zu stopped", worker_id);
     event_free(efd_ev);
-    close(efd);
     return nullptr;
 }

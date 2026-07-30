@@ -96,7 +96,7 @@ static bool worker_process_payload(http_task_t* task) {
 
     struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
     const char* ctype = evhttp_find_header(in_headers, "Content-Type");
-    if (ctype == nullptr || strncasecmp(ctype, "application/json", 16) != 0) {
+    if (ctype == nullptr || strncasecmp(ctype, "application/json", 16) != 0 || (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
         task->status_code = HTTP_BADREQUEST;
         task->status_txt = "Bad Request";
         const char* msg = "{\"error\":\"Invalid Content-Type. Expected application/json.\"}";
