@@ -24,6 +24,9 @@ constexpr char SERVER_ADDR[] = "0.0.0.0";
 /** \brief Initializes the global server state and ODBC environment. */
 int server_init_globals(size_t num_reactors);
 
+/** \brief Blocks until all reactor threads are fully initialized and registered. */
+void server_wait_startup_barrier(void);
+
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
 

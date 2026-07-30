@@ -85,6 +85,9 @@ http_task_t* task_pool_alloc(void) {
     
     if (!task) return nullptr;
     
+    size_t idx = (size_t)(task - g_task_slab);
+    g_is_free_flag[idx] = false;
+    
     struct evbuffer* cached_buf = task->worker_buf;
     memset(task, 0, sizeof(http_task_t));
     if (cached_buf) {
@@ -104,6 +107,13 @@ void task_pool_free(http_task_t* task) {
         return;
     }
 
+    size_t idx = (size_t)(task - g_task_slab);
+    if (g_is_free_flag[idx]) {
+        (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
+        abort();
+    }
+    g_is_free_flag[idx] = true;
+
     if (tl_cache_count < TL_CACHE_SIZE) {
         tl_cache[tl_cache_count++] = task;
         return;
@@ -116,14 +126,7 @@ void task_pool_free(http_task_t* task) {
         abort();
     }
     for (size_t i = 0; i < flush_count; i++) {
-        http_task_t* t = tl_cache[i];
-        size_t idx = (size_t)(t - g_task_slab);
-        if (g_is_free_flag[idx]) {
-            (void)fprintf(stderr, "FATAL: Double free detected in task_pool (idx %zu)\n", idx);
-            abort();
-        }
-        g_is_free_flag[idx] = true;
-        g_free_stack[g_stack_top++] = t;
+        g_free_stack[g_stack_top++] = tl_cache[i];
     }
     pthread_mutex_unlock(&g_pool_mutex);
     

@@ -118,6 +118,7 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
 
 static _Atomic(struct event_base*) *g_reactor_bases = nullptr;
 static size_t g_num_reactors = 0;
+static pthread_barrier_t g_startup_barrier;
 
 typedef struct {
     http_task_t* head;
@@ -229,6 +230,11 @@ static int init_reactor_queues(size_t bg_workers_count) {
         g_reactor_queues[i].eventfd = efd;
     }
 
+    if (pthread_barrier_init(&g_startup_barrier, nullptr, g_num_reactors + 1) != 0) {
+        LOG_FATAL("Failed to initialize startup barrier");
+        return -1;
+    }
+
     if (worker_pool_init(bg_workers_count) != 0) return -1;
     return 0;
 }
@@ -279,7 +285,12 @@ void server_cleanup_globals(void) {
     }
     free(g_reactor_queues);
     g_reactor_queues = nullptr;
+    pthread_barrier_destroy(&g_startup_barrier);
     odbc_cleanup();
+}
+
+void server_wait_startup_barrier(void) {
+    pthread_barrier_wait(&g_startup_barrier);
 }
 
 void server_shutdown_workers(void) {
@@ -794,6 +805,8 @@ void* reactor_thread_logic(void* arg) {
     unsigned long long tid = (unsigned long long)pthread_self();
     (void)snprintf(tl_tid_str, sizeof(tl_tid_str), "0x%llx", tid);
     LOG_INFO("Reactor %zu started", worker_id);
+    
+    pthread_barrier_wait(&g_startup_barrier);
     
     event_base_dispatch(base);
 

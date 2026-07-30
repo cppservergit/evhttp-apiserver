@@ -119,6 +119,8 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
+    server_wait_startup_barrier();
+
     wait_and_shutdown(&sigmask, threads, num_cores);
     return EXIT_SUCCESS;
 }
