@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
@@ -28,7 +29,7 @@ static int g_log_tail = 0;
 
 static pthread_mutex_t g_log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_log_cond = PTHREAD_COND_INITIALIZER;
-static bool g_logger_running = false;
+static atomic_bool g_logger_running = false;
 static pthread_t g_logger_thread;
 
 static void* logger_thread_func(void* arg) {
