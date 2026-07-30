@@ -172,12 +172,18 @@ void config_reload(void) {
     const char* env_url = getenv("API_URL");
     const char* env_user = getenv("API_USER");
     const char* env_pass = getenv("API_PASS");
+    const char* env_jwt_secret = getenv("JWT_SECRET");
+    const char* env_jwt_timeout = getenv("JWT_TIMEOUT_SECONDS");
+    const char* env_telemetry = getenv("TELEMETRY_API_KEY");
 
-    if (!env_odbc || !env_url || !env_user || !env_pass) {
+    if (!env_odbc || !env_url || !env_user || !env_pass || !env_jwt_secret || !env_jwt_timeout || !env_telemetry) {
         if (!env_odbc) LOG_ERROR("Missing required config: DB_0");
         if (!env_url)  LOG_ERROR("Missing required config: API_URL");
         if (!env_user) LOG_ERROR("Missing required config: API_USER");
         if (!env_pass) LOG_ERROR("Missing required config: API_PASS");
+        if (!env_jwt_secret) LOG_ERROR("Missing required config: JWT_SECRET");
+        if (!env_jwt_timeout) LOG_ERROR("Missing required config: JWT_TIMEOUT_SECONDS");
+        if (!env_telemetry) LOG_ERROR("Missing required config: TELEMETRY_API_KEY");
         LOG_FATAL("One or more required configuration variables are missing. Aborting startup.");
     }
     
