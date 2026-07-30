@@ -6,15 +6,6 @@
 #include <json-c/json.h>
 #include "json_util.h"
 
-static unsigned char b64_lookup(unsigned char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '-' || c == '+') return 62;
-    if (c == '_' || c == '/') return 63;
-    return 255;
-}
-
 void generate_uuidv4(char out[37]) {
     unsigned char bytes[16];
     
@@ -40,35 +31,12 @@ void generate_uuidv4(char out[37]) {
 static bool b64_decode_segment(const char* start, size_t len, char* out, size_t out_maxlen) {
     if (!out || out_maxlen == 0) return false;
     
-    size_t j = 0;
-    unsigned int n = 0;
-    int k = 0;
-    
-    for (size_t i = 0; i < len; i++) {
-        if (start[i] == '=') continue;
-        
-        unsigned char val = b64_lookup((unsigned char)start[i]);
-        if (val == 255) return false;
-        
-        n = (n << 6) | val;
-        k++;
-        
-        if (k == 4) {
-            if (j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
-            if (j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
-            if (j < out_maxlen - 1) out[j++] = (char)(n & 0xFF);
-            n = 0;
-            k = 0;
-        }
+    size_t bin_len = 0;
+    if (sodium_base642bin((unsigned char*)out, out_maxlen - 1, start, len, NULL, &bin_len, NULL, sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+        return false;
     }
     
-    if (k > 0) {
-        n <<= 6 * (4 - k);
-        if (k > 1 && j < out_maxlen - 1) out[j++] = (char)((n >> 16) & 0xFF);
-        if (k > 2 && j < out_maxlen - 1) out[j++] = (char)((n >> 8) & 0xFF);
-    }
-    
-    out[j] = '\0';
+    out[bin_len] = '\0';
     return true;
 }
 
