@@ -15,6 +15,7 @@ release: $(TARGET)
 $(TARGET): $(OBJ)
 	@mkdir -p bin
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	strip -s $@
 
 
 
