@@ -162,7 +162,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
 }
 
 bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
-    if (!out_secret || out_maxlen < 33) return false;
+    if (!out_secret || out_maxlen != 33) return false;
 
     unsigned char random_bytes[20];
     randombytes_buf(random_bytes, sizeof(random_bytes));
@@ -183,8 +183,8 @@ bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
         return false;
     }
 
-    memcpy(out_secret, b32, b32_len);
-    out_secret[b32_len] = '\0';
+    strncpy(out_secret, b32, out_maxlen);
+    out_secret[out_maxlen - 1] = '\0';
 
     sodium_memzero(b32, b32_len);
     free(b32);
