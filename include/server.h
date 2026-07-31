@@ -33,7 +33,13 @@ void server_shutdown_workers(void);
 /** \brief Safely cleans up all global resources deterministically without relying on atexit */
 void server_cleanup_globals(void);
 
-/** \brief Signature for a libevent HTTP request handler. */
+/** 
+ * \brief Signature for a libevent HTTP request handler. 
+ * \param body Parsed JSON request payload (null if GET/no body). Memory is managed by the server.
+ * \param user_arg Context pointer injected from RouteConfig (used for dependency injection/reusability).
+ * \param out_status Pointer to the HTTP status code (e.g. 200, 404). Handlers must set this.
+ * \param out_buf The libevent network buffer where response data should be appended directly.
+ */
 typedef void (*handler_fn)(struct json_object* body, void* user_arg, int* out_status, struct evbuffer* out_buf);
 
 /** \brief Security enforcement mode for an HTTP route. */
