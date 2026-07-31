@@ -157,20 +157,42 @@ EOF
 ### 4. Build and Run
 The project uses a standard Makefile. The compiled binary will be placed in the `bin/` directory.
 
-```bash
-# Compile the optimized release build
-make release
+Available Makefile targets:
+* `make release` - Compiles the optimized release build **with** debug symbols (`-g`) embedded for detailed core dumps.
+* `make slim` - Compiles the optimized release build without debug symbols and strips the binary for the smallest possible footprint.
+* `make clean` - Cleans the `obj/` and `bin/` directories.
+* `make asan` - Builds `bin/test_asan` using Google's AddressSanitizer (detects memory leaks and out-of-bounds access).
+* `make tsan` - Builds `bin/test_tsan` using Google's ThreadSanitizer (detects data races).
+* `make valgrind` - Builds `bin/test_valgrind` optimized for Valgrind profiling (`-O1` without sanitizers).
 
-# Run the server
+```bash
+# Example: Compile and run the release build
+make clean && make release
 ./bin/apiserver
 ```
 
-### 5. Advanced Targets & Testing
-To profile the architecture under load and verify correctness, you can build with Google Sanitizers:
+### 5. Core Dump Analysis (Ubuntu 24.04 / 26.04)
+By default, Ubuntu 24.04 and 26.04 use **Apport** to intercept crashes, which silently ignores binaries that aren't installed via a package manager (`apt`). If `apiserver` crashes during development, it will leave no trace.
+
+To configure Ubuntu to drop standard `core.<PID>` files directly into your working directory (e.g. `bin/`) for immediate analysis, run the following in your terminal:
+
 ```bash
-make asan   # Builds bin/test_asan (Address/Leak Sanitizer)
-make tsan   # Builds bin/test_tsan (Thread Sanitizer)
+# 1. Instruct the kernel to drop core files locally
+sudo sysctl -w kernel.core_pattern=core.%p
+
+# 2. Allow unlimited core dump sizes in your current shell session
+ulimit -c unlimited
 ```
+
+If the server crashes, a `core.<PID>` file will instantly appear. Ensure you built the server using `make release` (which includes debug symbols), and analyze the crash using GDB:
+
+```bash
+gdb ./bin/apiserver core.<PID>
+# Inside GDB, type 'bt' or 'bt full' to see the exact line of code that caused the crash.
+```
+
+### 6. Advanced Testing
+To profile the architecture under load and verify correctness, use the sanitizers described in the Makefile targets above.
 
 Additionally, the project features a comprehensive unit test suite for the declarative JSON input validation framework. The framework is aggressively tested against edge cases (type confusion, null-byte injection, leap year boundary traps, missing required fields, etc.) and maintains **100% code coverage**.
 
@@ -180,7 +202,7 @@ cd test
 make coverage
 ```
 
-### 6. Stress Testing
+### 7. Stress Testing
 A dedicated stress testing script is provided via `test/test.sh`. This script will bombard your running server with massive parallel `curl` requests to validate connection handling, thread-safety, and latency under extreme concurrency. Ensure the server is already compiled and running before executing the suite.
 ```bash
 cd test

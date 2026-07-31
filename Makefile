@@ -6,11 +6,15 @@ SRC = src/main.c src/server.c src/handlers.c src/http_client.c src/customer.c sr
 OBJ = $(patsubst src/%.c,obj/%.o,$(SRC))
 TARGET = bin/apiserver
 
-.PHONY: all release clean asan tsan valgrind
+.PHONY: all release slim clean asan tsan valgrind
 
 all: release
 
 release: $(TARGET)
+
+slim: CFLAGS := $(filter-out -g,$(CFLAGS))
+slim: $(TARGET)
+	strip -s $(TARGET)
 
 $(TARGET): $(OBJ)
 	@mkdir -p bin
