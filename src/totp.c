@@ -138,11 +138,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
         return false;
     }
 
-    oath_init();
-    
     int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, time(NULL), 30, 0, 2, NULL, NULL, OATH_TOTP_HMAC_SHA256, totp_code);
-    
-    oath_done();
     
     sodium_memzero(secret_b32, sizeof(secret_b32));
     sodium_memzero(secret_bin, secret_bin_len);

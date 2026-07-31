@@ -11,6 +11,7 @@
 #include <event2/event.h>
 #include <stdatomic.h>
 #include "worker_pool.h"
+#include <liboath/oath.h>
 
 static void setup_signals(sigset_t* sigmask) {
     sigemptyset(sigmask);
@@ -91,6 +92,7 @@ static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_co
     server_cleanup_globals();
     
     LOG_INFO("APIServer system halted safely. Network loops unlinked cleanly.");
+    oath_done();
     logger_shutdown();
 }
 
@@ -99,6 +101,8 @@ int main(void) {
         LOG_FATAL("Failed to initialize libevent pthreads.");
         return EXIT_FAILURE;
     }
+    
+    oath_init();
     
     logger_init();
     
