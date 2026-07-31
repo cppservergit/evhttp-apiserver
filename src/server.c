@@ -163,7 +163,7 @@ SQLHENV server_get_odbc_env(void) {
     return g_odbc_env;
 }
 
-static void odbc_cleanup(void) {
+static void cleanup_external_libraries(void) {
     if (g_odbc_env != SQL_NULL_HENV) {
         SQLFreeHandle(SQL_HANDLE_ENV, g_odbc_env);
         g_odbc_env = SQL_NULL_HENV;
@@ -280,13 +280,12 @@ void server_cleanup_globals(void) {
         free(g_reactor_stats);
         g_reactor_stats = nullptr;
     }
-    curl_global_cleanup();
     if (g_reactor_bases) {
         free(g_reactor_bases);
         g_reactor_bases = nullptr;
     }
     if (!g_reactor_queues) {
-        odbc_cleanup();
+        cleanup_external_libraries();
         return;
     }
     for (size_t i = 0; i < g_num_reactors; ++i) {
@@ -298,7 +297,7 @@ void server_cleanup_globals(void) {
     free(g_reactor_queues);
     g_reactor_queues = nullptr;
     pthread_barrier_destroy(&g_startup_barrier);
-    odbc_cleanup();
+    cleanup_external_libraries();
 }
 
 void server_wait_startup_barrier(void) {
