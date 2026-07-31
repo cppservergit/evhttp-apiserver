@@ -94,11 +94,6 @@ static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_co
 }
 
 int main(void) {
-    if (evthread_use_pthreads() != 0) {
-        LOG_FATAL("Failed to initialize libevent pthreads.");
-        return EXIT_FAILURE;
-    }
-    
     logger_init();
     
     config_init();

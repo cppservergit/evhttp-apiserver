@@ -14,6 +14,7 @@
 #include <curl/curl.h>
 #include <sodium.h>
 #include <liboath/oath.h>
+#include <event2/thread.h>
 #include "http_client.h"
 #include "customer.h"
 #include "jwt.h"
@@ -173,6 +174,11 @@ static void odbc_cleanup(void) {
 }
 
 static int init_server_metadata(size_t num_reactors) {
+    if (evthread_use_pthreads() != 0) {
+        LOG_FATAL("Failed to initialize libevent pthreads.");
+        return -1;
+    }
+    
     g_num_reactors = num_reactors;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
         (void)snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
