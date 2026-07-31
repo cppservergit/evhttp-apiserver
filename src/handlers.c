@@ -155,6 +155,20 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status,  stru
     
 }
 
+static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
+    char prefix[128];
+    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
+    if (remote_json) {
+        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
+        evbuffer_add(out_buf, json_str, strlen(json_str));
+        json_object_put(remote_json);
+    } else {
+        evbuffer_add(out_buf, "null", 4);
+    }
+    evbuffer_add(out_buf, "}", 1);
+}
+
 void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
     (void)body; (void)arg;
     
@@ -175,17 +189,7 @@ void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  str
     long http_code = 0;
     struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
 
-    char prefix[128];
-    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
-    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
-    if (remote_json) {
-        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
-        evbuffer_add(out_buf, json_str, strlen(json_str));
-        json_object_put(remote_json);
-    } else {
-        evbuffer_add(out_buf, "null", 4);
-    }
-    evbuffer_add(out_buf, "}", 1);
+    append_remote_json_response(out_buf, remote_json, http_code);
 }
 
 // --- Customer Handler & Schema ---
@@ -241,18 +245,7 @@ void rcustomer_handler(
     long http_code = 0;
     struct json_object* remote_json = customer_service_get_info(customer_id, &http_code);
     
-    char prefix[128];
-    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
-    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
-    if (remote_json) {
-        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
-        evbuffer_add(out_buf, json_str, strlen(json_str));
-        json_object_put(remote_json);
-    } else {
-        evbuffer_add(out_buf, "null", 4);
-    }
-    
-    evbuffer_add(out_buf, "}", 1);
+    append_remote_json_response(out_buf, remote_json, http_code);
 }
 
 

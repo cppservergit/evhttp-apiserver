@@ -9,6 +9,8 @@
 
 #include <pthread.h>
 
+void odbcutil_reset_connection(DbConnectionId db_id);
+
 static _Thread_local SQLHDBC tl_hdbc[MAX_DB_CONNECTIONS] = {0};
 static _Thread_local SQLHSTMT tl_hstmt[MAX_DB_CONNECTIONS] = {0};
 static pthread_key_t tl_hdbc_key;
@@ -17,15 +19,7 @@ static pthread_once_t tl_hdbc_key_once = PTHREAD_ONCE_INIT;
 static void tl_hdbc_destructor(void* arg) {
     (void)arg;
     for (int i = 0; i < MAX_DB_CONNECTIONS; i++) {
-        if (tl_hstmt[i] != SQL_NULL_HSTMT) {
-            SQLFreeHandle(SQL_HANDLE_STMT, tl_hstmt[i]);
-            tl_hstmt[i] = SQL_NULL_HSTMT;
-        }
-        if (tl_hdbc[i] != SQL_NULL_HDBC) {
-            SQLDisconnect(tl_hdbc[i]);
-            SQLFreeHandle(SQL_HANDLE_DBC, tl_hdbc[i]);
-            tl_hdbc[i] = SQL_NULL_HDBC;
-        }
+        odbcutil_reset_connection((DbConnectionId)i);
     }
 }
 
