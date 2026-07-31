@@ -75,7 +75,7 @@ void customer_handler(
     
     // 3. Execute the stored procedure and stream the results DIRECTLY to the network buffer.
     // The macro __func__ injects the caller name for robust telemetry.
-    if (!odbcutil_get_json("{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!odbcutil_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -97,7 +97,7 @@ Finally, wire the handler into the `libevent` routing table inside `server.c`. T
     .path = "/customer", 
     .allowed_method = EVHTTP_REQ_POST, 
     .validation_ctx = &CustomerContext, 
-    .handler = customer_handler, 
+    .handler = &customer_handler, 
     .user_arg = nullptr, 
     .is_fast = true,   // True if the query is extremely fast (< 5ms)
     .auth_mode = AUTH_JWT  // Require Bearer JWT Authentication
@@ -125,7 +125,7 @@ void shippers_handler(
     *out_status = HTTP_OK;
         
     // Execute parameterless query and stream directly to client
-    if (!odbcutil_get_json("{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
+    if (!odbcutil_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -139,7 +139,7 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
     .path = "/shippers", 
     .allowed_method = EVHTTP_REQ_GET, 
     .validation_ctx = nullptr, 
-    .handler = shippers_handler, 
+    .handler = &shippers_handler, 
     .user_arg = nullptr, 
     .is_fast = true, 
     .auth_mode = AUTH_JWT 

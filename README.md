@@ -256,7 +256,7 @@ void sales_handler(
         { .type = PARAM_STRING, .value = end_date }
     };
     
-    if (!odbcutil_get_json("{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!odbcutil_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
