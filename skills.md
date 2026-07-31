@@ -216,3 +216,34 @@ The worker thread wakes up, dequeues the task, and executes `worker_thread_main(
 ### 3. Thread-Local Error Engine
 To maintain strict thread safety across all layers without acquiring mutexes, the error engine relies on `_Thread_local` storage inside `thread_error.c`.
 When `odbcutil` loses a database connection, it calls `set_thread_error(TL_ERR_ERROR, "Database connection lost")`. Because the storage is `_Thread_local`, this completely avoids data races between concurrent workers. The `worker_thread_main` orchestration loop inspects and clears this error at the end of every task boundary.
+
+---
+
+## Diagnosing Core Dumps on Ubuntu
+
+When the API Server crashes with a segmentation fault or `abort()`, a core dump is generated. On modern Ubuntu systems running Apport, diagnosing these requires specific steps:
+
+### 1. Enabling Core Dumps in the Terminal
+By default, the Linux kernel sets the core file size limit to `0` for the user session, silently discarding all crashes. **Before** launching the server, you must bypass this limit:
+```bash
+ulimit -c unlimited
+./bin/apiserver
+```
+
+### 2. Finding the Crash Report
+Apport intercepts core dumps and wraps them in a compressed crash report file located in `/var/crash/`. Look for a file named similar to:
+`/var/crash/_home_ubuntu_evhttp_bin_apiserver.1000.crash`
+
+### 3. Extracting and Analyzing the Core Dump
+You cannot feed a `.crash` file directly to GDB. You must first extract the raw `CoreDump` file using `apport-unpack`:
+```bash
+# Extract the crash report to a temporary directory
+apport-unpack /var/crash/_home_ubuntu_evhttp_bin_apiserver.1000.crash /tmp/crash_report
+
+# Run GDB on the exact binary that generated the crash
+gdb -batch -ex "bt full" ./bin/apiserver /tmp/crash_report/CoreDump
+```
+
+### 4. Important Gotchas
+* **Recompilation Breakage:** Never run `make release` after a crash before extracting your backtrace. If the binary is modified, the memory offsets will shift, and GDB will fail to unwind the stack (showing `?? ()`).
+* **Debuginfod Timeouts:** If GDB hangs while saying `Downloading separate debug info for /lib/...`, it means Ubuntu's `debuginfod` servers are timing out. You can bypass this by running GDB locally without network symbols, which is usually sufficient to trace the crash back to our application code.
