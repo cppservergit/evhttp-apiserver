@@ -12,6 +12,8 @@
 #include <netinet/tcp.h>
 #include <sys/utsname.h>
 #include <curl/curl.h>
+#include <sodium.h>
+#include <liboath/oath.h>
 #include "http_client.h"
 #include "customer.h"
 #include "jwt.h"
@@ -20,7 +22,6 @@
 #include "login.h"
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <sodium.h>
 #include <sql.h>
 #include <sqlext.h>
 #include <errno.h>
@@ -166,6 +167,9 @@ static void odbc_cleanup(void) {
         SQLFreeHandle(SQL_HANDLE_ENV, g_odbc_env);
         g_odbc_env = SQL_NULL_HENV;
     }
+    
+    oath_done();
+    curl_global_cleanup();
 }
 
 static int init_server_metadata(size_t num_reactors) {
@@ -190,6 +194,8 @@ static int init_server_metadata(size_t num_reactors) {
         LOG_FATAL("Failed to initialize libsodium");
         return -1;
     }
+    
+    oath_init();
     
     curl_global_init(CURL_GLOBAL_ALL);
     
