@@ -221,7 +221,7 @@ When `odbcutil` loses a database connection, it calls `set_thread_error(TL_ERR_E
 
 ## Diagnosing Core Dumps on Ubuntu
 
-When the API Server crashes with a segmentation fault or `abort()`, a core dump is generated. On modern Ubuntu systems running Apport, diagnosing these requires specific steps:
+In the highly unlikely event that the API Server crashes with a segmentation fault or `abort()`, a core dump is generated. On modern Ubuntu systems running Apport, diagnosing these requires specific steps:
 
 ### 1. Enabling Core Dumps in the Terminal
 By default, the Linux kernel sets the core file size limit to `0` for the user session, silently discarding all crashes. **Before** launching the server, you must bypass this limit:
