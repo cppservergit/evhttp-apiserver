@@ -129,7 +129,21 @@ SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* fun
     return hstmt;
 }
 
+bool odbcutil_is_valid_stmt(SQLHSTMT hstmt) {
+    if (hstmt == SQL_NULL_HSTMT) return false;
+    for (int i = 0; i < MAX_DB_CONNECTIONS; i++) {
+        if (tl_hstmt[i] == hstmt) return true;
+    }
+    return false;
+}
 
+void odbcutil_cleanup_stmt(SQLHSTMT* stmt) {
+    if (odbcutil_is_valid_stmt(*stmt)) {
+        SQLFreeStmt(*stmt, SQL_CLOSE);
+        SQLFreeStmt(*stmt, SQL_RESET_PARAMS);
+        SQLFreeStmt(*stmt, SQL_UNBIND);
+    }
+}
 
 static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf, bool* has_data_written) {
     char chunk[ODBC_FETCH_CHUNK_SIZE];
@@ -283,7 +297,7 @@ typedef struct {
 
 static void metadata_destroy(ResultSetMetadata *meta) {
     if (!meta) return;
-    if (meta->hstmt != SQL_NULL_HSTMT) {
+    if (odbcutil_is_valid_stmt(meta->hstmt)) {
         SQLFreeStmt(meta->hstmt, SQL_UNBIND);
     }
     free(meta->cols);
