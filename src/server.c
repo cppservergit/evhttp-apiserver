@@ -239,14 +239,17 @@ static int init_reactor_queues(size_t bg_workers_count) {
         pthread_mutex_init(&g_reactor_queues[i].lock, nullptr);
         int efd = eventfd(0, EFD_NONBLOCK);
         if (efd < 0) {
-            LOG_FATAL("Failed to create eventfd for Reactor %zu", i);
+            char errbuf[256];
+            LOG_FATAL("Failed to create eventfd for Reactor %zu: %s", i, strerror_r(errno, errbuf, sizeof(errbuf)));
             return -1;
         }
         g_reactor_queues[i].eventfd = efd;
     }
 
-    if (pthread_barrier_init(&g_startup_barrier, nullptr, g_num_reactors + 1) != 0) {
-        LOG_FATAL("Failed to initialize startup barrier");
+    int rc_bar = pthread_barrier_init(&g_startup_barrier, nullptr, g_num_reactors + 1);
+    if (rc_bar != 0) {
+        char errbuf[256];
+        LOG_FATAL("Failed to initialize startup barrier: %s", strerror_r(rc_bar, errbuf, sizeof(errbuf)));
         return -1;
     }
 
@@ -818,7 +821,8 @@ void* reactor_thread_logic(void* arg) {
 
     evutil_socket_t fd = create_and_bind_socket((uint16_t)SERVER_PORT, SERVER_ADDR);
     if (fd < 0) {
-        LOG_FATAL("Failed to bind socket for Reactor %zu", worker_id);
+        char errbuf[256];
+        LOG_FATAL("Failed to bind socket for Reactor %zu: %s", worker_id, strerror_r(errno, errbuf, sizeof(errbuf)));
         atomic_store_explicit(&g_startup_failed, true, memory_order_release);
         event_free(efd_ev);
         atomic_store_explicit(&g_reactor_bases[worker_id], nullptr, memory_order_release);
