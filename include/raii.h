@@ -27,3 +27,12 @@ static inline void cleanup_json_object(struct json_object** obj) { if (*obj != n
 #define raii_json_tokener [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener*
 /** \brief Scoped auto-cleanup for json_object. */
 #define raii_json_object [[gnu::cleanup(cleanup_json_object)]] struct json_object*
+
+#include <stdio.h>
+static inline void cleanup_file(FILE** fp) { if (*fp != nullptr) fclose(*fp); }
+static inline void cleanup_free(void* p) { void** ptr = (void**)p; if (*ptr) free(*ptr); }
+
+/** \brief Scoped auto-cleanup for FILE*. */
+#define raii_file [[gnu::cleanup(cleanup_file)]] FILE*
+/** \brief Scoped auto-cleanup for malloc'd pointers. */
+#define raii_free [[gnu::cleanup(cleanup_free)]]

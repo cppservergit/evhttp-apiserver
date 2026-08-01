@@ -59,6 +59,7 @@ static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
 static size_t g_max_payload_size = 5242880; // Default 5MB payload max
+static char g_uploads_dir[MAX_CONFIG_STR] = {0};
 
 static char* trim_whitespace(char* str) {
     while (isspace((unsigned char)*str)) str++;
@@ -170,6 +171,9 @@ static void apply_initial_config_vars(void) {
     if (getenv("JWT_TIMEOUT_SECONDS")) {
         g_jwt_timeout_seconds = safe_strtol_env(getenv("JWT_TIMEOUT_SECONDS"), 3600, 1, 86400 * 30);
     }
+    
+    if (getenv("UPLOADS_DIR")) (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "%s", getenv("UPLOADS_DIR"));
+    else (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "/tmp");
 }
 
 void config_reload(void) {
@@ -277,6 +281,11 @@ void config_get_telemetry_api_key(char* out, size_t max_len) {
 void config_get_trust_proxy_ip(char* buf, size_t max_len) {
     if (!buf || max_len == 0) return;
     (void)snprintf(buf, max_len, "%s", g_trust_proxy_ip);
+}
+
+void config_get_uploads_dir(char* out, size_t max_len) {
+    if (!out || max_len == 0) return;
+    (void)snprintf(out, max_len, "%s", g_uploads_dir);
 }
 
 long config_get_jwt_timeout_seconds(void) {

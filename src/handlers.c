@@ -855,47 +855,38 @@ void upload_handler(
     char uuid_str[37];
     generate_uuidv4(uuid_str);
     
-    const char* uploads_dir = getenv("UPLOADS_DIR");
-    if (!uploads_dir) {
-        uploads_dir = "/tmp";
-    }
+    char uploads_dir[MAX_CONFIG_STR];
+    config_get_uploads_dir(uploads_dir, sizeof(uploads_dir));
     
-    char out_path[512];
+    char out_path[MAX_CONFIG_STR + 64];
     (void)snprintf(out_path, sizeof(out_path), "%s/%s", uploads_dir, uuid_str);
     
     size_t b64_len = strlen(blob);
     size_t bin_maxlen = (b64_len / 4) * 3 + 4; // Add padding buffer
-    unsigned char* bin_buf = malloc(bin_maxlen);
+    raii_free unsigned char* bin_buf = malloc(bin_maxlen);
     if (!bin_buf) {
-        const char* msg = "{\"error\":\"Out of memory\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
+        LOG_ERROR("Out of memory allocating %zu bytes for upload blob", bin_maxlen);
         return;
     }
     
     size_t bin_len = 0;
     if (sodium_base642bin(bin_buf, bin_maxlen, blob, b64_len, nullptr, &bin_len, nullptr, sodium_base64_VARIANT_ORIGINAL) != 0) {
-        free(bin_buf);
+        LOG_WARN("User %s provided invalid base64 encoding for upload", user ? user : "anonymous");
         const char* msg = "{\"error\":\"Invalid base64 encoding\"}";
         *out_status = HTTP_BADREQUEST;
         evbuffer_add(out_buf, msg, strlen(msg));
         return;
     }
     
-    FILE* fp = fopen(out_path, "wb");
+    raii_file fp = fopen(out_path, "wb");
     if (!fp) {
-        free(bin_buf);
-        const char* msg = "{\"error\":\"Failed to save file\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
+        LOG_ERROR("Failed to open upload destination %s for writing", out_path);
         return;
     }
     
     size_t written = fwrite(bin_buf, 1, bin_len, fp);
-    fclose(fp);
-    free(bin_buf);
-    
     if (written != bin_len) {
-        const char* msg = "{\"error\":\"Failed to save file fully\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
+        LOG_ERROR("Failed to write full %zu bytes to %s", bin_len, out_path);
         return;
     }
     

@@ -82,3 +82,7 @@ void config_get_trust_proxy_ip(char* buf, size_t max_len);
 
 /** \brief Checks if a CORS Origin is allowed by configuration. */
 bool config_is_origin_allowed(const char* origin);
+
+/** \brief Retrieves the uploads directory. */
+void config_get_uploads_dir(char* out, size_t max_len);
+
