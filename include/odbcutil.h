@@ -63,6 +63,13 @@ void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);
 
-/** \brief Frees the statement and returns the connection to the thread-local pool. The connection remains open by design. */
-void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt);
+static inline void cleanup_odbc_stmt(SQLHSTMT* stmt) {
+    if (*stmt != SQL_NULL_HSTMT) {
+        SQLFreeStmt(*stmt, SQL_CLOSE);
+        SQLFreeStmt(*stmt, SQL_RESET_PARAMS);
+        SQLFreeStmt(*stmt, SQL_UNBIND);
+    }
+}
 
+/** \brief Scoped auto-cleanup for ODBC statement handle. */
+#define raii_odbc_stmt [[gnu::cleanup(cleanup_odbc_stmt)]] SQLHSTMT

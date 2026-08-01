@@ -15,11 +15,8 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLHDBC hdbc = odbcutil_connect(DB_0);
     if (hdbc == SQL_NULL_HDBC) return HTTP_INTERNAL;
     
-    SQLHSTMT hstmt = odbcutil_alloc_stmt(DB_0, hdbc, __func__);
-    if (!hstmt) {
-        odbcutil_disconnect(hdbc, nullptr);
-        return HTTP_INTERNAL;
-    }
+    raii_odbc_stmt hstmt = odbcutil_alloc_stmt(DB_0, hdbc, __func__);
+    if (!hstmt) return HTTP_INTERNAL;
     
     SQLLEN cbUser = SQL_NTS;
     SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)user, 0, &cbUser);
@@ -27,28 +24,24 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL cpp_get_secret(?)}", SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         odbcutil_set_error(DB_0, SQL_HANDLE_STMT, hstmt, "Failed to execute cpp_get_secret");
-        odbcutil_disconnect(hdbc, hstmt);
         return HTTP_INTERNAL;
     }
     
     SQLRETURN fetch_ret = SQLFetch(hstmt);
     if (fetch_ret != SQL_SUCCESS && fetch_ret != SQL_SUCCESS_WITH_INFO) {
-        odbcutil_disconnect(hdbc, hstmt);
         return HTTP_NOTFOUND;
     }
     
     SQLLEN len = 0;
     SQLRETURN get_ret = SQLGetData(hstmt, 1, SQL_C_CHAR, out_secret, (SQLLEN)max_len, &len);
     
-    int status = HTTP_NOTFOUND;
     if (get_ret == SQL_SUCCESS) {
-        if (len != SQL_NULL_DATA && len > 0) status = HTTP_OK;
+        if (len != SQL_NULL_DATA && len > 0) return HTTP_OK;
     } else if (get_ret == SQL_SUCCESS_WITH_INFO) {
         odbcutil_set_error(DB_0, SQL_HANDLE_STMT, hstmt, "Secret fetch truncated or warning");
     }
     
-    odbcutil_disconnect(hdbc, hstmt);
-    return status;
+    return HTTP_NOTFOUND;
 }
 
 static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {

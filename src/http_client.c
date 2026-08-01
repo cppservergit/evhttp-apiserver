@@ -18,6 +18,17 @@ struct memory_struct {
     size_t capacity;
 };
 
+static inline void cleanup_memory_struct(struct memory_struct* mem) {
+    if (mem->memory) free(mem->memory);
+}
+#define raii_memory_struct [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct
+
+static inline void cleanup_curl_slist(struct curl_slist** slist) {
+    if (*slist) curl_slist_free_all(*slist);
+}
+#define raii_curl_slist [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist*
+
+
 static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* userp) {
     if (nmemb && size > SIZE_MAX / nmemb) return 0;
     size_t realsize = size * nmemb;
@@ -129,10 +140,8 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     for (int i = 0; i < num_headers; ++i) {
         struct curl_slist* temp = curl_slist_append(chunk_headers, headers[i]);
         if (!temp) {
-            curl_slist_free_all(chunk_headers);
-            free(chunk->memory);
-            chunk->memory = nullptr;
             set_thread_error(TL_ERR_ERROR, "Out of memory allocating curl headers");
+            *out_headers = chunk_headers; // So RAII can free the ones successfully allocated
             return nullptr;
         }
         chunk_headers = temp;
@@ -183,21 +192,15 @@ static struct json_object* do_http_request(const char* base_url, const char* uri
         return nullptr;
     }
 
-    struct memory_struct chunk;
-    struct curl_slist* chunk_headers = nullptr;
+    raii_memory_struct chunk = {0};
+    raii_curl_slist chunk_headers = nullptr;
     CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
     if (!curl) return nullptr;
 
     CURLcode res = curl_easy_perform(curl);
-    
-    if (chunk_headers) {
-        curl_slist_free_all(chunk_headers);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
-    }
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
 
-    struct json_object* json_response = parse_curl_response(curl, res, url, &chunk, out_http_code);
-    free(chunk.memory);
-    return json_response;
+    return parse_curl_response(curl, res, url, &chunk, out_http_code);
 }
 
 struct json_object* http_client_get_json(const char* base_url, const char* uri, const char** headers, int num_headers, long* out_http_code) {

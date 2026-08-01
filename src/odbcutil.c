@@ -129,14 +129,7 @@ SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* fun
     return hstmt;
 }
 
-void odbcutil_disconnect(SQLHDBC hdbc, SQLHSTMT hstmt) {
-    (void)hdbc; // Connection remains pooled persistently in tl_hdbc
-    if (hstmt != SQL_NULL_HSTMT) {
-        SQLFreeStmt(hstmt, SQL_CLOSE);        // Close open cursors
-        SQLFreeStmt(hstmt, SQL_RESET_PARAMS); // Clear bound parameters
-        SQLFreeStmt(hstmt, SQL_UNBIND);       // Clear bound columns
-    }
-}
+
 
 static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf, bool* has_data_written) {
     char chunk[ODBC_FETCH_CHUNK_SIZE];
@@ -247,28 +240,23 @@ static bool odbcutil_execute_and_fetch(
     SQLHDBC hdbc = odbcutil_connect(db_id);
     if (hdbc == SQL_NULL_HDBC) return false;
     
-    SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    raii_odbc_stmt hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
     if (!hstmt) return false;
     
     for (size_t i = 0; i < param_count; ++i) {
         if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &params[i])) {
-            odbcutil_disconnect(hdbc, hstmt);
             return false;
         }
     }
     
-    bool success = false;
-    
     if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS))) {
-        success = fetch_cb(db_id, hstmt, func_name, out_buf);
-    } else {
-        char err_msg[256];
-        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
-        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+        return fetch_cb(db_id, hstmt, func_name, out_buf);
     }
     
-    odbcutil_disconnect(hdbc, hstmt);
-    return success;
+    char err_msg[256];
+    (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect in %s", func_name);
+    odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+    return false;
 }
 
 bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
