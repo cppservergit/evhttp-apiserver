@@ -3,6 +3,7 @@
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <pthread.h>
 #include <event2/http.h>
 #include "thread_error.h"
@@ -18,6 +19,7 @@ struct memory_struct {
 };
 
 static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* userp) {
+    if (nmemb && size > SIZE_MAX / nmemb) return 0;
     size_t realsize = size * nmemb;
     struct memory_struct* mem = (struct memory_struct*)userp;
 
@@ -34,6 +36,8 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
         if (!ptr) {
             free(mem->memory);
             mem->memory = nullptr;
+            mem->size = 0;
+            mem->capacity = 0;
             return 0; // Out of memory
         }
         mem->memory = ptr;
@@ -67,6 +71,9 @@ static void apply_curl_defaults(CURL* curl) {
     // Explicitly pin secure TLS verification
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    
+    // Set custom User-Agent
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "evhttp-apiserver/1.0");
     
     // Require TLS 1.2 or higher
     curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT);

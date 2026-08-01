@@ -118,6 +118,18 @@ int main(void) {
 
     server_wait_startup_barrier();
 
+    if (server_did_startup_fail()) {
+        LOG_FATAL("One or more reactors failed to start. Shutting down immediately.");
+        server_shutdown_workers();
+        for (size_t i = 0; i < (size_t)num_cores; ++i) {
+            pthread_join(threads[i], nullptr);
+        }
+        free(threads);
+        server_cleanup_globals();
+        logger_shutdown();
+        return EXIT_FAILURE;
+    }
+
     wait_and_shutdown(&sigmask, threads, num_cores);
     return EXIT_SUCCESS;
 }

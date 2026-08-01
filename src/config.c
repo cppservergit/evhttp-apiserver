@@ -89,6 +89,14 @@ static bool load_env_file(const char* filepath, bool hot_reload) {
         *eq = '\0';
         char* key = trim_whitespace(trimmed_line);
         char* val = trim_whitespace(eq + 1);
+        if (val[0] == '"' || val[0] == '\'') {
+            char quote = val[0];
+            val++;
+            size_t len = strlen(val);
+            if (len > 0 && val[len - 1] == quote) {
+                val[len - 1] = '\0';
+            }
+        }
         
         if (hot_reload) {
             if (strcmp(key, "ACCESS_LOG") == 0) {
@@ -125,6 +133,11 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
 
 
 
+// WARNING: This function updates multiple static string buffers non-atomically.
+// It is currently thread-safe only because it is called during startup
+// (or hot reload of ACCESS_LOG which bypasses this). If config reloading
+// is expanded to these variables in the future, explicit synchronization
+// (e.g. read-write locks or RCU) MUST be implemented to prevent race conditions.
 static void apply_initial_config_vars(void) {
     for (int i = 0; i < 4; i++) {
         char env_key[8];
@@ -194,8 +207,18 @@ void config_reload(void) {
     
     bool access_log = parse_boolean_env(getenv("ACCESS_LOG"), true);
     atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
-    
+
     apply_initial_config_vars();
+    
+    unsetenv("JWT_SECRET");
+    unsetenv("API_PASS");
+    unsetenv("REMOTE_API_KEY");
+    unsetenv("TELEMETRY_API_KEY");
+    for (int i = 0; i < 4; i++) {
+        char env_key[8];
+        (void)snprintf(env_key, sizeof(env_key), "DB_%d", i);
+        unsetenv(env_key);
+    }
     
     is_first_load = false;
     LOG_INFO("Configuration loaded successfully on startup.");

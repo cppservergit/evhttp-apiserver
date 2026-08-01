@@ -4,6 +4,7 @@
 #include "thread_error.h"
 #include "server.h"
 #include "config.h"
+#include "logger.h"
 #include <string.h>
 #include <strings.h>
 
@@ -24,7 +25,9 @@ static void tl_hdbc_destructor(void* arg) {
 }
 
 static void make_tl_hdbc_key(void) {
-    pthread_key_create(&tl_hdbc_key, tl_hdbc_destructor);
+    if (pthread_key_create(&tl_hdbc_key, tl_hdbc_destructor) != 0) {
+        LOG_FATAL("Failed to create pthread key for ODBC connections");
+    }
 }
 
 void odbcutil_reset_connection(DbConnectionId db_id) {
@@ -45,10 +48,26 @@ void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE
     SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH];
     SQLINTEGER nativeError;
     SQLSMALLINT msgLen;
+    SQLSMALLINT rec_num = 1;
 
-    if (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
-        set_thread_error(TL_ERR_ERROR, "%s | ODBC Error [%s]: %s", context_msg, sqlState, msg);
+    char full_msg[1024] = {0};
+    int offset = 0;
+    bool is_disconnect = false;
+
+    while (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, rec_num, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
+        if (offset < (int)sizeof(full_msg) - 1) {
+            int written = snprintf(full_msg + offset, sizeof(full_msg) - offset, "[%s] %s; ", sqlState, msg);
+            if (written > 0) offset += written;
+        }
         if (strncmp((char*)sqlState, "08S01", 5) == 0 || strncmp((char*)sqlState, "08003", 5) == 0) {
+            is_disconnect = true;
+        }
+        rec_num++;
+    }
+
+    if (rec_num > 1) {
+        set_thread_error(TL_ERR_ERROR, "%s | ODBC Error: %s", context_msg, full_msg);
+        if (is_disconnect) {
             set_thread_error(TL_ERR_ERROR, "Database connection lost. Resetting thread-local connection pool.");
             odbcutil_reset_connection(db_id);
         }
@@ -72,7 +91,12 @@ SQLHDBC odbcutil_connect(DbConnectionId db_id) {
         odbcutil_set_error(db_id, SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
         return SQL_NULL_HDBC;
     }
-    SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
+    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)5, 0))) {
+        LOG_WARN("ODBC driver does not support SQL_ATTR_LOGIN_TIMEOUT");
+    }
+    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_CONNECTION_TIMEOUT, (SQLPOINTER)30, 0))) {
+        LOG_WARN("ODBC driver does not support SQL_ATTR_CONNECTION_TIMEOUT");
+    }
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
     SQLSMALLINT out_conn_len;
     if (!SQL_SUCCEEDED(SQLDriverConnect(tl_hdbc[db_id], nullptr, (SQLCHAR*)conn_str, SQL_NTS, out_conn_str, sizeof(out_conn_str), &out_conn_len, SQL_DRIVER_NOPROMPT))) {
@@ -98,7 +122,9 @@ SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* fun
         odbcutil_reset_connection(db_id);
         return SQL_NULL_HSTMT;
     }
-    SQLSetStmtAttr(hstmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)5, 0);
+    if (!SQL_SUCCEEDED(SQLSetStmtAttr(hstmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)5, 0))) {
+        LOG_WARN("ODBC driver does not support SQL_ATTR_QUERY_TIMEOUT");
+    }
     tl_hstmt[db_id] = hstmt;
     return hstmt;
 }
@@ -410,7 +436,7 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
         const ColumnDescriptor *col = &meta->cols[i];
 
         evbuffer_add(buf, "\"", 1);
-        evbuffer_add(buf, col->name, col->name_len);
+        evbuffer_append_escaped_str(buf, (const char*)col->name, col->name_len);
         evbuffer_add(buf, "\":", 2);
 
         if (col->ind == SQL_NULL_DATA) {

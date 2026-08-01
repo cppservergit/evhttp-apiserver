@@ -69,6 +69,7 @@ time_t jwt_get_expiration(const char* jwt) {
         }
         json_object_put(jwt_obj);
     }
+    sodium_memzero(payload_json, sizeof(payload_json));
     return exp;
 }
 
@@ -223,6 +224,8 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
 
     char payload_json[8192];
     if (!jwt_decode_payload(token, payload_json, sizeof(payload_json))) return JWT_ERR_INVALID;
-
-    return jwt_parse_payload(payload_json, out_username, out_uname_size, out_session_id, out_sess_size);
+    
+    int result = jwt_parse_payload(payload_json, out_username, out_uname_size, out_session_id, out_sess_size);
+    sodium_memzero(payload_json, sizeof(payload_json));
+    return result;
 }

@@ -5,6 +5,8 @@
  * \brief Thread-local error state management for lock-free error handling.
  */
 
+#define MAX_ERR_MSG_LEN 1024
+
 /** \brief Error severity levels for thread-local error state. */
 typedef enum {
     TL_ERR_NONE = 0,

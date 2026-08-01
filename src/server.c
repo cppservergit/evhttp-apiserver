@@ -22,7 +22,6 @@
 #include "config.h"
 #include "login.h"
 #include <arpa/inet.h>
-#include <unistd.h>
 #include <sql.h>
 #include <sqlext.h>
 #include <errno.h>
@@ -30,7 +29,6 @@
 #include <time.h>
 #include <string.h>
 #include <stdatomic.h>
-#include <event2/thread.h>
 #include <event2/bufferevent.h>
 #include "worker_pool.h"
 #include "task_pool.h"
@@ -121,6 +119,11 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
 static _Atomic(struct event_base*) *g_reactor_bases = nullptr;
 static size_t g_num_reactors = 0;
 static pthread_barrier_t g_startup_barrier;
+static _Atomic bool g_startup_failed = false;
+
+bool server_did_startup_fail(void) {
+    return atomic_load_explicit(&g_startup_failed, memory_order_acquire);
+}
 
 typedef struct {
     http_task_t* head;
@@ -221,7 +224,7 @@ static int init_server_metadata(size_t num_reactors) {
     
     g_page_size = sysconf(_SC_PAGE_SIZE);
     long pages = sysconf(_SC_PHYS_PAGES);
-    g_total_ram_kb = (uint64_t)((pages * g_page_size) / 1024);
+    g_total_ram_kb = (((uint64_t)pages * (uint64_t)g_page_size) / 1024);
     return 0;
 }
 
@@ -289,7 +292,7 @@ void server_cleanup_globals(void) {
         return;
     }
     for (size_t i = 0; i < g_num_reactors; ++i) {
-        if (g_reactor_queues[i].eventfd > 0) {
+        if (g_reactor_queues[i].eventfd >= 0) {
             close(g_reactor_queues[i].eventfd);
         }
         pthread_mutex_destroy(&g_reactor_queues[i].lock);
@@ -451,7 +454,9 @@ void server_notify_task_done(void* arg) {
         uint64_t one = 1;
         while (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
             if (errno == EINTR) continue;
-            LOG_ERROR("Failed to write to reactor eventfd: %s", strerror(errno));
+            char err_buf[256];
+            char* err_str = strerror_r(errno, err_buf, sizeof(err_buf));
+            LOG_ERROR("Failed to write to reactor eventfd: %s", err_str);
             break;
         }
     }
@@ -476,21 +481,21 @@ static void send_http_reply(http_task_t* task, struct evbuffer* out_buf, struct 
         } else if (!evhttp_find_header(headers, "Content-Type")) {
             evhttp_add_header(headers, "Content-Type", "application/json");
         }
-        evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, out_buf);
     } else if (task->status_code >= 400) {
         if (!evhttp_find_header(headers, "Content-Type")) evhttp_add_header(headers, "Content-Type", "application/json");
         char err_str[256];
         if (task->status_code != HTTP_INTERNAL) {
             int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"%s\"}", task->status_txt ? task->status_txt : "Error");
             evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
-            evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+            evhttp_send_reply(task->req, task->status_code, task->status_txt, out_buf);
         } else {
             int len = snprintf(err_str, sizeof(err_str), "{\"error\":\"Internal Server Error\"}");
             evbuffer_add(out_buf, err_str, len < (int)sizeof(err_str) ? (size_t)len : sizeof(err_str) - 1);
-            evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", nullptr);
+            evhttp_send_reply(task->req, HTTP_INTERNAL, "Internal Server Error", out_buf);
         }
     } else {
-        evhttp_send_reply(task->req, task->status_code, task->status_txt, nullptr);
+        evhttp_send_reply(task->req, task->status_code, task->status_txt, out_buf);
     }
 }
 
@@ -682,6 +687,7 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
         task_pool_free(task);
+        evhttp_request_free(req);
     }
 }
 
@@ -796,7 +802,11 @@ void* reactor_thread_logic(void* arg) {
     tl_reactor_id = worker_id;
     
     raii_event_base base = create_optimized_event_base();
-    if (base == nullptr) return nullptr;
+    if (base == nullptr) {
+        atomic_store_explicit(&g_startup_failed, true, memory_order_release);
+        pthread_barrier_wait(&g_startup_barrier);
+        return nullptr;
+    }
     
     atomic_store_explicit(&g_reactor_bases[worker_id], base, memory_order_release);
 
@@ -808,6 +818,10 @@ void* reactor_thread_logic(void* arg) {
     evutil_socket_t fd = create_and_bind_socket((uint16_t)SERVER_PORT, SERVER_ADDR);
     if (fd < 0) {
         LOG_FATAL("Failed to bind socket for Reactor %zu", worker_id);
+        atomic_store_explicit(&g_startup_failed, true, memory_order_release);
+        event_free(efd_ev);
+        atomic_store_explicit(&g_reactor_bases[worker_id], nullptr, memory_order_release);
+        pthread_barrier_wait(&g_startup_barrier);
         return nullptr;
     }
 
@@ -815,6 +829,10 @@ void* reactor_thread_logic(void* arg) {
     if (http == nullptr) {
         LOG_FATAL("Failed to configure HTTP server for Reactor %zu", worker_id);
         close(fd);
+        atomic_store_explicit(&g_startup_failed, true, memory_order_release);
+        event_free(efd_ev);
+        atomic_store_explicit(&g_reactor_bases[worker_id], nullptr, memory_order_release);
+        pthread_barrier_wait(&g_startup_barrier);
         return nullptr;
     }
 
@@ -823,6 +841,14 @@ void* reactor_thread_logic(void* arg) {
     LOG_INFO("Reactor %zu started", worker_id);
     
     pthread_barrier_wait(&g_startup_barrier);
+    
+    if (atomic_load_explicit(&g_startup_failed, memory_order_acquire)) {
+        LOG_INFO("Reactor %zu aborting due to startup failure in another reactor", worker_id);
+        close(fd);
+        event_free(efd_ev);
+        atomic_store_explicit(&g_reactor_bases[worker_id], nullptr, memory_order_release);
+        return nullptr;
+    }
     
     event_base_dispatch(base);
 

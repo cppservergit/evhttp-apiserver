@@ -10,7 +10,8 @@
 #include "config.h"
 
 #include "jwt.h"
-
+#include <sodium.h>
+#include "json_util.h"
 struct jwt_cache {
     char token[1024];
     time_t expires_at;
@@ -33,9 +34,17 @@ static struct json_object* execute_login_request(void) {
     config_get_api_pass(api_pass, sizeof(api_pass));
     config_get_api_url(api_url, sizeof(api_url));
     
-    char body_str[512];
-    int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", api_user, api_pass);
+    char escaped_user[256];
+    char escaped_pass[1024];
+    json_encode_string(api_user, escaped_user, sizeof(escaped_user));
+    json_encode_string(api_pass, escaped_pass, sizeof(escaped_pass));
+
+    char body_str[2048];
+    int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
     if (len >= (int)sizeof(body_str)) {
+        sodium_memzero(api_pass, sizeof(api_pass));
+        sodium_memzero(escaped_pass, sizeof(escaped_pass));
+        sodium_memzero(body_str, sizeof(body_str));
         set_thread_error(TL_ERR_ERROR, "Login payload truncated");
         return nullptr;
     }
@@ -44,6 +53,10 @@ static struct json_object* execute_login_request(void) {
     long http_code = 0;
     
     struct json_object* login_response = http_client_post_json(api_url, "/api/login", body_str, headers, 1, &http_code);
+    
+    sodium_memzero(api_pass, sizeof(api_pass));
+    sodium_memzero(escaped_pass, sizeof(escaped_pass));
+    sodium_memzero(body_str, sizeof(body_str));
     
     if (http_code != 200 || !login_response) {
         if (login_response) json_object_put(login_response);

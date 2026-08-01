@@ -55,7 +55,9 @@ static void* logger_thread_func(void* arg) {
         
         // Return pointer to free pool
         pthread_mutex_lock(&g_free_mutex);
-        g_free_stack[g_free_top++] = entry;
+        if (g_free_top < POOL_SIZE) {
+            g_free_stack[g_free_top++] = entry;
+        }
         pthread_mutex_unlock(&g_free_mutex);
     }
     return nullptr;

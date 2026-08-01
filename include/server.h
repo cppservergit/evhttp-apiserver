@@ -19,13 +19,15 @@ SQLHENV server_get_odbc_env(void);
 
 constexpr int SERVER_PORT = 8080;
 constexpr char SERVER_ADDR[] = "0.0.0.0";
-#define MAX_ERR_MSG_LEN 256
 
 /** \brief Initializes the global server state and ODBC environment. */
 int server_init_globals(size_t num_reactors);
 
 /** \brief Blocks until all reactor threads are fully initialized and registered. */
 void server_wait_startup_barrier(void);
+
+/** \brief Returns true if any reactor thread failed to initialize. */
+bool server_did_startup_fail(void);
 
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
