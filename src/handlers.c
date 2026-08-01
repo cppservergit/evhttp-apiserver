@@ -807,3 +807,103 @@ void sales_pgsql_handler(
         *out_status = HTTP_INTERNAL;
     }
 }
+
+// --- Upload Handler & Schema ---
+
+static bool upload_string_validator(
+    [[maybe_unused]] const ValidationContext *ctx, 
+    const json_object *obj, 
+    const char *name, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *str = json_object_get_string((struct json_object*)obj);
+    if (!str || strlen(str) > 250) {
+        (void)snprintf(err_buf, err_len, "Field '%s' must be string and max 250 chars.", name ? name : "unknown");
+        return false;
+    }
+    return true;
+}
+
+static const FieldValidator UploadSchema[] = {
+    {.field_name = "filename", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
+    {.field_name = "content_type", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
+    {.field_name = "title", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
+    {.field_name = "blob", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr}
+};
+
+const ValidationContext UploadContext = {
+    .schema = UploadSchema,
+    .schema_count = sizeof(UploadSchema) / sizeof(UploadSchema[0]),
+    .global_validator = nullptr
+};
+
+void upload_handler(
+    struct json_object* body, 
+    [[maybe_unused]] void* arg, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    const char* filename = json_get_string(body, "filename");
+    const char* content_type = json_get_string(body, "content_type");
+    const char* title = json_get_string(body, "title");
+    const char* blob = json_get_string(body, "blob");
+    const char* user = get_user();
+
+    *out_status = HTTP_INTERNAL;
+    
+    char uuid_str[37];
+    generate_uuidv4(uuid_str);
+    
+    const char* uploads_dir = getenv("UPLOADS_DIR");
+    if (!uploads_dir) {
+        uploads_dir = "/tmp";
+    }
+    
+    char out_path[512];
+    (void)snprintf(out_path, sizeof(out_path), "%s/%s", uploads_dir, uuid_str);
+    
+    size_t b64_len = strlen(blob);
+    size_t bin_maxlen = (b64_len / 4) * 3 + 4; // Add padding buffer
+    unsigned char* bin_buf = malloc(bin_maxlen);
+    if (!bin_buf) {
+        const char* msg = "{\"error\":\"Out of memory\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        return;
+    }
+    
+    size_t bin_len = 0;
+    if (sodium_base642bin(bin_buf, bin_maxlen, blob, b64_len, nullptr, &bin_len, nullptr, sodium_base64_VARIANT_ORIGINAL) != 0) {
+        free(bin_buf);
+        const char* msg = "{\"error\":\"Invalid base64 encoding\"}";
+        *out_status = HTTP_BADREQUEST;
+        evbuffer_add(out_buf, msg, strlen(msg));
+        return;
+    }
+    
+    FILE* fp = fopen(out_path, "wb");
+    if (!fp) {
+        free(bin_buf);
+        const char* msg = "{\"error\":\"Failed to save file\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        return;
+    }
+    
+    size_t written = fwrite(bin_buf, 1, bin_len, fp);
+    fclose(fp);
+    free(bin_buf);
+    
+    if (written != bin_len) {
+        const char* msg = "{\"error\":\"Failed to save file fully\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        return;
+    }
+    
+    LOG_AUDIT("User %s uploaded file %s (Title: %s, Content-Type: %s, Size: %zu bytes) saved as %s", 
+              user ? user : "anonymous", filename, title, content_type, bin_len, uuid_str);
+              
+    *out_status = HTTP_OK;
+    char response[256];
+    int len = snprintf(response, sizeof(response), "{\"status\":\"ok\",\"uuid\":\"%s\",\"size\":%zu}", uuid_str, bin_len);
+    evbuffer_add(out_buf, response, len < (int)sizeof(response) ? (size_t)len : sizeof(response) - 1);
+}

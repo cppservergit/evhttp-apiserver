@@ -92,3 +92,8 @@ extern const ValidationContext CustomersContext;
 
 /** \brief Handles /sales requests. */
 void sales_pgsql_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+
+/** \brief Handles /upload requests. */
+void upload_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /upload route. */
+extern const ValidationContext UploadContext;
