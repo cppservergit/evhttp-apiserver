@@ -14,6 +14,7 @@
 #include "raii.h"
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
 static const char* get_client_ip(void);
 static const char* get_session_id(void);
@@ -880,13 +881,15 @@ void upload_handler(
     
     raii_file fp = fopen(out_path, "wb");
     if (!fp) {
-        LOG_ERROR("Failed to open upload destination %s for writing", out_path);
+        char errbuf[256];
+        LOG_ERROR("Failed to open upload destination %s for writing: %s", out_path, strerror_r(errno, errbuf, sizeof(errbuf)));
         return;
     }
     
     size_t written = fwrite(bin_buf, 1, bin_len, fp);
     if (written != bin_len) {
-        LOG_ERROR("Failed to write full %zu bytes to %s", bin_len, out_path);
+        char errbuf[256];
+        LOG_ERROR("Failed to write full %zu bytes to %s: %s", bin_len, out_path, strerror_r(errno, errbuf, sizeof(errbuf)));
         return;
     }
     
