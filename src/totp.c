@@ -19,7 +19,7 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     if (!hstmt) return HTTP_INTERNAL;
     
     SQLLEN cbUser = SQL_NTS;
-    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)user, 0, &cbUser);
+    SQLBindParameter(hstmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, strlen(user), 0, (SQLPOINTER)user, 0, &cbUser);
     
     SQLRETURN ret = SQLExecDirect(hstmt, (SQLCHAR*)"{CALL cpp_get_secret(?)}", SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
@@ -46,13 +46,30 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
 
 static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
     char path_buf[128];
+    char batch_buf[4096];
+    size_t batch_len = 0;
+    
     for (int y = 0; y < qrcode->width; y++) {
         for (int x = 0; x < qrcode->width; x++) {
             if (qrcode->data[y * qrcode->width + x] & 1) {
                 int len = snprintf(path_buf, sizeof(path_buf), "M%d,%dh1v1h-1z ", x + 1, y + 1);
-                evbuffer_add(out_buf, path_buf, len < (int)sizeof(path_buf) ? (size_t)len : sizeof(path_buf) - 1);
+                size_t write_len = len < (int)sizeof(path_buf) ? (size_t)len : sizeof(path_buf) - 1;
+                
+                // Flush the batch buffer if it's full
+                if (batch_len + write_len > sizeof(batch_buf)) {
+                    evbuffer_add(out_buf, batch_buf, batch_len);
+                    batch_len = 0;
+                }
+                
+                memcpy(batch_buf + batch_len, path_buf, write_len);
+                batch_len += write_len;
             }
         }
+    }
+    
+    // Flush any remaining data
+    if (batch_len > 0) {
+        evbuffer_add(out_buf, batch_buf, batch_len);
     }
 }
 
@@ -79,8 +96,19 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
         return;
     }
 
-    char uri[512];
-    (void)snprintf(uri, sizeof(uri), "otpauth://totp/apiserver:%s?secret=%s&issuer=apiserver&algorithm=SHA256&digits=6&period=30", escaped_user, secret);
+    // Use a large fixed-size buffer since VLAs (-Wvla) are forbidden 
+    // and dynamic allocation (malloc) is discouraged here.
+    char uri[2048];
+    int uri_len = snprintf(uri, sizeof(uri), "otpauth://totp/apiserver:%s?secret=%s&issuer=apiserver&algorithm=SHA256&digits=6&period=30", escaped_user, secret);
+    
+    if (uri_len >= (int)sizeof(uri)) {
+        // Truncation occurred, username is too long.
+        *out_status = HTTP_BADREQUEST;
+        sodium_memzero(secret, sizeof(secret));
+        sodium_memzero(escaped_user, strlen(escaped_user));
+        free(escaped_user);
+        return;
+    }
 
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     
