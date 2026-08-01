@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <errno.h>
 #include "logger.h"
 #include <event2/buffer.h>
 
@@ -29,7 +30,8 @@ int task_pool_init(size_t pool_size) {
     g_is_free_flag = calloc(pool_size, sizeof(_Atomic bool));
     
     if (!g_task_slab || !g_free_stack || !g_is_free_flag) {
-        LOG_FATAL("Out of memory in task_pool_init");
+        char errbuf[256];
+        LOG_FATAL("Out of memory in task_pool_init: %s", strerror_r(errno, errbuf, sizeof(errbuf)));
         if (g_task_slab) { free(g_task_slab); g_task_slab = nullptr; }
         if (g_free_stack) { free(g_free_stack); g_free_stack = nullptr; }
         if (g_is_free_flag) { free(g_is_free_flag); g_is_free_flag = nullptr; }

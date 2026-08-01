@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sodium.h>
 #include <event2/buffer.h>
 #include "raii.h"
@@ -227,12 +228,15 @@ static int init_pool(pool_t* pool, size_t num_workers, const char* name) {
     pool->num_workers = num_workers;
     pool->workers = calloc(num_workers, sizeof(pthread_t));
     if (!pool->workers) {
-        LOG_FATAL("Out of memory allocating %s pool workers", name);
+        char errbuf[256];
+        LOG_FATAL("Out of memory allocating %s pool workers: %s", name, strerror_r(errno, errbuf, sizeof(errbuf)));
         return -1;
     }
     for (size_t i = 0; i < num_workers; ++i) {
-        if (pthread_create(&pool->workers[i], nullptr, worker_thread_main, pool) != 0) {
-            LOG_ERROR("Failed to create %s pool worker thread %zu", name, i);
+        int rc = pthread_create(&pool->workers[i], nullptr, worker_thread_main, pool);
+        if (rc != 0) {
+            char errbuf[256];
+            LOG_ERROR("Failed to create %s pool worker thread %zu: %s", name, i, strerror_r(rc, errbuf, sizeof(errbuf)));
             pool->num_workers = i;
             return -1;
         }
