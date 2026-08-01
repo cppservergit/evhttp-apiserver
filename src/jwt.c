@@ -5,6 +5,7 @@
 #include <sodium.h>
 #include <json-c/json.h>
 #include "json_util.h"
+#include "raii.h"
 
 void generate_uuidv4(char out[37]) {
     unsigned char bytes[16];
@@ -61,13 +62,12 @@ time_t jwt_get_expiration(const char* jwt) {
     if (!jwt_decode_payload(jwt, payload_json, sizeof(payload_json))) return 0;
     
     time_t exp = 0;
-    struct json_object* jwt_obj = json_tokener_parse(payload_json);
+    raii_json_object jwt_obj = json_tokener_parse(payload_json);
     if (jwt_obj) {
         struct json_object* exp_obj;
         if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
             exp = json_object_get_int64(exp_obj);
         }
-        json_object_put(jwt_obj);
     }
     sodium_memzero(payload_json, sizeof(payload_json));
     return exp;
@@ -142,16 +142,13 @@ static bool jwt_check_header_alg(const char* token) {
     char header_json[1024];
     if (!jwt_decode_header(token, header_json, sizeof(header_json))) return false;
     
-    struct json_object* header_obj = json_tokener_parse(header_json);
+    raii_json_object header_obj = json_tokener_parse(header_json);
     if (!header_obj) return false;
     
-    bool ok = false;
     struct json_object* alg_obj;
-    if (json_object_object_get_ex(header_obj, "alg", &alg_obj)) {
-        ok = (strcmp(json_object_get_string(alg_obj), "HS256") == 0);
-    }
-    json_object_put(header_obj);
-    return ok;
+    if (!json_object_object_get_ex(header_obj, "alg", &alg_obj)) return false;
+    
+    return (strcmp(json_object_get_string(alg_obj), "HS256") == 0);
 }
 
 static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_hex, const char* signature) {
@@ -181,32 +178,32 @@ static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_h
 }
 
 static int jwt_parse_payload(const char* payload_json, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
-    int ret = JWT_ERR_INVALID;
-    struct json_object* jwt_obj = json_tokener_parse(payload_json);
-    if (jwt_obj) {
-        struct json_object* exp_obj;
-        if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
-            time_t exp = json_object_get_int64(exp_obj);
-            ret = (time(nullptr) > exp) ? JWT_ERR_EXPIRED : JWT_OK;
-        }
-        
-        if (ret == JWT_OK) {
-            struct json_object* sub_obj;
-            if (json_object_object_get_ex(jwt_obj, "username", &sub_obj) && out_username) {
-                const char* uname = json_object_get_string(sub_obj);
-                if (uname && strlen(uname) >= out_uname_size) ret = JWT_ERR_INVALID;
-                else (void)snprintf(out_username, out_uname_size, "%s", uname ? uname : "");
-            }
-            struct json_object* jti_obj;
-            if (json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj) && out_session_id) {
-                const char* sess = json_object_get_string(jti_obj);
-                if (sess && strlen(sess) >= out_sess_size) ret = JWT_ERR_INVALID;
-                else (void)snprintf(out_session_id, out_sess_size, "%s", sess ? sess : "");
-            }
-        }
-        json_object_put(jwt_obj);
+    raii_json_object jwt_obj = json_tokener_parse(payload_json);
+    if (!jwt_obj) return JWT_ERR_INVALID;
+
+    struct json_object* exp_obj;
+    if (!json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) return JWT_ERR_INVALID;
+    
+    time_t exp = json_object_get_int64(exp_obj);
+    if (time(nullptr) > exp) return JWT_ERR_EXPIRED;
+
+    if (out_username) {
+        struct json_object* sub_obj;
+        if (!json_object_object_get_ex(jwt_obj, "username", &sub_obj)) return JWT_ERR_INVALID;
+        const char* uname = json_object_get_string(sub_obj);
+        if (!uname || strlen(uname) >= out_uname_size) return JWT_ERR_INVALID;
+        (void)snprintf(out_username, out_uname_size, "%s", uname);
     }
-    return ret;
+    
+    if (out_session_id) {
+        struct json_object* jti_obj;
+        if (!json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj)) return JWT_ERR_INVALID;
+        const char* sess = json_object_get_string(jti_obj);
+        if (!sess || strlen(sess) >= out_sess_size) return JWT_ERR_INVALID;
+        (void)snprintf(out_session_id, out_sess_size, "%s", sess);
+    }
+
+    return JWT_OK;
 }
 
 int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {

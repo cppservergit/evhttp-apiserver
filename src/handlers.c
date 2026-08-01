@@ -11,6 +11,7 @@
 #include "logger.h"
 #include "jwt.h"
 #include "odbcutil.h"
+#include "raii.h"
 #include <unistd.h>
 #include <string.h>
 
@@ -156,13 +157,13 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status,  stru
 }
 
 static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
+    raii_json_object scoped_json = remote_json;
     char prefix[128];
     int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
     evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
-    if (remote_json) {
-        const char* json_str = json_object_to_json_string_ext(remote_json, JSON_C_TO_STRING_PLAIN);
+    if (scoped_json) {
+        const char* json_str = json_object_to_json_string_ext(scoped_json, JSON_C_TO_STRING_PLAIN);
         evbuffer_add(out_buf, json_str, strlen(json_str));
-        json_object_put(remote_json);
     } else {
         evbuffer_add(out_buf, "null", 4);
     }
@@ -635,7 +636,6 @@ static void handle_login_failure(
         char buf[512];
         int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", escaped_error);
         evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
-        json_object_put(remote_response);
     } else {
         const char* msg = "{\"error\":\"Provider unreachable\"}";
         evbuffer_add(out_buf, msg, strlen(msg));
@@ -654,10 +654,9 @@ void login_handler(
     const char* remote_ip = get_client_ip();
 
     long http_code = 0;
-    struct json_object* remote_response = login_service_authenticate(username, password, &http_code);
+    raii_json_object remote_response = login_service_authenticate(username, password, &http_code);
 
     if (http_code == 200) {
-        if (remote_response) json_object_put(remote_response);
         handle_login_success(username, remote_ip, out_status, out_buf);
     } else {
         handle_login_failure(username, remote_ip, http_code, remote_response, out_status, out_buf);

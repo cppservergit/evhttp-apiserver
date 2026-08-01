@@ -12,6 +12,7 @@
 #include "jwt.h"
 #include <sodium.h>
 #include "json_util.h"
+#include "raii.h"
 struct jwt_cache {
     char token[1024];
     time_t expires_at;
@@ -115,14 +116,13 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     set_thread_error(TL_ERR_WARN, "[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
     
-    struct json_object* login_response = execute_login_request();
+    raii_json_object login_response = execute_login_request();
     
     pthread_mutex_lock(&jwt_cache_lock);
     
     if (login_response) {
         cache->token[0] = '\0';
         update_jwt_cache(cache, login_response);
-        json_object_put(login_response);
     }
     
     jwt_is_refreshing = false;
@@ -145,7 +145,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
         return nullptr;
     }
     
-    struct json_object* req_payload = json_object_new_object();
+    raii_json_object req_payload = json_object_new_object();
     json_object_object_add(req_payload, "id", json_object_new_string(customer_id));
     const char* body = json_object_to_json_string(req_payload);
     
@@ -161,7 +161,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
     config_get_api_url(api_url, sizeof(api_url));
     
     struct json_object* remote_response = http_client_post_json(api_url, "/api/customer", body, headers, 2, out_http_code);
-    json_object_put(req_payload);
+
     
     // Invalidate token cache on auth failure
     if (out_http_code && *out_http_code == 401) {
