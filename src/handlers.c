@@ -154,6 +154,7 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status,  stru
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
     
+    set_content_type("text/plain; version=0.0.4");
 }
 
 static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
