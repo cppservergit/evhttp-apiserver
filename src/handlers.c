@@ -116,41 +116,42 @@ void metrics_handler(struct json_object* body, void* arg, int* out_status,  stru
     uint64_t total_ram_kb = 0;
     uint64_t mem_usage_kb = 0;
     server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
+    const char* hname = server_get_hostname();
     
     char buf[2048];
     int len = snprintf(buf, sizeof(buf),
         "# HELP microservice_requests_total Total number of processed requests\n"
         "# TYPE microservice_requests_total counter\n"
-        "microservice_requests_total %" PRIu64 "\n\n"
+        "microservice_requests_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_requests_fast_total Total number of processed requests in fast pool\n"
         "# TYPE microservice_requests_fast_total counter\n"
-        "microservice_requests_fast_total %" PRIu64 "\n\n"
+        "microservice_requests_fast_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_requests_slow_total Total number of processed requests in slow pool\n"
         "# TYPE microservice_requests_slow_total counter\n"
-        "microservice_requests_slow_total %" PRIu64 "\n\n"
+        "microservice_requests_slow_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_processing_time_milliseconds_total Total processing time across all requests\n"
         "# TYPE microservice_processing_time_milliseconds_total counter\n"
-        "microservice_processing_time_milliseconds_total %" PRIu64 "\n\n"
+        "microservice_processing_time_milliseconds_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_processing_time_fast_milliseconds_total Total processing time for fast pool\n"
         "# TYPE microservice_processing_time_fast_milliseconds_total counter\n"
-        "microservice_processing_time_fast_milliseconds_total %" PRIu64 "\n\n"
+        "microservice_processing_time_fast_milliseconds_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_processing_time_slow_milliseconds_total Total processing time for slow pool\n"
         "# TYPE microservice_processing_time_slow_milliseconds_total counter\n"
-        "microservice_processing_time_slow_milliseconds_total %" PRIu64 "\n\n"
+        "microservice_processing_time_slow_milliseconds_total{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_memory_usage_bytes Current resident memory size in bytes\n"
         "# TYPE microservice_memory_usage_bytes gauge\n"
-        "microservice_memory_usage_bytes %" PRIu64 "\n\n"
+        "microservice_memory_usage_bytes{hostname=\"%s\"} %" PRIu64 "\n\n"
         "# HELP microservice_memory_total_bytes Total physical memory in bytes\n"
         "# TYPE microservice_memory_total_bytes gauge\n"
-        "microservice_memory_total_bytes %" PRIu64 "\n",
-        stats.total_requests,
-        stats.total_requests_fast,
-        stats.total_requests_slow,
-        stats.total_time_ms,
-        stats.total_time_fast_ms,
-        stats.total_time_slow_ms,
-        mem_usage_kb * 1024,
-        total_ram_kb * 1024
+        "microservice_memory_total_bytes{hostname=\"%s\"} %" PRIu64 "\n",
+        hname, stats.total_requests,
+        hname, stats.total_requests_fast,
+        hname, stats.total_requests_slow,
+        hname, stats.total_time_ms,
+        hname, stats.total_time_fast_ms,
+        hname, stats.total_time_slow_ms,
+        hname, mem_usage_kb * 1024,
+        hname, total_ram_kb * 1024
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
     
