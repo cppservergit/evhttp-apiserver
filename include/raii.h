@@ -36,3 +36,14 @@ static inline void cleanup_free(void* p) { void** ptr = (void**)p; if (*ptr) fre
 #define raii_file [[gnu::cleanup(cleanup_file)]] FILE*
 /** \brief Scoped auto-cleanup for malloc'd pointers. */
 #define raii_free [[gnu::cleanup(cleanup_free)]]
+
+#include <sodium.h>
+#include <string.h>
+static inline void cleanup_secure_free_str(char** str) { 
+    if (*str != nullptr) { 
+        sodium_memzero(*str, strlen(*str)); 
+        free(*str); 
+    } 
+}
+/** \brief Scoped auto-cleanup for malloc'd null-terminated strings that require secure wiping. */
+#define raii_secure_free_str [[gnu::cleanup(cleanup_secure_free_str)]] char*

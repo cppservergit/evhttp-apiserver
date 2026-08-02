@@ -1,6 +1,7 @@
 #include "totp.h"
 #include "odbcutil.h"
 #include "thread_error.h"
+#include "raii.h"
 #include <qrencode.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +61,7 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
         return;
     }
 
-    char* escaped_user = evhttp_uriencode(user, -1, 0);
+    raii_secure_free_str escaped_user = evhttp_uriencode(user, -1, 0);
     if (!escaped_user) {
         *out_status = HTTP_INTERNAL;
         sodium_memzero(secret, sizeof(secret));
@@ -73,8 +74,6 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
     QRcode *qrcode = QRcode_encodeString(uri, 0, QR_ECLEVEL_L, QR_MODE_8, 1);
     
     sodium_memzero(secret, sizeof(secret));
-    sodium_memzero(escaped_user, strlen(escaped_user));
-    free(escaped_user);
     sodium_memzero(uri, sizeof(uri));
 
     if (!qrcode) {
