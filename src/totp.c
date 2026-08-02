@@ -34,6 +34,16 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
 }
 
 static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
+    char svg_start[256];
+    int start_len = snprintf(svg_start, sizeof(svg_start), 
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 %d %d\">\n"
+        "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n"
+        "<path d=\"", 
+        qrcode->width + 2, qrcode->width + 2,
+        qrcode->width + 2, qrcode->width + 2);
+    evbuffer_add(out_buf, svg_start, start_len < (int)sizeof(svg_start) ? (size_t)start_len : sizeof(svg_start) - 1);
+
     char path_buf[128];
     for (int y = 0; y < qrcode->width; y++) {
         for (int x = 0; x < qrcode->width; x++) {
@@ -43,6 +53,9 @@ static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
             }
         }
     }
+
+    const char* svg_end = "\" fill=\"black\"/>\n</svg>\n";
+    evbuffer_add(out_buf, svg_end, strlen(svg_end));
 }
 
 
@@ -81,20 +94,7 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
         return;
     }
 
-    char svg_start[256];
-    int len = snprintf(svg_start, sizeof(svg_start), 
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 %d %d\">\n"
-        "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n"
-        "<path d=\"", 
-        qrcode->width + 2, qrcode->width + 2,
-        qrcode->width + 2, qrcode->width + 2);
-    evbuffer_add(out_buf, svg_start, len < (int)sizeof(svg_start) ? (size_t)len : sizeof(svg_start) - 1);
-    
     totp_append_qr_svg_path(out_buf, qrcode);
-    
-    const char* svg_end = "\" fill=\"black\"/>\n</svg>\n";
-    evbuffer_add(out_buf, svg_end, strlen(svg_end));
 
     QRcode_free(qrcode);
 
