@@ -34,6 +34,15 @@ typedef struct {
     char        _padding[4];
 } QueryParam;
 
+/** \brief Structure for binding an ODBC query output column. */
+typedef struct {
+    void*     buffer;      // Pointer to the caller's stack/heap buffer
+    SQLLEN    buffer_len;  // Maximum capacity of the buffer
+    SQLLEN    ind;         // Will hold the returned length or SQL_NULL_DATA
+    ParamType type;        // Expected C data type
+    char      _padding[4];
+} OutParam;
+
 /** \brief Supported database connection identifiers. */
 typedef enum {
     DB_0 = 0,
@@ -59,6 +68,9 @@ bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* p
 
 /** \brief Extracts and logs ODBC diagnostic records. */
 void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
+
+/** \brief Executes a query and fetches a single row directly into the provided OutParam buffers. */
+bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);

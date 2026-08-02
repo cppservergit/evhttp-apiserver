@@ -498,3 +498,74 @@ bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* fu
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
     return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_rs2json);
 }
+
+bool odbcutil_query_single_row(
+    DbConnectionId db_id,
+    const char* query,
+    QueryParam* in_params, size_t in_count,
+    OutParam* out_params, size_t out_count,
+    const char* func_name
+) {
+    SQLHDBC hdbc = odbcutil_connect(db_id);
+    if (hdbc == SQL_NULL_HDBC) return false;
+
+    raii_odbc_stmt hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    if (!hstmt) return false;
+
+    for (size_t i = 0; i < in_count; ++i) {
+        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &in_params[i])) {
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < out_count; ++i) {
+        SQLRETURN bind_ret;
+        switch (out_params[i].type) {
+            case PARAM_STRING:
+                bind_ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_CHAR, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            case PARAM_INT:
+                bind_ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_SLONG, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            case PARAM_DOUBLE:
+                bind_ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_DOUBLE, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            default:
+                odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Unsupported output parameter type");
+                return false;
+        }
+        if (!SQL_SUCCEEDED(bind_ret)) {
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind output column");
+            return false;
+        }
+    }
+
+    SQLRETURN exec_ret = SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS);
+    if (!SQL_SUCCEEDED(exec_ret) && exec_ret != SQL_NO_DATA) {
+        char err_msg[256];
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute query in %s", func_name);
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+        return false;
+    }
+
+    SQLRETURN fetch_ret = SQLFetch(hstmt);
+    if (fetch_ret == SQL_NO_DATA) {
+        return false; // Zero rows
+    } else if (!SQL_SUCCEEDED(fetch_ret) && fetch_ret != SQL_SUCCESS_WITH_INFO) {
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to fetch row");
+        return false;
+    }
+    
+    if (fetch_ret == SQL_SUCCESS_WITH_INFO) {
+        // Warning or truncation
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Fetch completed with info (possible truncation)");
+    }
+
+    // Strictness check: Make sure there's NO second row.
+    if (SQLFetch(hstmt) != SQL_NO_DATA) {
+        LOG_WARN("Query in %s returned multiple rows when only exactly one was expected.", func_name);
+        return false;
+    }
+
+    return true;
+}

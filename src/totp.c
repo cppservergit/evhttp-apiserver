@@ -44,6 +44,28 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
     return HTTP_NOTFOUND;
 }
 
+__attribute__((unused))
+static int get_secret2(const char* user, char* out_secret, size_t max_len) {
+    QueryParam in_params[] = {
+        { user, SQL_NTS, PARAM_STRING, {0} }
+    };
+
+    OutParam out_params[] = {
+        { out_secret, (SQLLEN)max_len, 0, PARAM_STRING, {0} }
+    };
+
+    if (!odbcutil_query_single_row(DB_0, "{CALL cpp_get_secret(?)}", in_params, 1, out_params, 1, __func__)) {
+        // odbcutil_query_single_row logs connection/execution errors automatically.
+        return HTTP_NOTFOUND; 
+    }
+
+    if (out_params[0].ind == SQL_NULL_DATA || out_params[0].ind == 0) {
+        return HTTP_NOTFOUND;
+    }
+
+    return HTTP_OK;
+}
+
 static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
     char path_buf[128];
     for (int y = 0; y < qrcode->width; y++) {
