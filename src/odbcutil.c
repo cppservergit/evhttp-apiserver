@@ -561,11 +561,5 @@ bool odbcutil_query_single_row(
         odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Fetch completed with info (possible truncation)");
     }
 
-    // Strictness check: Make sure there's NO second row.
-    if (SQLFetch(hstmt) != SQL_NO_DATA) {
-        LOG_WARN("Query in %s returned multiple rows when only exactly one was expected.", func_name);
-        return false;
-    }
-
     return true;
 }
