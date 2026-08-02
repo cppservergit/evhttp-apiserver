@@ -13,11 +13,11 @@
 
 static int get_secret(const char* user, char* out_secret, size_t max_len) {
     QueryParam in_params[] = {
-        { user, SQL_NTS, PARAM_STRING, {0} }
+        { .value = user, .ind = SQL_NTS, .type = PARAM_STRING }
     };
 
     OutParam out_params[] = {
-        { out_secret, (SQLLEN)max_len, 0, PARAM_STRING, {0} }
+        { .buffer = out_secret, .buffer_len = (SQLLEN)max_len, .type = PARAM_STRING }
     };
 
     if (!odbcutil_query_single_row(DB_0, "{CALL cpp_get_secret(?)}", in_params, 1, out_params, 1, __func__)) {
