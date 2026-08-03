@@ -64,11 +64,7 @@ void version_handler(struct json_object* body, void* arg, int* out_status,  stru
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
-    
-    *out_status = HTTP_OK;
-    
+void build_sysinfo_json_string(char* buf, size_t max_len) {
     server_request_stats_t stats = {0};
     server_get_request_stats(&stats);
     
@@ -82,8 +78,7 @@ void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  stru
     json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
     json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
 
-    char buf[1024];
-    int len = snprintf(buf, sizeof(buf),
+    snprintf(buf, max_len,
         "{"
         "\"start_time\":\"%s\","
         "\"total_requests\":%" PRIu64 ","
@@ -103,7 +98,17 @@ void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  stru
         mem_usage_pct,
         esc_hostname
     );
-    evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+}
+
+void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
+    (void)body; (void)arg;
+    
+    *out_status = HTTP_OK;
+    
+    char buf[1024];
+    build_sysinfo_json_string(buf, sizeof(buf));
+    
+    evbuffer_add(out_buf, buf, strlen(buf));
 }
 
 void metrics_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {

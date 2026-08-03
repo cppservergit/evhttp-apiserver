@@ -23,6 +23,9 @@ void version_handler(struct json_object* body, void* arg, int* out_status, struc
 /** \brief Handles /sysinfo requests. */
 void sysinfo_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 
+/** \brief Builds the sysinfo JSON string for reuse. */
+void build_sysinfo_json_string(char* buf, size_t max_len);
+
 /** \brief Handles /rsysinfo requests. */
 void rsysinfo_handler(struct json_object* body, void* arg, int* out_status, struct evbuffer* out_buf);
 

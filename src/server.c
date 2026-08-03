@@ -1,5 +1,6 @@
 #include "server.h"
 #include "handlers.h"
+#include "mcp.h"
 #include "validation.h"
 #include <json-c/json.h>
 #include "raii.h"
@@ -425,7 +426,8 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = &prodget_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = &customers_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_pgsql_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/upload", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &UploadContext, .handler = &upload_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT }
+    { .path = "/upload", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &UploadContext, .handler = &upload_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/mcp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = nullptr, .handler = &mcp_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_NONE }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
@@ -522,6 +524,10 @@ static void process_completed_task(http_task_t* task) {
     
     bool has_body = (evbuffer_get_length(out_buf) > 0);
     struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
+    
+    if (ctx && strcmp(ctx->path, "/mcp") == 0) {
+        evhttp_add_header(headers, "MCP-Protocol-Version", "2026-07-28");
+    }
 
     send_http_reply(task, out_buf, headers, has_body);
     
