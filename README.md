@@ -42,7 +42,7 @@ flowchart TD
 * **Efficient use of ODBC API:** Transparent connection pooling per worker thread with reconnect on error, and highly optimized `SQLGetData` stream-reading to seamlessly process JSON database payloads with virtually zero memory overhead.
 * **Built-in JWT support:** Stateless security model that generates and validates JWT tokens using `libsodium`.
 * **Built-in TOTP support:** Sample code provided to generate TOTP QR code and validate a TOTP using `libqrencode` and `liboath` respectively.
-
+* **Built-in MCP support:** Includes and endpoint to implement as a server the Model Context Protocol to be consumed by AI agents, with a sample tool.
 
 ## Clean C Design
 
