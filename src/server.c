@@ -526,7 +526,6 @@ static void process_completed_task(http_task_t* task) {
     send_http_reply(task, out_buf, headers, has_body);
     
     if (task->parsed_body) json_object_put(task->parsed_body);
-    if (task->req) evhttp_request_free(task->req);
     logger_clear_request_id();
     task_pool_free(task);
 }
