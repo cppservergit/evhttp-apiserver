@@ -5,7 +5,9 @@
 #include <event2/buffer.h>
 #include <json-c/json.h>
 #include <stdlib.h>
-
+#include <stdio.h>
+#include <sodium.h>
+#include <string.h>
 /**
  * \file raii.h
  * \brief Resource Acquisition Is Initialization (RAII) memory cleanup macros using GCC's __attribute__((cleanup)).
@@ -28,7 +30,6 @@ static inline void cleanup_json_object(struct json_object** obj) { if (*obj != n
 /** \brief Scoped auto-cleanup for json_object. */
 #define raii_json_object [[gnu::cleanup(cleanup_json_object)]] struct json_object*
 
-#include <stdio.h>
 static inline void cleanup_file(FILE** fp) { if (*fp != nullptr) fclose(*fp); }
 static inline void cleanup_free(void* p) { void** ptr = (void**)p; if (*ptr) free(*ptr); }
 
@@ -37,8 +38,6 @@ static inline void cleanup_free(void* p) { void** ptr = (void**)p; if (*ptr) fre
 /** \brief Scoped auto-cleanup for malloc'd pointers. */
 #define raii_free [[gnu::cleanup(cleanup_free)]]
 
-#include <sodium.h>
-#include <string.h>
 static inline void cleanup_secure_free_str(char** str) { 
     if (*str != nullptr) { 
         sodium_memzero(*str, strlen(*str)); 

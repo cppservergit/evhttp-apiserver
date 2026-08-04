@@ -16,17 +16,17 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
-
-static const char* get_client_ip(void);
-static const char* get_session_id(void);
-static void set_content_type(const char* ctype);
-
 #include <time.h>
 #include <ctype.h>
 #include <sodium.h>
 #include "json_util.h"
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
+
+static const char* get_client_ip(void);
+static const char* get_session_id(void);
+static void set_content_type(const char* ctype);
+
 
 void ping_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     (void)body; 

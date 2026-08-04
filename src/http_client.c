@@ -7,10 +7,9 @@
 #include <pthread.h>
 #include <event2/http.h>
 #include "thread_error.h"
-
+#include "config.h"
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
-#include "config.h"
 
 struct memory_struct {
     char* memory;

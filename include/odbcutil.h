@@ -3,6 +3,7 @@
 #include <sql.h>
 #include <sqlext.h>
 #include <json-c/json.h>
+#include <stdbool.h>
 
 struct evbuffer;
 
@@ -58,7 +59,6 @@ typedef enum {
  */
 SQLHDBC odbcutil_connect(DbConnectionId db_id);
 
-#include <stdbool.h>
 
 /** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
 [[nodiscard("ODBC function return value must be evaluated")]]
