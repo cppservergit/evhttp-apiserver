@@ -727,6 +727,21 @@ const ValidationContext UploadContext = {
     .global_validator = nullptr
 };
 
+static bool upload_is_valid_dir(const char* uploads_dir) {
+    if (uploads_dir[0] == '\0') {
+        LOG_ERROR("UPLOADS_DIR config variable is empty. Uploads are disabled.");
+        return false;
+    }
+    
+    struct stat st;
+    if (stat(uploads_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        LOG_ERROR("Uploads directory '%s' does not exist or is not a directory.", uploads_dir);
+        return false;
+    }
+    
+    return true;
+}
+
 void upload_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* filename = json_get_string(body, "filename");
     const char* content_type = json_get_string(body, "content_type");
@@ -742,15 +757,7 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     char uploads_dir[MAX_CONFIG_STR];
     config_get_uploads_dir(uploads_dir, sizeof(uploads_dir));
     
-    if (uploads_dir[0] == '\0') {
-        LOG_ERROR("UPLOADS_DIR config variable is empty. Uploads are disabled.");
-        *out_status = HTTP_INTERNAL;
-        return;
-    }
-    
-    struct stat st;
-    if (stat(uploads_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        LOG_ERROR("Uploads directory '%s' does not exist or is not a directory.", uploads_dir);
+    if (!upload_is_valid_dir(uploads_dir)) {
         *out_status = HTTP_INTERNAL;
         return;
     }
