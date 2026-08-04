@@ -27,16 +27,14 @@
         } \
     } while (0)
 
-static bool validate_positive_amount(const ValidationContext *ctx, const json_object *obj, const char *name, char *err_buf, size_t err_len) {
-    (void)ctx;
+static bool validate_positive_amount(const json_object *obj, char *err_buf, size_t err_len) {
     if (json_object_get_double((struct json_object*)obj) < 0.0) {
-        return emit_error(err_buf, err_len, ERR_NEGATIVE_AMOUNT, name);
+        return emit_error(err_buf, err_len, ERR_NEGATIVE_AMOUNT, "amount");
     }
     return true;
 }
 
-static bool validate_start_before_end(const ValidationContext *ctx, const json_object *root, const char *name, char *err_buf, size_t err_len) {
-    (void)ctx; (void)name;
+static bool validate_start_before_end(const json_object *root, char *err_buf, size_t err_len) {
     struct json_object *start_obj = nullptr;
     struct json_object *end_obj = nullptr;
 
