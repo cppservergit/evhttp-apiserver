@@ -79,7 +79,7 @@ bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryPar
 SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);
 
 /** \brief Safely cleans up a statement handle, verifying it hasn't been freed by a reset. */
-void odbcutil_cleanup_stmt(SQLHSTMT* stmt);
+void odbcutil_cleanup_stmt(const SQLHSTMT* stmt);
 
 /** \brief Checks if a statement handle is still valid in the thread-local pool. */
 bool odbcutil_is_valid_stmt(SQLHSTMT hstmt);

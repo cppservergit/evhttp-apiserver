@@ -91,10 +91,10 @@ SQLHDBC odbcutil_connect(DbConnectionId db_id) {
         odbcutil_set_error(db_id, SQL_HANDLE_ENV, server_get_odbc_env(), "Failed to allocate ODBC connection handle");
         return SQL_NULL_HDBC;
     }
-    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)5, 0))) {
+    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_LOGIN_TIMEOUT, (SQLPOINTER)(uintptr_t)5, 0))) {
         LOG_WARN("ODBC driver does not support SQL_ATTR_LOGIN_TIMEOUT");
     }
-    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_CONNECTION_TIMEOUT, (SQLPOINTER)30, 0))) {
+    if (!SQL_SUCCEEDED(SQLSetConnectAttr(tl_hdbc[db_id], SQL_ATTR_CONNECTION_TIMEOUT, (SQLPOINTER)(uintptr_t)30, 0))) {
         LOG_WARN("ODBC driver does not support SQL_ATTR_CONNECTION_TIMEOUT");
     }
     SQLCHAR out_conn_str[MAX_ODBC_CONN_STR_LEN];
@@ -122,7 +122,7 @@ SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* fun
         odbcutil_reset_connection(db_id);
         return SQL_NULL_HSTMT;
     }
-    if (!SQL_SUCCEEDED(SQLSetStmtAttr(hstmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)5, 0))) {
+    if (!SQL_SUCCEEDED(SQLSetStmtAttr(hstmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)(uintptr_t)5, 0))) {
         LOG_WARN("ODBC driver does not support SQL_ATTR_QUERY_TIMEOUT");
     }
     tl_hstmt[db_id] = hstmt;
@@ -137,7 +137,7 @@ bool odbcutil_is_valid_stmt(SQLHSTMT hstmt) {
     return false;
 }
 
-void odbcutil_cleanup_stmt(SQLHSTMT* stmt) {
+void odbcutil_cleanup_stmt(const SQLHSTMT* stmt) {
     if (odbcutil_is_valid_stmt(*stmt)) {
         SQLFreeStmt(*stmt, SQL_CLOSE);
         SQLFreeStmt(*stmt, SQL_RESET_PARAMS);
@@ -149,30 +149,35 @@ static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, con
     char chunk[ODBC_FETCH_CHUNK_SIZE];
     SQLLEN indicator;
     SQLRETURN ret;
-    while (true) {
+    
+    do {
         ret = SQLGetData(hstmt, 1, SQL_C_CHAR, chunk, sizeof(chunk), &indicator);
+        
         if (!SQL_SUCCEEDED(ret) && ret != SQL_NO_DATA) {
             char err_msg[256];
             (void)snprintf(err_msg, sizeof(err_msg), "SQLGetData failed (code %d) for %s", ret, func_name);
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
             return false;
         }
+
         if (indicator == SQL_NULL_DATA) {
-            if (!*has_data_written) { evbuffer_add(out_buf, "null", 4); *has_data_written = true; }
-            break;
+            if (!*has_data_written) { 
+                evbuffer_add(out_buf, "null", 4); 
+                *has_data_written = true; 
+            }
+            ret = SQL_SUCCESS; // Force loop exit
+        } else if (ret != SQL_NO_DATA) {
+            size_t max_payload = sizeof(chunk) - 1;
+            size_t bytes_to_write = (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) ? max_payload : 
+                                    (indicator >= 0 ? (size_t)indicator : strlen(chunk));
+            
+            if (bytes_to_write > 0) {
+                evbuffer_add(out_buf, chunk, bytes_to_write);
+                *has_data_written = true;
+            }
         }
-        if (ret == SQL_NO_DATA) break;
-        
-        size_t max_payload = sizeof(chunk) - 1;
-        size_t bytes_to_write = (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) ? max_payload : 
-                                (indicator >= 0 ? (size_t)indicator : strlen(chunk));
-        
-        if (bytes_to_write > 0) {
-            evbuffer_add(out_buf, chunk, bytes_to_write);
-            *has_data_written = true;
-        }
-        if (ret == SQL_SUCCESS) break;
-    }
+    } while (ret == SQL_SUCCESS_WITH_INFO);
+    
     return true;
 }
 
@@ -211,19 +216,19 @@ static bool odbcutil_bind_param(DbConnectionId db_id, SQLHSTMT hstmt, SQLUSMALLI
             size_t len = str ? strlen(str) : 0;
             param->ind = (str && len > 0) ? SQL_NTS : SQL_NULL_DATA;
             bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                                   len > 0 ? len : 1, 0, (SQLPOINTER)str, 0, &param->ind);
+                                   len > 0 ? len : 1, 0, (SQLPOINTER)(uintptr_t)str, 0, &param->ind);
             break;
         }
         case PARAM_INT: {
             param->ind = param->value ? 0 : SQL_NULL_DATA;
             bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
-                                   0, 0, (SQLPOINTER)param->value, 0, &param->ind);
+                                   0, 0, (SQLPOINTER)(uintptr_t)param->value, 0, &param->ind);
             break;
         }
         case PARAM_DOUBLE: {
             param->ind = param->value ? 0 : SQL_NULL_DATA;
             bind_ret = SQLBindParameter(hstmt, param_idx, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                                   15, 0, (SQLPOINTER)param->value, 0, &param->ind);
+                                   15, 0, (SQLPOINTER)(uintptr_t)param->value, 0, &param->ind);
             break;
         }
         case PARAM_NULL: {
@@ -358,6 +363,8 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
 }
 
 static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols) {
+    if (num_cols <= 0) return false;
+
     meta->hstmt = hstmt;
     meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
     if (!meta->cols) return false;
@@ -366,18 +373,33 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
     size_t total_arena_size = 0;
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         SQLULEN col_size = 0;
-        SQLSMALLINT digits = 0, nullable = 0;
+        SQLSMALLINT digits = 0; 
+        SQLSMALLINT nullable = 0;
         SQLRETURN ret = SQLDescribeCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].name, sizeof(meta->cols[i].name),
                                        &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
+            free(meta->cols);
+            meta->cols = nullptr;
             return false;
         }
         meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
         total_arena_size += meta->cols[i].alloc_size;
     }
+
+    if (total_arena_size == 0) {
+        free(meta->cols);
+        meta->cols = nullptr;
+        return false;
+    }
+
     meta->arena = malloc(total_arena_size);
-    return meta->arena != nullptr;
+    if (!meta->arena) {
+        free(meta->cols);
+        meta->cols = nullptr;
+        return false;
+    }
+    return true;
 }
 
 static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, [[maybe_unused]] const char* func_name, ResultSetMetadata *meta) {

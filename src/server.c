@@ -51,7 +51,7 @@ static const char* server_get_client_ip_fast(struct evhttp_connection* evcon) {
     int fd = bufferevent_getfd(bev);
     if (fd < 0) return "unknown";
     
-    struct sockaddr_storage addr;
+    struct sockaddr_storage addr = {0};
     socklen_t addr_len = sizeof(addr);
     
     if (getpeername(fd, (struct sockaddr*)&addr, &addr_len) == 0) {
