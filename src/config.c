@@ -173,7 +173,7 @@ static void apply_initial_config_vars(void) {
     }
     
     if (getenv("UPLOADS_DIR")) (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "%s", getenv("UPLOADS_DIR"));
-    else (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "/tmp");
+    else g_uploads_dir[0] = '\0';
 }
 
 void config_reload(void) {

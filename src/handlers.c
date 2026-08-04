@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 static const char* get_client_ip(void);
 static const char* get_session_id(void);
@@ -739,6 +740,19 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     
     char uploads_dir[MAX_CONFIG_STR];
     config_get_uploads_dir(uploads_dir, sizeof(uploads_dir));
+    
+    if (uploads_dir[0] == '\0') {
+        LOG_ERROR("UPLOADS_DIR config variable is empty. Uploads are disabled.");
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
+    
+    struct stat st;
+    if (stat(uploads_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        LOG_ERROR("Uploads directory '%s' does not exist or is not a directory.", uploads_dir);
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
     
     char out_path[MAX_CONFIG_STR + 64];
     (void)snprintf(out_path, sizeof(out_path), "%s/%s", uploads_dir, uuid_str);
