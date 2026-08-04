@@ -5,6 +5,7 @@
 #include <math.h>
 #include <json-c/json.h>
 #include "validation.h"
+#include <stdint.h>
 
 // --- Centralized Error Code Registry ---
 
@@ -117,7 +118,7 @@ static bool validate_type_string(const json_object *obj, const FieldValidator *f
         return emit_error(err, len, ERR_NOT_STRING, field->field_name);
     }
     if (field->max_len > 0) {
-        const char *str = json_object_get_string((struct json_object*)obj);
+        const char *str = json_object_get_string((struct json_object*)(uintptr_t)obj);
         if (str && strlen(str) > field->max_len) {
             return emit_error(err, len, ERR_TOO_LONG, field->field_name);
         }
@@ -129,7 +130,7 @@ static bool validate_type_date(const json_object *obj, const FieldValidator *fie
     if (!json_object_is_type(obj, json_type_string)) {
         return emit_error(err, len, ERR_NOT_DATE, field->field_name);
     }
-    if (!validate_date_string_fast(json_object_get_string((json_object *)obj))) {
+    if (!validate_date_string_fast(json_object_get_string((struct json_object*)(uintptr_t)obj))) {
         return emit_error(err, len, ERR_INVALID_DATE, field->field_name);
     }
     return true;
@@ -203,7 +204,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
 
 const char* json_get_string(const struct json_object* obj, const char* key) {
     struct json_object* val;
-    if (json_object_object_get_ex((struct json_object*)obj, key, &val)) {
+    if (json_object_object_get_ex(obj, key, &val)) {
         return json_object_get_string(val);
     }
     return nullptr;
@@ -211,7 +212,7 @@ const char* json_get_string(const struct json_object* obj, const char* key) {
 
 int64_t json_get_int(const struct json_object* obj, const char* key) {
     struct json_object* val;
-    if (json_object_object_get_ex((struct json_object*)obj, key, &val)) {
+    if (json_object_object_get_ex(obj, key, &val)) {
         return json_object_get_int64(val);
     }
     return 0;
@@ -219,7 +220,7 @@ int64_t json_get_int(const struct json_object* obj, const char* key) {
 
 double json_get_double(const struct json_object* obj, const char* key) {
     struct json_object* val;
-    if (json_object_object_get_ex((struct json_object*)obj, key, &val)) {
+    if (json_object_object_get_ex(obj, key, &val)) {
         return json_object_get_double(val);
     }
     return 0.0;

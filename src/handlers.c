@@ -22,6 +22,7 @@
 #include "json_util.h"
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
+#include <stdint.h>
 
 static const char* get_client_ip(void);
 static const char* get_session_id(void);
@@ -216,7 +217,7 @@ static bool customer_id_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *id = json_object_get_string((struct json_object *)obj);
+    const char *id = json_object_get_string((struct json_object*)(uintptr_t)obj);
     if (!id || strlen(id) != 5) {
         (void)snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
         return false;
@@ -301,7 +302,7 @@ static bool validate_sales_start_date(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *date_str = json_object_get_string((json_object *)obj);
+    const char *date_str = json_object_get_string((struct json_object*)(uintptr_t)obj);
     int year = (int)strtol(date_str, nullptr, 10);
     if (year <= 1993) {
         (void)snprintf(err_buf, err_len, "Start date is too early (min 1994)");
@@ -315,7 +316,7 @@ static bool validate_sales_end_date(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *date_str = json_object_get_string((json_object *)obj);
+    const char *date_str = json_object_get_string((struct json_object*)(uintptr_t)obj);
     int year = (int)strtol(date_str, nullptr, 10);
     if (year >= 1997) {
         (void)snprintf(err_buf, err_len, "End date is too late (max 1996)");
@@ -389,7 +390,7 @@ static bool totp_custom_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *totp = json_object_get_string((struct json_object*)obj);
+    const char *totp = json_object_get_string((struct json_object*)(uintptr_t)obj);
     if (!totp || strlen(totp) != 6) {
         (void)snprintf(err_buf, err_len, "Field '%s' must be exactly 6 characters.", "totp");
         return false;
