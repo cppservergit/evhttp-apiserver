@@ -159,7 +159,7 @@ static struct reactor_stats* g_reactor_stats = nullptr;
 static _Thread_local size_t tl_reactor_id = 0;
 static _Thread_local char tl_tid_str[32] = {0};
 
-// Removed static void server_free_globals(void);
+
 
 static SQLHENV g_odbc_env = SQL_NULL_HENV;
 
@@ -404,7 +404,7 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     close(fd);
 }
 
-// middleware_ctx_t now in server.h
+
 
 static const middleware_ctx_t g_routes[] = {
     { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &ping_handler, .is_fast = true, .auth_mode = AUTH_NONE },
@@ -797,7 +797,7 @@ static struct evhttp* configure_http_server(struct event_base* base, evutil_sock
     evhttp_set_allowed_methods(http, EVHTTP_REQ_GET | EVHTTP_REQ_POST | EVHTTP_REQ_OPTIONS);
 
     for (size_t i = 0; i < route_count; ++i) {
-        evhttp_set_cb(http, routes[i].path, api_middleware_wrapper, (void*)&routes[i]);
+        evhttp_set_cb(http, routes[i].path, api_middleware_wrapper, (void*)(uintptr_t)&routes[i]);
     }
     
     if (evhttp_accept_socket_with_handle(http, fd) == nullptr) {
@@ -836,7 +836,7 @@ void* reactor_thread_logic(void* arg) {
         return nullptr;
     }
 
-    [[gnu::cleanup(cleanup_evhttp)]] struct evhttp* http = configure_http_server(base, fd, g_routes, g_route_count);
+    [[gnu::cleanup(cleanup_evhttp)]] const struct evhttp* http = configure_http_server(base, fd, g_routes, g_route_count);
     if (http == nullptr) {
         LOG_FATAL("Failed to configure HTTP server for Reactor %zu", worker_id);
         close(fd);

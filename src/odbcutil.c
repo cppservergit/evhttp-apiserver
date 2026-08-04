@@ -168,8 +168,15 @@ static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, con
             ret = SQL_SUCCESS; // Force loop exit
         } else if (ret != SQL_NO_DATA) {
             size_t max_payload = sizeof(chunk) - 1;
-            size_t bytes_to_write = (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) ? max_payload : 
-                                    (indicator >= 0 ? (size_t)indicator : strlen(chunk));
+            size_t bytes_to_write = 0;
+            
+            if (indicator == SQL_NO_TOTAL || indicator >= (SQLLEN)max_payload) {
+                bytes_to_write = max_payload;
+            } else if (indicator >= 0) {
+                bytes_to_write = (size_t)indicator;
+            } else {
+                bytes_to_write = strlen(chunk);
+            }
             
             if (bytes_to_write > 0) {
                 evbuffer_add(out_buf, chunk, bytes_to_write);
@@ -269,7 +276,7 @@ static bool odbcutil_execute_and_fetch(
         }
     }
     
-    if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS))) {
+    if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS))) {
         return fetch_cb(db_id, hstmt, func_name, out_buf);
     }
     
@@ -566,7 +573,7 @@ bool odbcutil_query_single_row(
         }
     }
 
-    SQLRETURN exec_ret = SQLExecDirect(hstmt, (SQLCHAR*)query, SQL_NTS);
+    SQLRETURN exec_ret = SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS);
     if (!SQL_SUCCEEDED(exec_ret) && exec_ret != SQL_NO_DATA) {
         char err_msg[256];
         (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute query in %s", func_name);

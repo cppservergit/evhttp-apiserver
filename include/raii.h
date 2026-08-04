@@ -15,7 +15,7 @@
 
 static inline void cleanup_event_config(struct event_config** cfg) { if (*cfg != nullptr) event_config_free(*cfg); }
 static inline void cleanup_event_base(struct event_base** base) { if (*base != nullptr) event_base_free(*base); }
-static inline void cleanup_evhttp(struct evhttp** http) { if (*http != nullptr) evhttp_free(*http); }
+static inline void cleanup_evhttp(const struct evhttp** http) { if (*http != nullptr) evhttp_free((struct evhttp*)(uintptr_t)*http); }
 static inline void cleanup_json_tokener(struct json_tokener** tok) { if (*tok != nullptr) json_tokener_free(*tok); }
 static inline void cleanup_json_object(struct json_object** obj) { if (*obj != nullptr) json_object_put(*obj); }
 
