@@ -21,7 +21,7 @@ flowchart TD
 ```
 
 ## Features
-* **Optimized Struct Memory Layout:** All C structures are strictly sorted from largest to smallest alignment requirements and explicitly padded, mathematically eliminating internal compiler padding holes to guarantee optimal cache line utilization across all 64-bit architectures (x86-64, ARM64, etc.). Verified strictly with `-Wpadded`.
+* **Optimized Struct Memory Layout & False Sharing Prevention:** All C structures are strictly sorted from largest to smallest alignment requirements and explicitly padded to exact 64-byte cache-line boundaries. This mathematically eliminates internal compiler padding holes and guarantees that concurrent threads do not suffer performance penalties from False Sharing across all 64-bit architectures (x86-64, ARM64, etc.). Verified strictly with `-Wpadded`.
 * **Strict Security Compliance (SEI CERT C):** The codebase formally adheres to the SEI CERT C secure coding standards (`cert-*`).
 * **Thread-Safety & Memory-Safety:** Rigorously profiled and tested under extreme stress loads (80 concurrent client threads hitting all API handlers simultaneously) using Google's AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind to validate the architecture against data races, memory leaks, and undefined behavior.
 * **Lock-Free Single-Flight JWT Authentication (Remote APIs):** For API handlers that connect to remote REST services, the server implements a leader-follower concurrency pattern to eliminate thundering herd requests. Ensures that out of thousands of concurrent worker threads, exactly ONE thread performs the network refresh for an expired JWT, while the others sleep efficiently on condition variables—avoiding global read/write lock contention.
