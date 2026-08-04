@@ -88,7 +88,7 @@ static bool load_env_file(const char* filepath, bool hot_reload) {
         if (!eq) continue;
 
         *eq = '\0';
-        char* key = trim_whitespace(trimmed_line);
+        const char* key = trim_whitespace(trimmed_line);
         char* val = trim_whitespace(eq + 1);
         if (val[0] == '"' || val[0] == '\'') {
             char quote = val[0];

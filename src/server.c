@@ -461,7 +461,7 @@ void server_notify_task_done(void* arg) {
         while (write(g_reactor_queues[rid].eventfd, &one, sizeof(one)) < 0) {
             if (errno == EINTR) continue;
             char err_buf[256];
-            char* err_str = strerror_r(errno, err_buf, sizeof(err_buf));
+            const char* err_str = strerror_r(errno, err_buf, sizeof(err_buf));
             LOG_ERROR("Failed to write to reactor eventfd: %s", err_str);
             break;
         }
