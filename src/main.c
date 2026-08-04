@@ -64,7 +64,7 @@ static int spawn_worker_threads(pthread_t* threads, long num_cores) {
     return 0;
 }
 
-static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_cores) {
+static void wait_and_shutdown(const sigset_t* sigmask, pthread_t* threads, long num_cores) {
     int caught_sig = 0;
 
     LOG_INFO("All reactors operational. Waiting for OS signals...");
@@ -75,7 +75,12 @@ static void wait_and_shutdown(sigset_t* sigmask, pthread_t* threads, long num_co
             LOG_AUDIT("Caught SIGHUP signal. Hot-reloading configuration...");
             config_reload();
         } else {
-            const char* sig_name = (caught_sig == SIGINT) ? "SIGINT" : (caught_sig == SIGTERM) ? "SIGTERM" : "UNKNOWN";
+            const char* sig_name = "UNKNOWN";
+            if (caught_sig == SIGINT) {
+                sig_name = "SIGINT";
+            } else if (caught_sig == SIGTERM) {
+                sig_name = "SIGTERM";
+            }
             LOG_INFO("Caught signal %s. Initiating graceful shutdown across all workers...", sig_name);
             break;
         }
