@@ -62,8 +62,9 @@ static const middleware_ctx_t g_routes[] = {
 Avoid messy manual JSON parsing. Define a strict schema and let the framework automatically validate types and execute custom logical boundaries before the handler is even invoked:
 ```c
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr},
-    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = nullptr}
+    {.field_name = "category",   .type = TYPE_STRING, .is_required = true, .max_len = 50},
+    {.field_name = "start_date", .type = TYPE_DATE,   .is_required = true},
+    {.field_name = "end_date",   .type = TYPE_DATE,   .is_required = true}
 };
 
 const ValidationContext SalesContext = {

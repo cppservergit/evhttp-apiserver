@@ -13,9 +13,7 @@ To securely accept JSON input, define a strict schema using `FieldValidator` arr
 ```c
 // 1. Define custom validators for complex business logic (Optional)
 static bool customer_id_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -34,8 +32,9 @@ static bool customer_id_validator(
 }
 
 // 2. Define the expected fields and their types
+// Note: For simple strings, you can use `.max_len = 250` instead of a custom validator!
 static const FieldValidator CustomerSchema[] = {
-    // We use a custom validator to enforce the ID is exactly 5 alphabetical chars
+    // We use a custom validator here to enforce the ID is exactly 5 alphabetical chars
     {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
 };
 
