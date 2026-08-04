@@ -254,7 +254,7 @@ static bool odbcutil_execute_and_fetch(
     SQLHDBC hdbc = odbcutil_connect(db_id);
     if (hdbc == SQL_NULL_HDBC) return false;
     
-    raii_odbc_stmt hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
     if (!hstmt) return false;
     
     for (size_t i = 0; i < param_count; ++i) {
@@ -512,7 +512,7 @@ bool odbcutil_query_single_row(
     SQLHDBC hdbc = odbcutil_connect(db_id);
     if (hdbc == SQL_NULL_HDBC) return false;
 
-    raii_odbc_stmt hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
     if (!hstmt) return false;
 
     for (size_t i = 0; i < in_count; ++i) {

@@ -124,7 +124,7 @@ static bool worker_process_payload(http_task_t* task) {
         return false;
     }
     
-    raii_json_tokener tok = json_tokener_new();
+    [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener* tok = json_tokener_new();
     task->parsed_body = json_tokener_parse_ex(tok, (const char*)data, (int)len);
     enum json_tokener_error jerr = json_tokener_get_error(tok);
     if (!task->parsed_body || jerr != json_tokener_success || !json_object_is_type(task->parsed_body, json_type_object)) {

@@ -116,7 +116,7 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     
     set_thread_error(TL_ERR_WARN, "[customer] JWT cache miss (token missing or expired). Requesting a fresh token...");
     
-    raii_json_object login_response = execute_login_request();
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* login_response = execute_login_request();
     
     pthread_mutex_lock(&jwt_cache_lock);
     
@@ -145,7 +145,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
         return nullptr;
     }
     
-    raii_json_object req_payload = json_object_new_object();
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* req_payload = json_object_new_object();
     json_object_object_add(req_payload, "id", json_object_new_string(customer_id));
     const char* body = json_object_to_json_string(req_payload);
     

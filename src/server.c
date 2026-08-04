@@ -740,7 +740,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
 }
 
 static struct event_base* create_optimized_event_base(void) {
-    raii_event_config cfg = event_config_new();
+    [[gnu::cleanup(cleanup_event_config)]] struct event_config* cfg = event_config_new();
     if (cfg != nullptr) {
         event_config_avoid_method(cfg, "select");
         event_config_avoid_method(cfg, "poll");
@@ -811,7 +811,7 @@ void* reactor_thread_logic(void* arg) {
     size_t worker_id = (size_t)arg;
     tl_reactor_id = worker_id;
     
-    raii_event_base base = create_optimized_event_base();
+    [[gnu::cleanup(cleanup_event_base)]] struct event_base* base = create_optimized_event_base();
     if (base == nullptr) {
         atomic_store_explicit(&g_startup_failed, true, memory_order_release);
         pthread_barrier_wait(&g_startup_barrier);
@@ -836,7 +836,7 @@ void* reactor_thread_logic(void* arg) {
         return nullptr;
     }
 
-    raii_evhttp http = configure_http_server(base, fd, g_routes, g_route_count);
+    [[gnu::cleanup(cleanup_evhttp)]] struct evhttp* http = configure_http_server(base, fd, g_routes, g_route_count);
     if (http == nullptr) {
         LOG_FATAL("Failed to configure HTTP server for Reactor %zu", worker_id);
         close(fd);

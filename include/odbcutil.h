@@ -84,6 +84,5 @@ void odbcutil_cleanup_stmt(SQLHSTMT* stmt);
 /** \brief Checks if a statement handle is still valid in the thread-local pool. */
 bool odbcutil_is_valid_stmt(SQLHSTMT hstmt);
 
-/** \brief Scoped auto-cleanup for ODBC statement handle. */
-#define raii_odbc_stmt [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT
+
 

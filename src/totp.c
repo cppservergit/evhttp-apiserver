@@ -74,7 +74,7 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
         return;
     }
 
-    raii_secure_free_str escaped_user = evhttp_uriencode(user, -1, 0);
+    [[gnu::cleanup(cleanup_secure_free_str)]] char* escaped_user = evhttp_uriencode(user, -1, 0);
     if (!escaped_user) {
         *out_status = HTTP_INTERNAL;
         sodium_memzero(secret, sizeof(secret));

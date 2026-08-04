@@ -20,12 +20,10 @@ struct memory_struct {
 static inline void cleanup_memory_struct(struct memory_struct* mem) {
     if (mem->memory) free(mem->memory);
 }
-#define raii_memory_struct [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct
 
 static inline void cleanup_curl_slist(struct curl_slist** slist) {
     if (*slist) curl_slist_free_all(*slist);
 }
-#define raii_curl_slist [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist*
 
 
 static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -191,8 +189,8 @@ static struct json_object* do_http_request(const char* base_url, const char* uri
         return nullptr;
     }
 
-    raii_memory_struct chunk = {0};
-    raii_curl_slist chunk_headers = nullptr;
+    [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
+    [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist* chunk_headers = nullptr;
     CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
     if (!curl) return nullptr;
 

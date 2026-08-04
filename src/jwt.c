@@ -62,7 +62,7 @@ time_t jwt_get_expiration(const char* jwt) {
     if (!jwt_decode_payload(jwt, payload_json, sizeof(payload_json))) return 0;
     
     time_t exp = 0;
-    raii_json_object jwt_obj = json_tokener_parse(payload_json);
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* jwt_obj = json_tokener_parse(payload_json);
     if (jwt_obj) {
         struct json_object* exp_obj;
         if (json_object_object_get_ex(jwt_obj, "exp", &exp_obj)) {
@@ -142,7 +142,7 @@ static bool jwt_check_header_alg(const char* token) {
     char header_json[1024];
     if (!jwt_decode_header(token, header_json, sizeof(header_json))) return false;
     
-    raii_json_object header_obj = json_tokener_parse(header_json);
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* header_obj = json_tokener_parse(header_json);
     if (!header_obj) return false;
     
     struct json_object* alg_obj;
@@ -178,7 +178,7 @@ static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_h
 }
 
 static int jwt_parse_payload(const char* payload_json, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
-    raii_json_object jwt_obj = json_tokener_parse(payload_json);
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* jwt_obj = json_tokener_parse(payload_json);
     if (!jwt_obj) return JWT_ERR_INVALID;
 
     struct json_object* exp_obj;

@@ -166,7 +166,7 @@ void metrics_handler(struct json_object* body, int* out_status, struct evbuffer*
 }
 
 static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
-    raii_json_object scoped_json = remote_json;
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* scoped_json = remote_json;
     char prefix[128];
     int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
     evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
@@ -581,7 +581,7 @@ void login_handler(struct json_object* body, int* out_status, struct evbuffer* o
     const char* remote_ip = get_client_ip();
 
     long http_code = 0;
-    raii_json_object remote_response = login_service_authenticate(username, password, &http_code);
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* remote_response = login_service_authenticate(username, password, &http_code);
 
     if (http_code == 200) {
         handle_login_success(username, remote_ip, out_status, out_buf);
@@ -759,7 +759,7 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     
     size_t b64_len = strlen(blob);
     size_t bin_maxlen = (b64_len / 4) * 3 + 4; // Add padding buffer
-    raii_free unsigned char* bin_buf = malloc(bin_maxlen);
+    [[gnu::cleanup(cleanup_free)]] unsigned char* bin_buf = malloc(bin_maxlen);
     if (!bin_buf) {
         LOG_ERROR("Out of memory allocating %zu bytes for upload blob", bin_maxlen);
         return;
@@ -774,7 +774,7 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
         return;
     }
     
-    raii_file fp = fopen(out_path, "wb");
+    [[gnu::cleanup(cleanup_file)]] FILE* fp = fopen(out_path, "wb");
     if (!fp) {
         char errbuf[256];
         LOG_ERROR("Failed to open upload destination %s for writing: %s", out_path, strerror_r(errno, errbuf, sizeof(errbuf)));
