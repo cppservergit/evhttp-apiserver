@@ -540,7 +540,7 @@ static void handle_login_failure(
     const char* username, 
     const char* remote_ip, 
     long http_code, 
-    struct json_object* remote_response,
+    const struct json_object* remote_response,
     int* out_status, 
     struct evbuffer* out_buf
 ) {
