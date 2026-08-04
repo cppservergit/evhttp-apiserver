@@ -177,7 +177,8 @@ static bool fetch_json_native_col_loop(DbConnectionId db_id, SQLHSTMT hstmt, con
 }
 
 static bool odbcutil_fetch_json_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
-    bool has_rows = false, has_data_written = false;
+    bool has_rows = false;
+    bool has_data_written = false;
 
     while (true) {
         SQLRETURN ret = SQLFetch(hstmt);
