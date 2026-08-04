@@ -14,6 +14,7 @@
 void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_buf);
 
 /** \brief Validates a TOTP code for a given user. */
+[[nodiscard("TOTP validation result must be evaluated")]]
 bool is_valid_totp(const char* username, const char* totp_code);
 
 /** 
@@ -22,4 +23,5 @@ bool is_valid_totp(const char* username, const char* totp_code);
  * \param out_maxlen The maximum length of the output buffer (must be exactly 33 for a 20-byte secret).
  * \return true on success, false if the buffer is too small or improperly sized.
  */
+[[nodiscard("TOTP base32 generation status must be evaluated")]]
 bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen);

@@ -101,6 +101,7 @@ void totp_generate_svg(const char* user, int* out_status, struct evbuffer* out_b
     *out_status = HTTP_OK;
 }
 
+[[nodiscard("TOTP validation result must be evaluated")]]
 bool is_valid_totp(const char* username, const char* totp_code) {
     if (!username || !totp_code) return false;
 
@@ -127,6 +128,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
     return (validate_ret >= 0);
 }
 
+[[nodiscard("TOTP base32 generation status must be evaluated")]]
 bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
     if (!out_secret || out_maxlen != 33) return false;
 
