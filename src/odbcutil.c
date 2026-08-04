@@ -468,9 +468,8 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
     for (SQLSMALLINT i = 0; i < meta->count; ++i) {
         const ColumnDescriptor *col = &meta->cols[i];
 
-        evbuffer_add(buf, "\"", 1);
         evbuffer_append_escaped_str(buf, (const char*)col->name, col->name_len);
-        evbuffer_add(buf, "\":", 2);
+        evbuffer_add(buf, ":", 1);
 
         if (col->ind == SQL_NULL_DATA) {
             evbuffer_add(buf, "null", 4);
