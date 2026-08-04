@@ -61,15 +61,18 @@ SQLHDBC odbcutil_connect(DbConnectionId db_id);
 #include <stdbool.h>
 
 /** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Executes query and converts traditional resultset to JSON array of objects. */
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Extracts and logs ODBC diagnostic records. */
 void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
 
 /** \brief Executes a query and fetches a single row directly into the provided OutParam buffers. */
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */

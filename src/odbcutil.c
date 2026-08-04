@@ -273,6 +273,7 @@ static bool odbcutil_execute_and_fetch(
     return false;
 }
 
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
     return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_json_native);
 }
@@ -495,10 +496,12 @@ bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* fu
     return true;
 }
 
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
     return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_rs2json);
 }
 
+[[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(
     DbConnectionId db_id,
     const char* query,
