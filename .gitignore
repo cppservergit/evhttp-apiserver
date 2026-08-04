@@ -23,7 +23,7 @@ test/*
 !test/validation-test.c
 !test/test.sh
 !test/concurrency-test.c
-!test/api-tester.sh
+!test/api-tester-cust.sh
 !test/api-tester-emp.sh
 
 # Docs
