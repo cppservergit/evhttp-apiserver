@@ -55,7 +55,7 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
         return true;
     }
 
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
     const char* auth_hdr = evhttp_find_header(in_headers, "Authorization");
     if (!auth_hdr || strncasecmp(auth_hdr, "Bearer ", 7) != 0) {
         task->status_code = 401;
@@ -95,7 +95,7 @@ static bool worker_process_payload(http_task_t* task) {
         return true;
     }
 
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
+    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(task->req);
     const char* ctype = evhttp_find_header(in_headers, "Content-Type");
     if (ctype == nullptr || strncasecmp(ctype, "application/json", 16) != 0 || (ctype[16] != '\0' && ctype[16] != ';' && ctype[16] != ' ')) {
         task->status_code = HTTP_BADREQUEST;
@@ -332,7 +332,8 @@ bool worker_pool_enqueue(http_task_t* task) {
     task->next = nullptr;
     
     if (pool->tail == nullptr) {
-        pool->head = pool->tail = task;
+        pool->tail = task;
+        pool->head = task;
     } else {
         pool->tail->next = task;
         pool->tail = task;

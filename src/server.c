@@ -56,10 +56,10 @@ static const char* server_get_client_ip_fast(struct evhttp_connection* evcon) {
     
     if (getpeername(fd, (struct sockaddr*)&addr, &addr_len) == 0) {
         if (addr.ss_family == AF_INET) {
-            struct sockaddr_in* s = (struct sockaddr_in*)&addr;
+            const struct sockaddr_in* s = (const struct sockaddr_in*)&addr;
             if (inet_ntop(AF_INET, &s->sin_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
         } else if (addr.ss_family == AF_INET6) {
-            struct sockaddr_in6* s = (struct sockaddr_in6*)&addr;
+            const struct sockaddr_in6* s = (const struct sockaddr_in6*)&addr;
             if (inet_ntop(AF_INET6, &s->sin6_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
         }
     }
@@ -86,7 +86,7 @@ static bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_i
 }
 
 static const char* server_extract_client_ip(struct evhttp_request* req) {
-    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    const struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
     const char* x_forwarded_for = evhttp_find_header(headers, "X-Forwarded-For");
 
     if (!x_forwarded_for || !is_trusted_proxy(req, nullptr)) {
@@ -382,7 +382,7 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
     }
     
     buf[bytes] = '\0';
-    char* p = buf;
+    const char* p = buf;
     while (*p && *p != ' ') p++;
     if (*p != ' ') {
         close(fd);
@@ -449,7 +449,8 @@ void server_notify_task_done(void* arg) {
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
     bool was_empty = (g_reactor_queues[rid].tail == nullptr);
     if (was_empty) {
-        g_reactor_queues[rid].head = g_reactor_queues[rid].tail = task;
+        g_reactor_queues[rid].tail = task;
+        g_reactor_queues[rid].head = task;
     } else {
         g_reactor_queues[rid].tail->next = task;
         g_reactor_queues[rid].tail = task;
@@ -468,7 +469,7 @@ void server_notify_task_done(void* arg) {
     }
 }
 
-static void request_on_complete_cb(struct evhttp_request *req, void *arg) {
+static void request_on_complete_cb(const struct evhttp_request *req, void *arg) {
     (void)req;
     http_task_t* task = arg;
     atomic_store(&task->cancelled, true);
@@ -540,7 +541,7 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     (void)events; (void)arg;
     uint64_t val;
     // Drain eventfd counter
-    while (read(fd, &val, sizeof(val)) == sizeof(val)) {}
+    while (read(fd, &val, sizeof(val)) == sizeof(val)) { /* do nothing */ }
     
     size_t rid = tl_reactor_id;
     
@@ -578,7 +579,7 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
         return false;
     }
     
-    struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
+    const struct evkeyvalq* headers = evhttp_request_get_input_headers(req);
     const char* auth_header = evhttp_find_header(headers, "X-API-Key");
     const char* bearer = evhttp_find_header(headers, "Authorization");
     
@@ -601,7 +602,7 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
 
 
 static bool server_validate_cors(struct evhttp_request* req) {
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* origin = evhttp_find_header(in_headers, "Origin");
     if (origin) {
         if (config_is_origin_allowed(origin)) {
@@ -647,7 +648,7 @@ static bool server_validate_method_and_auth(struct evhttp_request* req, const mi
 
 static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx_t* ctx, struct timespec start_time) {
     const char* extracted_client_ip = server_extract_client_ip(req);
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
 
     http_task_t* task = task_pool_alloc();
     if (!task) {
@@ -686,7 +687,7 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
     
     atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
-    evhttp_request_set_on_complete_cb(req, request_on_complete_cb, task);
+    evhttp_request_set_on_complete_cb(req, (void (*)(struct evhttp_request *, void *))request_on_complete_cb, task);
     
     evhttp_request_own(req);
     
@@ -722,7 +723,7 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     struct timespec start_time;
     clock_gettime(CLOCK_MONOTONIC, &start_time);
     
-    struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
+    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
     if (x_forwarded_for) {
         const char* peer_ip = nullptr;
