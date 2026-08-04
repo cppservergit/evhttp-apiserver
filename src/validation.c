@@ -36,6 +36,9 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
         case ERR_UNKNOWN_TYPE:
             (void)snprintf(err_buf, err_len, "Internal error: Unknown validation type configured.");
             break;
+        case ERR_TOO_LONG:
+            (void)snprintf(err_buf, err_len, "Field '%s' exceeds maximum allowed length.", arg ? arg : "");
+            break;
         default:
             (void)snprintf(err_buf, err_len, "Unknown error code: %d", code);
             break;
@@ -46,7 +49,7 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
 
 // --- Framework Types ---
 
-typedef bool (*TypeValidatorFunc)(const json_object *obj, const char *field_name, char *err_buf, size_t err_len);
+typedef bool (*TypeValidatorFunc)(const json_object *obj, const FieldValidator *field, char *err_buf, size_t err_len);
 
 
 
@@ -91,37 +94,43 @@ static bool validate_date_string_fast(const char *date_str) {
 
 // --- Dynamic Type Validators ---
 
-static bool validate_type_int(const json_object *obj, const char *name, char *err, size_t len) {
+static bool validate_type_int(const json_object *obj, const FieldValidator *field, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_int)) {
-        return emit_error(err, len, ERR_NOT_INT, name);
+        return emit_error(err, len, ERR_NOT_INT, field->field_name);
     }
     return true;
 }
 
-static bool validate_type_double(const json_object *obj, const char *name, char *err, size_t len) {
+static bool validate_type_double(const json_object *obj, const FieldValidator *field, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_double) && !json_object_is_type(obj, json_type_int)) {
-        return emit_error(err, len, ERR_NOT_DOUBLE, name);
+        return emit_error(err, len, ERR_NOT_DOUBLE, field->field_name);
     }
     double val = json_object_get_double(obj);
     if (isnan(val) || isinf(val)) {
-        return emit_error(err, len, ERR_NOT_DOUBLE, name);
+        return emit_error(err, len, ERR_NOT_DOUBLE, field->field_name);
     }
     return true;
 }
 
-static bool validate_type_string(const json_object *obj, const char *name, char *err, size_t len) {
+static bool validate_type_string(const json_object *obj, const FieldValidator *field, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_string)) {
-        return emit_error(err, len, ERR_NOT_STRING, name);
+        return emit_error(err, len, ERR_NOT_STRING, field->field_name);
+    }
+    if (field->max_len > 0) {
+        const char *str = json_object_get_string((struct json_object*)obj);
+        if (str && strlen(str) > field->max_len) {
+            return emit_error(err, len, ERR_TOO_LONG, field->field_name);
+        }
     }
     return true;
 }
 
-static bool validate_type_date(const json_object *obj, const char *name, char *err, size_t len) {
+static bool validate_type_date(const json_object *obj, const FieldValidator *field, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_string)) {
-        return emit_error(err, len, ERR_NOT_DATE, name);
+        return emit_error(err, len, ERR_NOT_DATE, field->field_name);
     }
     if (!validate_date_string_fast(json_object_get_string((json_object *)obj))) {
-        return emit_error(err, len, ERR_INVALID_DATE, name);
+        return emit_error(err, len, ERR_INVALID_DATE, field->field_name);
     }
     return true;
 }
@@ -178,7 +187,7 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
             return emit_error(err_buf, err_len, ERR_UNKNOWN_TYPE, nullptr);
         }
 
-        if (!TYPE_VALIDATOR_MAP[field->type](field_obj, field->field_name, err_buf, err_len)) {
+        if (!TYPE_VALIDATOR_MAP[field->type](field_obj, field, err_buf, err_len)) {
             return false;
         }
 

@@ -17,6 +17,7 @@ typedef enum {
     ERR_NOT_DATE,
     ERR_INVALID_DATE,
     ERR_UNKNOWN_TYPE,
+    ERR_TOO_LONG,
     ERR_MAX_ERRORS
 } ErrorCode;
 
@@ -42,6 +43,7 @@ typedef struct {
     FieldType type;
     bool is_required;
     char _padding[3];
+    size_t max_len;
 } FieldValidator;
 
 /** \brief Holds an entire JSON validation schema. */
