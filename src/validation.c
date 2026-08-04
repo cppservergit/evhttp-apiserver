@@ -182,12 +182,12 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
             return false;
         }
 
-        if (field->custom_validator && !field->custom_validator(ctx, field_obj, field->field_name, err_buf, err_len)) {
+        if (field->custom_validator && !field->custom_validator(field_obj, err_buf, err_len)) {
             return false; 
         }
     }
 
-    if (ctx->global_validator && !ctx->global_validator(ctx, root, nullptr, err_buf, err_len)) return false;
+    if (ctx->global_validator && !ctx->global_validator(root, err_buf, err_len)) return false;
 
     return true;
 }

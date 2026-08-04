@@ -211,9 +211,7 @@ void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  str
  * data integrity before invoking the stored procedure.
  */
 static bool customer_id_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -287,9 +285,7 @@ void customer_handler(
  * from hitting the database.
  */
 static bool sales_invariant_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *root, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -310,9 +306,7 @@ static bool sales_invariant_validator(
 }
 
 static bool validate_sales_start_date(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -326,9 +320,7 @@ static bool validate_sales_start_date(
 }
 
 static bool validate_sales_end_date(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -422,20 +414,18 @@ void getqr_handler(
 // --- Verify TOTP Handler & Schema ---
 
 static bool totp_custom_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
     const char *totp = json_object_get_string((struct json_object*)obj);
     if (!totp || strlen(totp) != 6) {
-        (void)snprintf(err_buf, err_len, "Field '%s' must be exactly 6 characters.", name ? name : "totp");
+        (void)snprintf(err_buf, err_len, "Field '%s' must be exactly 6 characters.", "totp");
         return false;
     }
     for (int i = 0; i < 6; ++i) {
         if (!isdigit((unsigned char)totp[i])) {
-            (void)snprintf(err_buf, err_len, "Field '%s' must contain only digits.", name ? name : "totp");
+            (void)snprintf(err_buf, err_len, "Field '%s' must contain only digits.", "totp");
             return false;
         }
     }
@@ -557,9 +547,7 @@ static const FieldValidator LoginSchema[] = {
 };
 
 static bool login_global_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *root, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -674,9 +662,7 @@ void login_handler(
 // --- Employee Handler & Schema ---
 
 static bool employee_id_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -720,9 +706,7 @@ void employee_handler(
 // --- Prodget Handler & Schema ---
 
 static bool prodget_id_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
     const json_object *obj, 
-    [[maybe_unused]] const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
@@ -816,25 +800,49 @@ void sales_pgsql_handler(
 
 // --- Upload Handler & Schema ---
 
-static bool upload_string_validator(
-    [[maybe_unused]] const ValidationContext *ctx, 
+static bool upload_filename_validator(
     const json_object *obj, 
-    const char *name, 
     char *err_buf, 
     size_t err_len
 ) {
     const char *str = json_object_get_string((struct json_object*)obj);
     if (!str || strlen(str) > 250) {
-        (void)snprintf(err_buf, err_len, "Field '%s' must be string and max 250 chars.", name ? name : "unknown");
+        (void)snprintf(err_buf, err_len, "Field 'filename' must be string and max 250 chars.");
+        return false;
+    }
+    return true;
+}
+
+static bool upload_content_type_validator(
+    const json_object *obj, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *str = json_object_get_string((struct json_object*)obj);
+    if (!str || strlen(str) > 250) {
+        (void)snprintf(err_buf, err_len, "Field 'content_type' must be string and max 250 chars.");
+        return false;
+    }
+    return true;
+}
+
+static bool upload_title_validator(
+    const json_object *obj, 
+    char *err_buf, 
+    size_t err_len
+) {
+    const char *str = json_object_get_string((struct json_object*)obj);
+    if (!str || strlen(str) > 250) {
+        (void)snprintf(err_buf, err_len, "Field 'title' must be string and max 250 chars.");
         return false;
     }
     return true;
 }
 
 static const FieldValidator UploadSchema[] = {
-    {.field_name = "filename", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
-    {.field_name = "content_type", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
-    {.field_name = "title", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_string_validator},
+    {.field_name = "filename", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_filename_validator},
+    {.field_name = "content_type", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_content_type_validator},
+    {.field_name = "title", .type = TYPE_STRING, .is_required = true, .custom_validator = upload_title_validator},
     {.field_name = "blob", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr}
 };
 

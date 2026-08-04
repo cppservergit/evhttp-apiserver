@@ -33,7 +33,7 @@ typedef enum {
 typedef struct ValidationContext ValidationContext;
 
 /** \brief Function pointer definition for a custom field validator. */
-typedef bool (*CustomValidatorFunc)(const ValidationContext *ctx, const json_object *obj, const char *field_name, char *err_buf, size_t err_len);
+typedef bool (*CustomValidatorFunc)(const json_object *obj, char *err_buf, size_t err_len);
 
 /** \brief Defines a schema rule for a single JSON field. */
 typedef struct {
