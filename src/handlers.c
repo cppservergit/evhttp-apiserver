@@ -230,7 +230,7 @@ static bool customer_id_validator(
 }
 
 static const FieldValidator CustomerSchema[] = {
-    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
+    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .max_len = 5, .custom_validator = customer_id_validator}
 };
 
 const ValidationContext CustomerContext = {
@@ -433,7 +433,7 @@ static bool totp_custom_validator(
 }
 
 static const FieldValidator VerifyTotpSchema[] = {
-    {.field_name = "totp", .type = TYPE_STRING, .is_required = true, .custom_validator = totp_custom_validator}
+    {.field_name = "totp", .type = TYPE_STRING, .is_required = true, .max_len = 6, .custom_validator = totp_custom_validator}
 };
 
 const ValidationContext VerifyTotpContext = {
@@ -542,34 +542,14 @@ const char* get_content_type(void) {
 // --- Login Handler & Schema ---
 
 static const FieldValidator LoginSchema[] = {
-    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr},
-    {.field_name = "password", .type = TYPE_STRING, .is_required = true, .custom_validator = nullptr}
+    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .max_len = 32},
+    {.field_name = "password", .type = TYPE_STRING, .is_required = true, .max_len = 32}
 };
-
-static bool login_global_validator(
-    const json_object *root, 
-    char *err_buf, 
-    size_t err_len
-) {
-    const char* username = json_get_string(root, "username");
-    const char* password = json_get_string(root, "password");
-    
-    if (username && strlen(username) > 32) {
-        (void)snprintf(err_buf, err_len, "username exceeds 32 characters");
-        return false;
-    }
-
-    if (password && strlen(password) > 32) {
-        (void)snprintf(err_buf, err_len, "password exceeds 32 characters");
-        return false;
-    }
-    return true;
-}
 
 const ValidationContext LoginContext = {
     .schema = LoginSchema,
     .schema_count = sizeof(LoginSchema) / sizeof(LoginSchema[0]),
-    .global_validator = login_global_validator
+    .global_validator = nullptr
 };
 
 static void handle_login_success(
@@ -750,7 +730,7 @@ void prodget_handler(
 // --- Customers Handler & Schema ---
 
 static const FieldValidator CustomersSchema[] = {
-    {.field_name = "filter", .type = TYPE_STRING, .is_required = false, .custom_validator = nullptr}
+    {.field_name = "filter", .type = TYPE_STRING, .is_required = false, .max_len = 100}
 };
 
 const ValidationContext CustomersContext = {
