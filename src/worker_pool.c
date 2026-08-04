@@ -159,7 +159,11 @@ static void worker_process_task(http_task_t* task) {
     
     if (worker_process_jwt(task, ctx) && worker_process_payload(task) && worker_process_validation(task, ctx)) {
         if (ctx && ctx->handler) {
-            ctx->handler(task->parsed_body, ctx->user_arg, &task->status_code, task->worker_buf);
+            if (task->parsed_body) {
+                ctx->handler(task->parsed_body, &task->status_code, task->worker_buf);
+            } else {
+                ctx->handler(nullptr, &task->status_code, task->worker_buf);
+            }
             const char* ctype = get_content_type();
             if (ctype) {
                 (void)snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);

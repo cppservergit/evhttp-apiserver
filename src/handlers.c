@@ -27,8 +27,8 @@ static void set_content_type(const char* ctype);
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
 
-void ping_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
+void ping_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    (void)body; 
     
     *out_status = HTTP_OK;
     
@@ -36,8 +36,8 @@ void ping_handler(struct json_object* body, void* arg, int* out_status,  struct 
     evbuffer_add(out_buf, msg, strlen(msg));
 }
 
-void version_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
+void version_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    (void)body; 
     
     *out_status = HTTP_OK;
     
@@ -100,8 +100,8 @@ void build_sysinfo_json_string(char* buf, size_t max_len) {
     );
 }
 
-void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
+void sysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    (void)body; 
     
     *out_status = HTTP_OK;
     
@@ -111,8 +111,8 @@ void sysinfo_handler(struct json_object* body, void* arg, int* out_status,  stru
     evbuffer_add(out_buf, buf, strlen(buf));
 }
 
-void metrics_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
+void metrics_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    (void)body; 
     
     *out_status = HTTP_OK;
     
@@ -178,8 +178,8 @@ static void append_remote_json_response(struct evbuffer* out_buf, struct json_ob
     evbuffer_add(out_buf, "}", 1);
 }
 
-void rsysinfo_handler(struct json_object* body, void* arg, int* out_status,  struct evbuffer* out_buf) {
-    (void)body; (void)arg;
+void rsysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    (void)body; 
     
     *out_status = HTTP_OK;
 
@@ -239,12 +239,7 @@ const ValidationContext CustomerContext = {
     .global_validator = nullptr
 };
 
-void rcustomer_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void rcustomer_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char *customer_id = json_get_string(body, "id");
     
     *out_status = HTTP_OK;
@@ -256,12 +251,7 @@ void rcustomer_handler(
 }
 
 
-void customer_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void customer_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     const char* customer_id = json_get_string(body, "id");
@@ -344,12 +334,7 @@ const ValidationContext SalesContext = {
     .global_validator = sales_invariant_validator
 };
 
-void sales_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void sales_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     const char* start_date = json_get_string(body, "start_date");
@@ -366,12 +351,7 @@ void sales_handler(
 
 // --- TOTP QR Handler ---
 
-void shippers_handler(
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void shippers_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
         
     const char* user = get_user();
@@ -385,24 +365,14 @@ void shippers_handler(
     }
 }
 
-void products_handler(
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void products_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     if (!odbcutil_get_json(DB_0, "{CALL sp_products_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
 
-void getqr_handler(
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void getqr_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* user = get_user();
     
     totp_generate_svg(user, out_status, out_buf);
@@ -442,12 +412,7 @@ const ValidationContext VerifyTotpContext = {
     .global_validator = nullptr
 };
 
-void verifytotp_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void verifytotp_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* user = get_user();
     const char* session = get_session_id();
     const char* totp_str = json_get_string(body, "totp");
@@ -466,12 +431,7 @@ void verifytotp_handler(
     }
 }
 
-void uuid_handler(
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void uuid_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     char uuid_str[37];
@@ -482,12 +442,7 @@ void uuid_handler(
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void secretb32_handler(
-    [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void secretb32_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     char secret[33];
     if (totp_generate_base32_secret(secret, sizeof(secret))) {
@@ -618,12 +573,7 @@ static void handle_login_failure(
     }
 }
 
-void login_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void login_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* username = json_get_string(body, "username");
     const char* password = json_get_string(body, "password");
 
@@ -664,12 +614,7 @@ const ValidationContext EmployeeContext = {
     .global_validator = nullptr
 };
 
-void employee_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void employee_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     int emp_id = json_get_int(body, "id");
@@ -708,12 +653,7 @@ const ValidationContext ProdgetContext = {
     .global_validator = nullptr
 };
 
-void prodget_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void prodget_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     int id = json_get_int(body, "id");
@@ -739,12 +679,7 @@ const ValidationContext CustomersContext = {
     .global_validator = nullptr
 };
 
-void customers_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void customers_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     const char* filter = json_get_string(body, "filter");
@@ -758,12 +693,7 @@ void customers_handler(
     }
 }
 
-void sales_pgsql_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void sales_pgsql_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     const char* start_date = json_get_string(body, "start_date");
@@ -795,12 +725,7 @@ const ValidationContext UploadContext = {
     .global_validator = nullptr
 };
 
-void upload_handler(
-    struct json_object* body, 
-    [[maybe_unused]] void* arg, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void upload_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* filename = json_get_string(body, "filename");
     const char* content_type = json_get_string(body, "content_type");
     const char* title = json_get_string(body, "title");

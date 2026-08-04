@@ -42,7 +42,7 @@ void server_cleanup_globals(void);
  * \param out_status Pointer to the HTTP status code (e.g. 200, 404). Handlers must set this.
  * \param out_buf The libevent network buffer where response data should be appended directly.
  */
-typedef void (*handler_fn)(struct json_object* body, void* user_arg, int* out_status, struct evbuffer* out_buf);
+typedef void (*handler_fn)(struct json_object* body, int* out_status, struct evbuffer* out_buf);
 
 /** \brief Security enforcement mode for an HTTP route. */
 typedef enum {
@@ -56,7 +56,6 @@ typedef struct {
     const char* path;
     const ValidationContext* validation_ctx;
     handler_fn handler;
-    void* user_arg;
     enum evhttp_cmd_type allowed_method;
     auth_mode_t auth_mode; /**< \brief Security enforcement mode for this route. */
     bool is_fast; /**< \brief If true, routes to the dedicated fast thread pool to prevent starvation (Bulkheading). */

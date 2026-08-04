@@ -57,7 +57,6 @@ The handler function orchestrates the request. By using the `odbcutil_get_json` 
 ```c
 void customer_handler(
     struct json_object* body, 
-    [[maybe_unused]] void* arg, 
     int* out_status, 
     struct evbuffer* out_buf
 ) {
@@ -117,7 +116,6 @@ Pass `nullptr` and `0` for the parameter arguments in `odbcutil_get_json`:
 ```c
 void shippers_handler(
     [[maybe_unused]] struct json_object* body, 
-    [[maybe_unused]] void* arg, 
     int* out_status, 
     struct evbuffer* out_buf
 ) {

@@ -185,7 +185,7 @@ static void mcp_handle_tools_call(struct json_object* params, struct evbuffer* o
     send_jsonrpc_error(out_buf, req_id, -32601, "Tool not found");
 }
 
-void mcp_handler(struct json_object* body, [[maybe_unused]] void* arg, int* out_status, struct evbuffer* out_buf) {
+void mcp_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK; // JSON-RPC mostly returns 200 OK unless HTTP failure
     
     if (body == nullptr || json_object_get_type(body) != json_type_object) {

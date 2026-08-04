@@ -44,7 +44,7 @@ flowchart TD
 * **Built-in TOTP support:** Sample code provided to generate TOTP QR code and validate a TOTP using `libqrencode` and `liboath` respectively.
 * **Built-in MCP support:** Includes and endpoint to implement as a server the Model Context Protocol to be consumed by AI agents, with a sample tool.
 
-## Clean C Design
+## Clean data-driven C Design
 
 ### Declarative API Routing
 Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas:
@@ -243,7 +243,6 @@ Because the framework handles the JSON parsing and validation automatically, the
 ```c
 void sales_handler(
     struct json_object* body, 
-    [[maybe_unused]] void* arg, 
     int* out_status, 
     struct evbuffer* out_buf
 ) {
