@@ -34,3 +34,4 @@ code*.md
 rules.md
 .gemini/*
 sonar_violations.md
+.antigravity/
