@@ -25,6 +25,7 @@ test/*
 !test/concurrency-test.c
 !test/api-tester-cust.sh
 !test/api-tester-emp.sh
+!test/test-upload.sh
 
 # Docs
 features.md
