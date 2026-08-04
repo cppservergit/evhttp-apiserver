@@ -547,7 +547,8 @@ static void reactor_eventfd_cb(evutil_socket_t fd, short events, void *arg) {
     
     pthread_mutex_lock(&g_reactor_queues[rid].lock);
     http_task_t* curr = g_reactor_queues[rid].head;
-    g_reactor_queues[rid].head = g_reactor_queues[rid].tail = nullptr;
+    g_reactor_queues[rid].tail = nullptr;
+    g_reactor_queues[rid].head = nullptr;
     pthread_mutex_unlock(&g_reactor_queues[rid].lock);
     
     while (curr != nullptr) {
@@ -634,14 +635,12 @@ static bool server_validate_method_and_auth(struct evhttp_request* req, const mi
         return false;
     }
     
-    if (ctx->auth_mode == AUTH_API_KEY) {
-        if (!validate_telemetry_api_key(req)) {
-            struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
-            const char* msg = "{\"error\":\"Access Denied\"}";
-            evbuffer_add(out_buf, msg, strlen(msg));
-            evhttp_send_reply(req, 403, "Forbidden", nullptr);
-            return false;
-        }
+    if (ctx->auth_mode == AUTH_API_KEY && !validate_telemetry_api_key(req)) {
+        struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
+        const char* msg = "{\"error\":\"Access Denied\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+        evhttp_send_reply(req, 403, "Forbidden", nullptr);
+        return false;
     }
     return true;
 }
