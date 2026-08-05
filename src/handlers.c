@@ -638,8 +638,8 @@ static bool prodget_id_validator(
     size_t err_len
 ) {
     int id = json_object_get_int(obj);
-    if (id <= 0 || id >= 30) {
-        (void)snprintf(err_buf, err_len, "Invalid id: %d (must be > 0 and < 30)", id);
+    if (id <= 0) {
+        (void)snprintf(err_buf, err_len, "Invalid id: %d (must be > 0)", id);
         return false;
     }
     return true;
