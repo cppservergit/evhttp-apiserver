@@ -1,5 +1,4 @@
 #include "handlers.h"
-#include <assert.h>
 #include "server.h"
 #include "http_client.h"
 #include "customer.h"
@@ -12,21 +11,195 @@
 #include "jwt.h"
 #include "odbcutil.h"
 #include "raii.h"
-#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <ctype.h>
 #include <sodium.h>
 #include "json_util.h"
 #include <event2/buffer.h>
-#include <event2/keyvalq_struct.h>
 #include <stdint.h>
 
-static const char* get_client_ip(void);
-static const char* get_session_id(void);
-static void set_content_type(const char* ctype);
+
+// ==============================================================================
+// UTILITY FUNCTIONS & SHARED CONTEXT
+// ==============================================================================
+
+// --- Shared Utilities ---
+
+static _Thread_local char tl_user[33] = {0};
+static _Thread_local char tl_session[37] = {0};
+static _Thread_local char tl_client_ip[64] = {0};
+static _Thread_local char tl_uri[1024] = {0};
+static _Thread_local char tl_content_type[128] = {0};
+
+void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri) {
+    if (user) (void)snprintf(tl_user, sizeof(tl_user), "%s", user);
+    else tl_user[0] = '\0';
+    if (session) (void)snprintf(tl_session, sizeof(tl_session), "%s", session);
+    else tl_session[0] = '\0';
+    if (client_ip) (void)snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
+    else tl_client_ip[0] = '\0';
+    if (uri) (void)snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
+    else tl_uri[0] = '\0';
+}
+
+void handlers_clear_context(void) {
+    tl_user[0] = '\0';
+    tl_session[0] = '\0';
+    tl_client_ip[0] = '\0';
+    tl_uri[0] = '\0';
+    tl_content_type[0] = '\0';
+}
+
+const char* get_user(void) { return tl_user[0] ? tl_user : nullptr; }
+static const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
+static const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
+
+static void set_content_type(const char* ctype) {
+    if (ctype) (void)snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
+    else tl_content_type[0] = '\0';
+}
+
+const char* get_content_type(void) {
+    return tl_content_type[0] ? tl_content_type : nullptr;
+}
+
+void build_sysinfo_json_string(char* buf, size_t max_len) {
+    server_request_stats_t stats = {0};
+    server_get_request_stats(&stats);
+    
+    uint64_t total_ram_kb = 0;
+    uint64_t mem_usage_kb = 0;
+    server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
+    double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
+    
+    char esc_start[128];
+    char esc_hostname[256];
+    json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
+    json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
+
+    snprintf(buf, max_len,
+        "{"
+        "\"start_time\":\"%s\","
+        "\"total_requests\":%" PRIu64 ","
+        "\"average_processing_time_fast_ms\":%" PRIu64 ","
+        "\"average_processing_time_slow_ms\":%" PRIu64 ","
+        "\"total_ram_kb\":%" PRIu64 ","
+        "\"memory_usage_kb\":%" PRIu64 ","
+        "\"memory_usage_percentage\":%.2f,"
+        "\"hostname\":\"%s\""
+        "}",
+        esc_start,
+        (uint64_t)stats.total_requests,
+        (uint64_t)stats.avg_time_fast_ms,
+        (uint64_t)stats.avg_time_slow_ms,
+        total_ram_kb,
+        mem_usage_kb,
+        mem_usage_pct,
+        esc_hostname
+    );
+}
+
+static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
+    [[gnu::cleanup(cleanup_json_object)]] struct json_object* scoped_json = remote_json;
+    char prefix[128];
+    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
+    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
+    if (scoped_json) {
+        const char* json_str = json_object_to_json_string_ext(scoped_json, JSON_C_TO_STRING_PLAIN);
+        evbuffer_add(out_buf, json_str, strlen(json_str));
+    } else {
+        evbuffer_add(out_buf, "null", 4);
+    }
+    evbuffer_add(out_buf, "}", 1);
+}
+
+static void handle_login_success(
+    const char* username, 
+    const char* remote_ip, 
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = HTTP_OK;
+    
+    char session_id[37];
+    generate_uuidv4(session_id);
+
+    char jwt_secret[MAX_CONFIG_STR];
+    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+    long jwt_timeout = config_get_jwt_timeout_seconds();
+
+    char token[1024];
+    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, token, sizeof(token))) {
+        char buf[1200];
+        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", token);
+        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+        LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
+    } else {
+        *out_status = HTTP_INTERNAL;
+        LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
+    }
+}
+
+static void handle_login_failure(
+    const char* username, 
+    const char* remote_ip, 
+    long http_code, 
+    const struct json_object* remote_response,
+    int* out_status, 
+    struct evbuffer* out_buf
+) {
+    *out_status = (int)http_code;
+    if (http_code == 0) {
+        *out_status = HTTP_INTERNAL;
+    }
+
+    LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
+
+    if (remote_response) {
+        const char* final_error = nullptr;
+        const char* desc = json_get_string(remote_response, "description");
+        const char* err_msg = json_get_string(remote_response, "error");
+        
+        if (desc) {
+            final_error = desc;
+        } else if (err_msg) {
+            final_error = err_msg;
+        } else {
+            final_error = "Unknown provider error";
+        }
+        
+        char escaped_error[256];
+        json_encode_string(final_error, escaped_error, sizeof(escaped_error));
+        char buf[512];
+        int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", escaped_error);
+        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+    } else {
+        const char* msg = "{\"error\":\"Provider unreachable\"}";
+        evbuffer_add(out_buf, msg, strlen(msg));
+    }
+}
+
+static bool upload_is_valid_dir(const char* uploads_dir) {
+    if (uploads_dir[0] == '\0') {
+        LOG_ERROR("UPLOADS_DIR config variable is empty. Uploads are disabled.");
+        return false;
+    }
+    
+    struct stat st;
+    if (stat(uploads_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        LOG_ERROR("Uploads directory '%s' does not exist or is not a directory.", uploads_dir);
+        return false;
+    }
+    
+    return true;
+}
+
+
+// ==============================================================================
+// HTTP HANDLERS
+// ==============================================================================
 
 
 void ping_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
@@ -66,41 +239,6 @@ void version_handler(struct json_object* body, int* out_status, struct evbuffer*
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
 
-void build_sysinfo_json_string(char* buf, size_t max_len) {
-    server_request_stats_t stats = {0};
-    server_get_request_stats(&stats);
-    
-    uint64_t total_ram_kb = 0;
-    uint64_t mem_usage_kb = 0;
-    server_get_memory_stats(&total_ram_kb, &mem_usage_kb);
-    double mem_usage_pct = total_ram_kb > 0 ? ((double)mem_usage_kb / (double)total_ram_kb) * 100.0 : 0.0;
-    
-    char esc_start[128];
-    char esc_hostname[256];
-    json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
-    json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
-
-    snprintf(buf, max_len,
-        "{"
-        "\"start_time\":\"%s\","
-        "\"total_requests\":%" PRIu64 ","
-        "\"average_processing_time_fast_ms\":%" PRIu64 ","
-        "\"average_processing_time_slow_ms\":%" PRIu64 ","
-        "\"total_ram_kb\":%" PRIu64 ","
-        "\"memory_usage_kb\":%" PRIu64 ","
-        "\"memory_usage_percentage\":%.2f,"
-        "\"hostname\":\"%s\""
-        "}",
-        esc_start,
-        (uint64_t)stats.total_requests,
-        (uint64_t)stats.avg_time_fast_ms,
-        (uint64_t)stats.avg_time_slow_ms,
-        total_ram_kb,
-        mem_usage_kb,
-        mem_usage_pct,
-        esc_hostname
-    );
-}
 
 void sysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     (void)body; 
@@ -166,19 +304,6 @@ void metrics_handler(struct json_object* body, int* out_status, struct evbuffer*
     set_content_type("text/plain; version=0.0.4");
 }
 
-static void append_remote_json_response(struct evbuffer* out_buf, struct json_object* remote_json, long http_code) {
-    [[gnu::cleanup(cleanup_json_object)]] struct json_object* scoped_json = remote_json;
-    char prefix[128];
-    int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
-    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
-    if (scoped_json) {
-        const char* json_str = json_object_to_json_string_ext(scoped_json, JSON_C_TO_STRING_PLAIN);
-        evbuffer_add(out_buf, json_str, strlen(json_str));
-    } else {
-        evbuffer_add(out_buf, "null", 4);
-    }
-    evbuffer_add(out_buf, "}", 1);
-}
 
 void rsysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     (void)body; 
@@ -351,7 +476,7 @@ void sales_handler(struct json_object* body, int* out_status, struct evbuffer* o
     }
 }
 
-// --- TOTP QR Handler ---
+// --- Shippers & Products Handlers ---
 
 void shippers_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
@@ -456,45 +581,6 @@ void secretb32_handler([[maybe_unused]] struct json_object* body, int* out_statu
     }
 }
 
-// --- Shared Utilities ---
-
-static _Thread_local char tl_user[33] = {0};
-static _Thread_local char tl_session[37] = {0};
-static _Thread_local char tl_client_ip[64] = {0};
-static _Thread_local char tl_uri[1024] = {0};
-static _Thread_local char tl_content_type[128] = {0};
-
-void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri) {
-    if (user) (void)snprintf(tl_user, sizeof(tl_user), "%s", user);
-    else tl_user[0] = '\0';
-    if (session) (void)snprintf(tl_session, sizeof(tl_session), "%s", session);
-    else tl_session[0] = '\0';
-    if (client_ip) (void)snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
-    else tl_client_ip[0] = '\0';
-    if (uri) (void)snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
-    else tl_uri[0] = '\0';
-}
-
-void handlers_clear_context(void) {
-    tl_user[0] = '\0';
-    tl_session[0] = '\0';
-    tl_client_ip[0] = '\0';
-    tl_uri[0] = '\0';
-    tl_content_type[0] = '\0';
-}
-
-const char* get_user(void) { return tl_user[0] ? tl_user : nullptr; }
-static const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
-static const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
-
-static void set_content_type(const char* ctype) {
-    if (ctype) (void)snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
-    else tl_content_type[0] = '\0';
-}
-
-const char* get_content_type(void) {
-    return tl_content_type[0] ? tl_content_type : nullptr;
-}
 
 // --- Login Handler & Schema ---
 
@@ -509,71 +595,6 @@ const ValidationContext LoginContext = {
     .global_validator = nullptr
 };
 
-static void handle_login_success(
-    const char* username, 
-    const char* remote_ip, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
-    *out_status = HTTP_OK;
-    
-    char session_id[37];
-    generate_uuidv4(session_id);
-
-    char jwt_secret[MAX_CONFIG_STR];
-    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
-    long jwt_timeout = config_get_jwt_timeout_seconds();
-
-    char token[1024];
-    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, token, sizeof(token))) {
-        char buf[1200];
-        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", token);
-        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
-        LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
-    } else {
-        *out_status = HTTP_INTERNAL;
-        LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
-    }
-}
-
-static void handle_login_failure(
-    const char* username, 
-    const char* remote_ip, 
-    long http_code, 
-    const struct json_object* remote_response,
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
-    *out_status = (int)http_code;
-    if (http_code == 0) {
-        *out_status = HTTP_INTERNAL;
-    }
-
-    LOG_WARN("Login failed - Username: %s, RemoteIP: %s, HTTP Code: %ld", username, remote_ip, http_code);
-
-    if (remote_response) {
-        const char* final_error = nullptr;
-        const char* desc = json_get_string(remote_response, "description");
-        const char* err_msg = json_get_string(remote_response, "error");
-        
-        if (desc) {
-            final_error = desc;
-        } else if (err_msg) {
-            final_error = err_msg;
-        } else {
-            final_error = "Unknown provider error";
-        }
-        
-        char escaped_error[256];
-        json_encode_string(final_error, escaped_error, sizeof(escaped_error));
-        char buf[512];
-        int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", escaped_error);
-        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
-    } else {
-        const char* msg = "{\"error\":\"Provider unreachable\"}";
-        evbuffer_add(out_buf, msg, strlen(msg));
-    }
-}
 
 void login_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* username = json_get_string(body, "username");
@@ -727,20 +748,6 @@ const ValidationContext UploadContext = {
     .global_validator = nullptr
 };
 
-static bool upload_is_valid_dir(const char* uploads_dir) {
-    if (uploads_dir[0] == '\0') {
-        LOG_ERROR("UPLOADS_DIR config variable is empty. Uploads are disabled.");
-        return false;
-    }
-    
-    struct stat st;
-    if (stat(uploads_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        LOG_ERROR("Uploads directory '%s' does not exist or is not a directory.", uploads_dir);
-        return false;
-    }
-    
-    return true;
-}
 
 void upload_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* filename = json_get_string(body, "filename");
@@ -758,7 +765,6 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     config_get_uploads_dir(uploads_dir, sizeof(uploads_dir));
     
     if (!upload_is_valid_dir(uploads_dir)) {
-        *out_status = HTTP_INTERNAL;
         return;
     }
     

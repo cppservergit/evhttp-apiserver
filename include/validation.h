@@ -44,7 +44,6 @@ typedef struct {
     CustomValidatorFunc custom_validator;
     FieldType type;
     
-    // 1-bit flags tightly packed
     // 1-bit flags tightly packed into 4 bytes
     uint32_t is_required : 1;
     uint32_t has_min     : 1;
