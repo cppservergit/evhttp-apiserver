@@ -424,6 +424,7 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &metrics_handler, .is_fast = true, .auth_mode = AUTH_API_KEY },
     { .path = "/employee", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &employee_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = &prodget_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/supplier", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SupplierContext, .handler = &supplier_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = &customers_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_pgsql_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/upload", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &UploadContext, .handler = &upload_handler, .is_fast = false, .auth_mode = AUTH_JWT },

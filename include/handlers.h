@@ -88,6 +88,11 @@ void prodget_handler(struct json_object* body, int* out_status, struct evbuffer*
 /** \brief Validation schema context for /prodget route. */
 extern const ValidationContext ProdgetContext;
 
+/** \brief Handles /supplier requests. */
+void supplier_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /supplier route. */
+extern const ValidationContext SupplierContext;
+
 /** \brief Handles /customers requests. */
 void customers_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
 /** \brief Validation schema context for /customers route. */

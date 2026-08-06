@@ -40,6 +40,12 @@ bool emit_error(char *err_buf, size_t err_len, ErrorCode code, const char *arg) 
         case ERR_TOO_LONG:
             (void)snprintf(err_buf, err_len, "Field '%s' exceeds maximum allowed length.", arg ? arg : "");
             break;
+        case ERR_TOO_SMALL:
+            (void)snprintf(err_buf, err_len, "Field '%s' is below minimum allowed value.", arg ? arg : "");
+            break;
+        case ERR_TOO_LARGE:
+            (void)snprintf(err_buf, err_len, "Field '%s' exceeds maximum allowed value.", arg ? arg : "");
+            break;
         default:
             (void)snprintf(err_buf, err_len, "Unknown error code: %d", code);
             break;
@@ -99,6 +105,13 @@ static bool validate_type_int(const json_object *obj, const FieldValidator *fiel
     if (!json_object_is_type(obj, json_type_int)) {
         return emit_error(err, len, ERR_NOT_INT, field->field_name);
     }
+    int val = json_object_get_int(obj);
+    if (field->has_min && val < field->min_int) {
+        return emit_error(err, len, ERR_TOO_SMALL, field->field_name);
+    }
+    if (field->has_max && val > field->max_int) {
+        return emit_error(err, len, ERR_TOO_LARGE, field->field_name);
+    }
     return true;
 }
 
@@ -109,6 +122,12 @@ static bool validate_type_double(const json_object *obj, const FieldValidator *f
     double val = json_object_get_double(obj);
     if (isnan(val) || isinf(val)) {
         return emit_error(err, len, ERR_NOT_DOUBLE, field->field_name);
+    }
+    if (field->has_min && val < field->min_dbl) {
+        return emit_error(err, len, ERR_TOO_SMALL, field->field_name);
+    }
+    if (field->has_max && val > field->max_dbl) {
+        return emit_error(err, len, ERR_TOO_LARGE, field->field_name);
     }
     return true;
 }

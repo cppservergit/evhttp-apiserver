@@ -18,6 +18,8 @@ typedef enum {
     ERR_INVALID_DATE,
     ERR_UNKNOWN_TYPE,
     ERR_TOO_LONG,
+    ERR_TOO_SMALL,
+    ERR_TOO_LARGE,
     ERR_MAX_ERRORS
 } ErrorCode;
 
@@ -41,9 +43,24 @@ typedef struct {
     const char *field_name;
     CustomValidatorFunc custom_validator;
     FieldType type;
-    bool is_required;
-    char _padding[3];
-    size_t max_len;
+    
+    // 1-bit flags tightly packed
+    // 1-bit flags tightly packed into 4 bytes
+    uint32_t is_required : 1;
+    uint32_t has_min     : 1;
+    uint32_t has_max     : 1;
+    uint32_t _pad_bits   : 29;
+
+    // C11/C23 anonymous unions to share memory between types
+    union {
+        int min_int;
+        double min_dbl;
+    };
+    union {
+        size_t max_len;
+        int max_int;
+        double max_dbl;
+    };
 } FieldValidator;
 
 /** \brief Holds an entire JSON validation schema. */

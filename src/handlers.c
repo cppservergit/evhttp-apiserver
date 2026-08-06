@@ -593,21 +593,8 @@ void login_handler(struct json_object* body, int* out_status, struct evbuffer* o
 
 // --- Employee Handler & Schema ---
 
-static bool employee_id_validator(
-    const json_object *obj, 
-    char *err_buf, 
-    size_t err_len
-) {
-    int id = json_object_get_int(obj);
-    if (id <= 0 || id >= 10) {
-        (void)snprintf(err_buf, err_len, "Employee ID must be greater than 0 and less than 10");
-        return false;
-    }
-    return true;
-}
-
 static const FieldValidator EmployeeSchema[] = {
-    {.field_name = "id", .type = TYPE_INT, .is_required = true, .custom_validator = employee_id_validator}
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1, .has_max = true, .max_int = 9}
 };
 
 const ValidationContext EmployeeContext = {
@@ -632,21 +619,8 @@ void employee_handler(struct json_object* body, int* out_status, struct evbuffer
 
 // --- Prodget Handler & Schema ---
 
-static bool prodget_id_validator(
-    const json_object *obj, 
-    char *err_buf, 
-    size_t err_len
-) {
-    int id = json_object_get_int(obj);
-    if (id <= 0) {
-        (void)snprintf(err_buf, err_len, "Invalid id: %d (must be > 0)", id);
-        return false;
-    }
-    return true;
-}
-
 static const FieldValidator ProdgetSchema[] = {
-    {.field_name = "id", .type = TYPE_INT, .is_required = true, .custom_validator = prodget_id_validator}
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1}
 };
 
 const ValidationContext ProdgetContext = {
@@ -665,6 +639,32 @@ void prodget_handler(struct json_object* body, int* out_status, struct evbuffer*
     };
     
     if (!odbcutil_get_rs2json(DB_0, "{CALL product_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
+
+// --- Supplier Handler & Schema ---
+
+static const FieldValidator SupplierSchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1}
+};
+
+const ValidationContext SupplierContext = {
+    .schema = SupplierSchema,
+    .schema_count = sizeof(SupplierSchema) / sizeof(SupplierSchema[0]),
+    .global_validator = nullptr
+};
+
+void supplier_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    if (!odbcutil_get_rs2json(DB_0, "{CALL supplier_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
