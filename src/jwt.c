@@ -84,8 +84,9 @@ static bool get_secret_bytes(const char* secret_hex, unsigned char* out_bytes) {
 static bool jwt_build_payload(const char* username, const char* session_id, long timeout_seconds, char* payload, size_t payload_max) {
     char escaped_user[128];
     json_encode_string(username, escaped_user, sizeof(escaped_user));
-    int p_len = snprintf(payload, payload_max, "{\"username\":\"%s\",\"sessionId\":\"%s\",\"exp\":%lld}", 
-                         escaped_user, session_id, (long long)(time(nullptr) + timeout_seconds));
+    time_t now = time(nullptr);
+    int p_len = snprintf(payload, payload_max, "{\"username\":\"%s\",\"sessionId\":\"%s\",\"iat\":%lld,\"exp\":%lld}", 
+                         escaped_user, session_id, (long long)now, (long long)(now + timeout_seconds));
     return p_len >= 0 && p_len < (int)payload_max;
 }
 
@@ -159,22 +160,22 @@ static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_h
     crypto_auth_hmacsha256(mac, (const unsigned char*)msg, msg_len, secret_bytes);
     sodium_memzero(secret_bytes, sizeof(secret_bytes));
 
-    char mac_b64[128] = {0};
-    size_t mac_b64_max = sodium_base64_ENCODED_LEN(sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    if (mac_b64_max > sizeof(mac_b64)) return false;
+    unsigned char provided_mac[crypto_auth_hmacsha256_BYTES];
+    size_t provided_len = 0;
+    if (sodium_base642bin(provided_mac, sizeof(provided_mac), signature, strlen(signature),
+                          NULL, &provided_len, NULL,
+                          sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+        return false;
+    }
     
-    sodium_bin2base64(mac_b64, mac_b64_max, mac, sizeof(mac), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    if (provided_len != crypto_auth_hmacsha256_BYTES) {
+        return false;
+    }
     
-    char provided_sig[128] = {0};
-    (void)snprintf(provided_sig, sizeof(provided_sig), "%s", signature);
+    int match = sodium_memcmp(mac, provided_mac, sizeof(mac));
+    sodium_memzero(provided_mac, sizeof(provided_mac));
     
-    int match = sodium_memcmp(provided_sig, mac_b64, sizeof(mac_b64));
-    bool valid_len = (signature[0] != '\0');
-    
-    sodium_memzero(provided_sig, sizeof(provided_sig));
-    sodium_memzero(mac_b64, sizeof(mac_b64));
-    
-    return (match == 0 && valid_len);
+    return (match == 0);
 }
 
 static int jwt_parse_payload(const char* payload_json, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
@@ -213,6 +214,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     if (!dot1) return JWT_ERR_INVALID;
     const char* dot2 = strchr(dot1 + 1, '.');
     if (!dot2) return JWT_ERR_INVALID;
+    if (strchr(dot2 + 1, '.') != NULL) return JWT_ERR_INVALID;
 
     size_t msg_len = (size_t)(dot2 - token);
     
