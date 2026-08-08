@@ -33,7 +33,9 @@ issues*.md
 async*.md
 code*.md
 rules.md
-.gemini/*
+.gemini/
 sonar_violations.md
 sonar.md
 .antigravity/
+.dockerignore
+

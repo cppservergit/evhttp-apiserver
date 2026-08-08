@@ -693,7 +693,7 @@ void supplier_handler(struct json_object* body, int* out_status, struct evbuffer
 // --- Customers Handler & Schema ---
 
 static const FieldValidator CustomersSchema[] = {
-    {.field_name = "filter", .type = TYPE_STRING, .is_required = false, .max_len = 100}
+    {.field_name = "filter", .type = TYPE_STRING, .is_required = false, .max_len = 10}
 };
 
 const ValidationContext CustomersContext = {

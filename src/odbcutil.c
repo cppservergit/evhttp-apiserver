@@ -1,4 +1,3 @@
-#define ODBC_MAX_COL_SIZE 65536
 #include "odbcutil.h"
 #include "raii.h"
 #include "thread_error.h"
@@ -7,8 +6,9 @@
 #include "logger.h"
 #include <string.h>
 #include <strings.h>
-
 #include <pthread.h>
+
+#define ODBC_MAX_COL_SIZE 65536
 
 void odbcutil_reset_connection(DbConnectionId db_id);
 
@@ -589,8 +589,9 @@ bool odbcutil_query_single_row(
     }
     
     if (fetch_ret == SQL_SUCCESS_WITH_INFO) {
-        // Warning or truncation
+        // if data was truncated, assume an error
         odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Fetch completed with info (possible truncation)");
+        return false;
     }
 
     return true;

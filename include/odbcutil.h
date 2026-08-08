@@ -2,8 +2,8 @@
 
 #include <sql.h>
 #include <sqlext.h>
-#include <json-c/json.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 struct evbuffer;
 
