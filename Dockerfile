@@ -3,6 +3,7 @@ ARG UBUNTU_RELEASE=26.04
 
 # ===================================================================================================================================
 # Multi-stage Dockerfile — GCC-15 builder + Distroless (Chisel + LDD extraction)
+# Architecture: x86_64 only (binary compiled with -march=x86-64-v3, library paths hardcoded to x86_64-linux-gnu)
 #
 # Build:   docker build -t apiserver:latest .
 # Run:     docker run --rm -p 8080:8080 --env-file bin/apiserver.env -u 1000:1000 -v /opt/uploads:/opt/uploads apiserver:latest
@@ -71,7 +72,7 @@ RUN wget -q https://github.com/json-c/json-c/archive/refs/tags/json-c-0.18-20240
        -DCMAKE_INSTALL_PREFIX=/usr \
        -DBUILD_SHARED_LIBS=ON \
        -DBUILD_STATIC_LIBS=OFF \
-       -DISABLE_WERROR=ON \
+       -DDISABLE_WERROR=ON \
        -DENABLE_THREADING=ON \
        -DENABLE_RDRAND=ON \
        -DBUILD_TESTING=OFF \
@@ -112,7 +113,7 @@ RUN wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.22-s
 
 
 WORKDIR /build
-COPY Makefile include/ src/ ./
+COPY Makefile ./
 COPY include/ include/
 COPY src/ src/
 
