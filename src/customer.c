@@ -16,6 +16,7 @@
 struct jwt_cache {
     char token[1024];
     time_t expires_at;
+    time_t last_failed_auth;
 };
 
 static struct jwt_cache global_jwt_cache = {0};
@@ -108,6 +109,12 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
             continue;
         }
         
+        if (now < cache->last_failed_auth + 5) {
+            // Fail fast during backoff period
+            pthread_mutex_unlock(&jwt_cache_lock);
+            return false;
+        }
+        
         jwt_is_refreshing = true;
         break;
     }
@@ -123,6 +130,9 @@ static bool login_and_get_token(char* out_token, size_t max_len) {
     if (login_response) {
         cache->token[0] = '\0';
         update_jwt_cache(cache, login_response);
+        cache->last_failed_auth = 0;
+    } else {
+        cache->last_failed_auth = time(nullptr);
     }
     
     jwt_is_refreshing = false;
@@ -169,6 +179,9 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
         get_jwt_cache()->token[0] = '\0';
         pthread_mutex_unlock(&jwt_cache_lock);
     }
+    
+    sodium_memzero(auth_header, sizeof(auth_header));
+    sodium_memzero(token, sizeof(token));
     
     return remote_response;
 }

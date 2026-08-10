@@ -8,6 +8,7 @@
 #include <event2/http.h>
 #include "thread_error.h"
 #include "config.h"
+#include "logger.h"
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
 
@@ -42,6 +43,7 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
         }
         char* ptr = realloc(mem->memory, new_cap);
         if (!ptr) {
+            set_thread_error(TL_ERR_ERROR, "Out of memory in HTTP client write callback");
             free(mem->memory);
             mem->memory = nullptr;
             mem->size = 0;
@@ -64,7 +66,10 @@ static void curl_thread_destructor(void* val) {
 }
 
 static void curl_init_tls_key(void) {
-    pthread_key_create(&g_curl_tls_key, curl_thread_destructor);
+    if (pthread_key_create(&g_curl_tls_key, curl_thread_destructor) != 0) {
+        LOG_FATAL("Failed to create pthread key for CURL connections");
+        abort();
+    }
 }
 
 static void apply_curl_defaults(CURL* curl) {
@@ -126,10 +131,9 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)chunk);
     
     if (body) {
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
+        curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, body);
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
     } else {
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     }
     
@@ -139,6 +143,8 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
         if (!temp) {
             set_thread_error(TL_ERR_ERROR, "Out of memory allocating curl headers");
             *out_headers = chunk_headers; // So RAII can free the ones successfully allocated
+            // Note: chunk->memory was already allocated above. It will be freed automatically 
+            // by the [[gnu::cleanup]] macro on the 'chunk' variable in the caller (do_http_request).
             return nullptr;
         }
         chunk_headers = temp;
@@ -149,7 +155,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     return curl;
 }
 
-static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const char* url, struct memory_struct* chunk, long* out_http_code) {
+static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const char* url, struct memory_struct* chunk, long* out_http_code, const char* errbuf) {
     struct json_object* json_response = nullptr;
     if (res == CURLE_OK) {
         long http_code = 0;
@@ -157,14 +163,18 @@ static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const c
         if (out_http_code) *out_http_code = http_code;
         
         if (http_code >= 400) {
-            set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, chunk->memory ? chunk->memory : "<empty>");
+            char trunc_body[256] = {0};
+            if (chunk->memory) {
+                snprintf(trunc_body, sizeof(trunc_body), "%s", chunk->memory);
+            }
+            set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, trunc_body[0] ? trunc_body : "<empty>");
         }
         
         if (chunk->size > 0) {
             json_response = json_tokener_parse(chunk->memory);
         }
     } else {
-        set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s | URL: %s", curl_easy_strerror(res), url);
+        set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s (%s) | URL: %s", curl_easy_strerror(res), errbuf[0] ? errbuf : "no details", url);
         if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
     }
     return json_response;
@@ -194,10 +204,13 @@ static struct json_object* do_http_request(const char* base_url, const char* uri
     CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
     if (!curl) return nullptr;
 
+    char errbuf[CURL_ERROR_SIZE] = {0};
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+
     CURLcode res = curl_easy_perform(curl);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
 
-    return parse_curl_response(curl, res, url, &chunk, out_http_code);
+    return parse_curl_response(curl, res, url, &chunk, out_http_code, errbuf);
 }
 
 struct json_object* http_client_get_json(const char* base_url, const char* uri, const char** headers, int num_headers, long* out_http_code) {
@@ -213,5 +226,7 @@ void http_client_init_thread(void) {
 }
 
 void http_client_cleanup_thread(void) {
-    // Curl handles are automatically destroyed by the pthread_key destructor (curl_thread_destructor) when the thread exits.
+    // Intentional no-op kept for API symmetry. 
+    // Curl handles are automatically destroyed by the pthread_key destructor 
+    // (curl_thread_destructor) when the thread exits.
 }

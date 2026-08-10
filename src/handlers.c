@@ -105,7 +105,9 @@ static void append_remote_json_response(struct evbuffer* out_buf, struct json_ob
     [[gnu::cleanup(cleanup_json_object)]] struct json_object* scoped_json = remote_json;
     char prefix[128];
     int len = snprintf(prefix, sizeof(prefix), "{\"remote_status\":%ld,\"remote_data\":", http_code);
-    evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
+    if (len >= 0) {
+        evbuffer_add(out_buf, prefix, len < (int)sizeof(prefix) ? (size_t)len : sizeof(prefix) - 1);
+    }
     if (scoped_json) {
         const char* json_str = json_object_to_json_string_ext(scoped_json, JSON_C_TO_STRING_PLAIN);
         evbuffer_add(out_buf, json_str, strlen(json_str));
@@ -132,14 +134,22 @@ static void handle_login_success(
 
     char token[1024];
     if (jwt_create(username, session_id, jwt_secret, jwt_timeout, token, sizeof(token))) {
-        char buf[1200];
-        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", token);
-        evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+        char esc_token[2048];
+        json_encode_string(token, esc_token, sizeof(esc_token));
+        
+        char buf[2500];
+        int len = snprintf(buf, sizeof(buf), "{\"token\":\"%s\"}", esc_token);
+        if (len >= 0) {
+            evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
+        }
         LOG_AUDIT("Login OK - Username: %s, SessionID: %s, RemoteIP: %s", username, session_id, remote_ip);
     } else {
         *out_status = HTTP_INTERNAL;
         LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
     }
+    
+    sodium_memzero(jwt_secret, sizeof(jwt_secret));
+    sodium_memzero(token, sizeof(token));
 }
 
 static void handle_login_failure(
@@ -324,6 +334,9 @@ void rsysinfo_handler(struct json_object* body, int* out_status, struct evbuffer
 
     long http_code = 0;
     struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
+    
+    sodium_memzero(api_key, sizeof(api_key));
+    sodium_memzero(auth_header, sizeof(auth_header));
 
     append_remote_json_response(out_buf, remote_json, http_code);
 }
@@ -370,6 +383,11 @@ void rcustomer_handler(struct json_object* body, int* out_status, struct evbuffe
     const char *customer_id = json_get_string(body, "id");
     
     *out_status = HTTP_OK;
+    
+    if (!customer_id) {
+        *out_status = HTTP_BADREQUEST;
+        return;
+    }
     
     long http_code = 0;
     struct json_object* remote_json = customer_service_get_info(customer_id, &http_code);
