@@ -14,13 +14,13 @@ struct json_object* login_service_authenticate(const char* username, const char*
     config_get_login_provider(provider, sizeof(provider));
     config_get_login_uri(uri, sizeof(uri));
 
-    char escaped_user[96];
-    char escaped_pass[96];
+    char escaped_user[JSON_ENCODE_BUFSIZE(96)];
+    char escaped_pass[JSON_ENCODE_BUFSIZE(96)];
     
     json_encode_string(username, escaped_user, sizeof(escaped_user));
     json_encode_string(password, escaped_pass, sizeof(escaped_pass));
 
-    char body_str[512];
+    char body_str[JSON_ENCODE_BUFSIZE(96) * 2 + 128];
     int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
     if (len >= (int)sizeof(body_str) || len < 0) {
         sodium_memzero(escaped_pass, sizeof(escaped_pass));

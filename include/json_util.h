@@ -8,6 +8,8 @@
  * \brief JSON string encoding utilities.
  */
 
+#define JSON_ENCODE_BUFSIZE(src_max) (((src_max) * 6) + 1)
+
 /**
  * \brief Encodes/escapes a plaintext string into a JSON-safe string format.
  * 

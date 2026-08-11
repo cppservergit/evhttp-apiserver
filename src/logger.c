@@ -11,10 +11,11 @@
 
 #define POOL_SIZE 4096
 #define RING_SIZE (POOL_SIZE + 1)
+#define SYNC_BUF_SIZE 12800
 
 typedef struct {
     int len;
-    char data[12800];
+    char data[SYNC_BUF_SIZE];
 } log_entry_t;
 
 static log_entry_t g_log_buffers[POOL_SIZE];
@@ -63,15 +64,24 @@ static void* logger_thread_func(void* arg) {
     return nullptr;
 }
 
-void logger_init(void) {
-    if (!g_logger_running) {
-        for (int i = 0; i < POOL_SIZE; i++) {
-            g_free_stack[i] = &g_log_buffers[i];
-        }
-        g_free_top = POOL_SIZE;
-        g_logger_running = true;
-        pthread_create(&g_logger_thread, nullptr, logger_thread_func, nullptr);
+static pthread_once_t g_logger_init_once = PTHREAD_ONCE_INIT;
+
+static void logger_init_routine(void) {
+    for (int i = 0; i < POOL_SIZE; i++) {
+        g_free_stack[i] = &g_log_buffers[i];
     }
+    g_free_top = POOL_SIZE;
+    g_logger_running = true;
+    if (pthread_create(&g_logger_thread, nullptr, logger_thread_func, nullptr) != 0) {
+        g_logger_running = false;
+        const char* err = "{\"level\":\"FATAL\",\"msg\":\"Failed to create logger thread\"}\n";
+        ssize_t ignored = write(STDERR_FILENO, err, strlen(err));
+        (void)ignored;
+    }
+}
+
+void logger_init(void) {
+    pthread_once(&g_logger_init_once, logger_init_routine);
 }
 
 void logger_shutdown(void) {
@@ -85,7 +95,7 @@ void logger_shutdown(void) {
 }
 
 static const char* level_strings[] = {
-    "INFO", "WARN", "AUDIT", "ERROR", "FATAL", "DEBUG"
+    "INFO", "WARN", "AUDIT", "ERROR", "FATAL"
 };
 
 static _Thread_local char tl_logger_tid[32] = {0};
@@ -107,7 +117,7 @@ void logger_clear_request_id(void) {
 
 static void logger_format_message(log_entry_t* entry, char* sync_buf, LogLevel level, const char* escaped_msg, int* out_to_write) {
     char* target_buf = entry ? entry->data : sync_buf;
-    int target_size = entry ? (int)sizeof(entry->data) : 12800; // sizeof(sync_buf) is 12800
+    int target_size = entry ? (int)sizeof(entry->data) : SYNC_BUF_SIZE;
 
     int len;
     if (tl_request_id[0] != '\0') {
@@ -173,7 +183,7 @@ void logger_log(LogLevel level, const char* format, ...) {
     static _Thread_local char escaped_msg[12288];
     json_encode_string(msg_buf, escaped_msg, sizeof(escaped_msg));
 
-    static _Thread_local char sync_buf[12800];
+    static _Thread_local char sync_buf[SYNC_BUF_SIZE];
     int to_write = 0;
     logger_format_message(entry, sync_buf, level, escaped_msg, &to_write);
     
@@ -189,9 +199,14 @@ void logger_log(LogLevel level, const char* format, ...) {
     
     if (entry) {
         pthread_mutex_lock(&g_free_mutex);
-        g_free_stack[g_free_top++] = entry;
+        if (g_free_top < POOL_SIZE) {
+            g_free_stack[g_free_top++] = entry;
+        }
         pthread_mutex_unlock(&g_free_mutex);
     }
     
-    if (level == LOG_LEVEL_FATAL) exit(EXIT_FAILURE);
+    if (level == LOG_LEVEL_FATAL) {
+        logger_shutdown();
+        exit(EXIT_FAILURE);
+    }
 }

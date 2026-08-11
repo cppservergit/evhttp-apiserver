@@ -14,8 +14,7 @@ typedef enum {
     LOG_LEVEL_WARN,
     LOG_LEVEL_AUDIT,
     LOG_LEVEL_ERROR,
-    LOG_LEVEL_FATAL,
-    LOG_LEVEL_DEBUG
+    LOG_LEVEL_FATAL
 } LogLevel;
 
 #define LOG_INFO(...)  logger_log(LOG_LEVEL_INFO,  __VA_ARGS__)

@@ -36,12 +36,12 @@ static struct json_object* execute_login_request(void) {
     config_get_api_pass(api_pass, sizeof(api_pass));
     config_get_api_url(api_url, sizeof(api_url));
     
-    char escaped_user[256];
-    char escaped_pass[1024];
+    char escaped_user[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR)];
+    char escaped_pass[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR)];
     json_encode_string(api_user, escaped_user, sizeof(escaped_user));
     json_encode_string(api_pass, escaped_pass, sizeof(escaped_pass));
 
-    char body_str[2048];
+    char body_str[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR) * 2 + 128];
     int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
     if (len >= (int)sizeof(body_str)) {
         sodium_memzero(api_pass, sizeof(api_pass));

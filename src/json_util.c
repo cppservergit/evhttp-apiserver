@@ -1,6 +1,8 @@
 #include "json_util.h"
 #include <stdio.h>
 
+static const char hex[] = "0123456789abcdef";
+
 void json_encode_string(const char* src, char* dest, size_t dest_size) {
     if (!src || !dest || dest_size == 0) return;
     
@@ -13,6 +15,8 @@ void json_encode_string(const char* src, char* dest, size_t dest_size) {
             case '\n': dest[j++] = '\\'; dest[j++] = 'n'; break;
             case '\r': dest[j++] = '\\'; dest[j++] = 'r'; break;
             case '\t': dest[j++] = '\\'; dest[j++] = 't'; break;
+            case '\b': dest[j++] = '\\'; dest[j++] = 'b'; break;
+            case '\f': dest[j++] = '\\'; dest[j++] = 'f'; break;
             default: {
                 unsigned char c = (unsigned char)src[i];
                 if (c >= 0x20) {
@@ -20,7 +24,6 @@ void json_encode_string(const char* src, char* dest, size_t dest_size) {
                     break;
                 }
                 
-                const char hex[] = "0123456789abcdef";
                 dest[j++] = '\\';
                 dest[j++] = 'u';
                 dest[j++] = '0';
