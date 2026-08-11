@@ -64,6 +64,18 @@ static const ValidationContext TestContext = {
     .global_validator = validate_start_before_end
 };
 
+static const FieldValidator BoundsSchema[] = {
+    {.field_name = "age", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 18, .has_max = true, .max_int = 99},
+    {.field_name = "score", .type = TYPE_DOUBLE, .is_required = true, .has_min = true, .min_dbl = 0.0, .has_max = true, .max_dbl = 100.0},
+    {.field_name = "username", .type = TYPE_STRING, .is_required = true, .max_len = 10}
+};
+
+static const ValidationContext BoundsContext = {
+    .schema = BoundsSchema,
+    .schema_count = sizeof(BoundsSchema) / sizeof(BoundsSchema[0]),
+    .global_validator = nullptr
+};
+
 static void test_coverage(void) {
     char err_buf[256];
     
@@ -258,6 +270,27 @@ static void test_coverage(void) {
     };
     root = json_tokener_parse("{\"start_date\":\"2000-01-01\"}");
     assert_validation_error(&bad_ctx, root, "Unknown validation type");
+    json_object_put(root);
+
+    // Test bounds
+    root = json_tokener_parse("{\"age\": 17, \"score\": 50.0, \"username\": \"user\"}");
+    assert_validation_error(&BoundsContext, root, "below minimum");
+    json_object_put(root);
+    
+    root = json_tokener_parse("{\"age\": 100, \"score\": 50.0, \"username\": \"user\"}");
+    assert_validation_error(&BoundsContext, root, "exceeds maximum");
+    json_object_put(root);
+
+    root = json_tokener_parse("{\"age\": 25, \"score\": -1.0, \"username\": \"user\"}");
+    assert_validation_error(&BoundsContext, root, "below minimum");
+    json_object_put(root);
+    
+    root = json_tokener_parse("{\"age\": 25, \"score\": 101.0, \"username\": \"user\"}");
+    assert_validation_error(&BoundsContext, root, "exceeds maximum");
+    json_object_put(root);
+
+    root = json_tokener_parse("{\"age\": 25, \"score\": 50.0, \"username\": \"verylongusername\"}");
+    assert_validation_error(&BoundsContext, root, "exceeds maximum allowed length");
     json_object_put(root);
 
     json_object_put(empty_obj);

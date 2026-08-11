@@ -52,7 +52,6 @@ Endpoints are defined using a crisp, array-based routing table mapped directly t
 static const middleware_ctx_t g_routes[] = {
     { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
     { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/rcustomer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = rcustomer_handler, .user_arg = nullptr, .is_fast = false, .auth_mode = AUTH_JWT },
     { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY }
 };
@@ -62,7 +61,6 @@ static const middleware_ctx_t g_routes[] = {
 Avoid messy manual JSON parsing. Define a strict schema and let the framework automatically validate types and execute custom logical boundaries before the handler is even invoked:
 ```c
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "category",   .type = TYPE_STRING, .is_required = true, .max_len = 50},
     {.field_name = "start_date", .type = TYPE_DATE,   .is_required = true},
     {.field_name = "end_date",   .type = TYPE_DATE,   .is_required = true}
 };
@@ -70,7 +68,7 @@ static const FieldValidator SalesSchema[] = {
 const ValidationContext SalesContext = {
     .schema = SalesSchema,
     .schema_count = sizeof(SalesSchema) / sizeof(SalesSchema[0]),
-    .global_validator = sales_invariant_validator
+    .global_validator = &sales_invariant_validator
 };
 ```
 
@@ -82,6 +80,7 @@ const ValidationContext SalesContext = {
 This project embraces modern C23 standards and strict compiler safety flags. We recommend developing on:
 * **Ubuntu 24.04 LTS** utilizing **GCC 14**
 * **Ubuntu 26.04 LTS** utilizing **GCC 15**
+* **GCC 16.1** using the official docker image gcc:16.1 on Ubuntu 24.04 or 26.04.
 
 ## Development Installation
 
@@ -90,23 +89,27 @@ Install the required development headers and libraries.
 
 For Ubuntu 24.04 and 26.04:
 ```bash
-sudo apt-get update
-sudo apt-get install -y build-essential gcc make \
+sudo apt update
+sudo apt install -y build-essential gcc make \
                         libevent-dev \
                         libjson-c-dev \
                         libcurl4-openssl-dev \
                         unixodbc-dev \
                         libsodium-dev \
                         libqrencode-dev \
-                        liboath-dev \
-                        tdsodbc
+                        liboath-dev
 ```
-**Note:** The package `tdsodbc` installs SQLServer/Sybase open source drivers because the examples provided use an [SQL Server database](https://github.com/cppservergit/apiserver2/blob/main/docs/sqlserver.md), but APIServer only depends on `unixodbc`.
 
-### 2. Clone the Repository
+**Note:** Install the open source ODBC drivers to connect evhttp-apiserver to SQL Server, Sybase and PostgreSQL. 
+```bash
+sudo apt install tdsodbc odbc-postgresql
+```
+
+### 2. Clone the Repository and compile it
 ```bash
 git clone https://github.com/cppservergit/evhttp-apiserver.git
 cd evhttp-apiserver
+make
 ```
 
 ### 3. Configure the Environment

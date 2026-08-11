@@ -89,7 +89,7 @@ static void apply_curl_defaults(CURL* curl) {
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "evhttp-apiserver/1.0");
     
     // Require TLS 1.2 or higher
-    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, (long)(CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT));
     
     // Defend against SSRF by strictly restricting allowed schemes
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");

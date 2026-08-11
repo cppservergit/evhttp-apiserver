@@ -476,7 +476,7 @@ static const FieldValidator SalesSchema[] = {
 const ValidationContext SalesContext = {
     .schema = SalesSchema,
     .schema_count = sizeof(SalesSchema) / sizeof(SalesSchema[0]),
-    .global_validator = sales_invariant_validator
+    .global_validator = &sales_invariant_validator
 };
 
 void sales_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {

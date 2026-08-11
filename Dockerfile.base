@@ -1,0 +1,116 @@
+# syntax=docker/dockerfile:1
+
+# -----------------------------------------------------------------------------
+# Base Image: gcc:latest (GCC 16.1) with precompiled dependencies
+# Build with: docker build -t apiserver-base:latest -f Dockerfile.base .
+# -----------------------------------------------------------------------------
+FROM gcc:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. Install Dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libc6-dev \
+        make \
+        ca-certificates \
+        gawk \
+        bison \
+        flex \
+        bzip2 \
+        odbc-postgresql \
+        wget \
+        libssl-dev \
+        zlib1g-dev \
+        pkg-config \
+        autoconf \
+        automake \
+        libtool \
+        cmake \
+        liboath-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# GLOBAL OPTIMIZATION FLAGS
+# ------------------------------------------------------------------------------
+ENV CFLAGS="-O2" \
+    CXXFLAGS="-O2" \
+    LDFLAGS="-O2"
+
+# 2. Compile Minimal libcurl
+WORKDIR /tmp/curl
+RUN wget -q https://github.com/curl/curl/releases/download/curl-8_21_0/curl-8.21.0.tar.gz -O curl.tar.gz \
+    && tar -xvf curl.tar.gz --strip-components=1 \
+    && ./configure --prefix=/usr --with-ssl --with-zlib --enable-threaded-resolver \
+       --disable-dict --disable-file --disable-ftp --disable-gopher --disable-imap \
+       --disable-ldap --disable-ldaps --disable-mqtt --disable-pop3 --disable-rtsp \
+       --disable-smb --disable-telnet --disable-tftp \
+       --without-libssh2 --without-librtmp --without-libidn2 --without-nghttp2 \
+       --without-brotli --without-zstd --without-libpsl \
+       --disable-docs --disable-manual \
+    && make -j$(nproc) && make install \
+    && cp -f /usr/lib/libcurl.so* /usr/lib/x86_64-linux-gnu/
+
+# 3. Compile Minimal libevent
+WORKDIR /tmp/libevent
+RUN wget -q https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz -O libevent.tar.gz \
+    && tar -xvf libevent.tar.gz --strip-components=1 \
+    && ./configure --prefix=/usr --disable-static --disable-samples --disable-libevent-regress \
+    && make -j$(nproc) && make install
+
+# 4. Compile Minimal json-c
+WORKDIR /tmp/json-c
+RUN wget -q https://github.com/json-c/json-c/archive/refs/tags/json-c-0.18-20240915.tar.gz -O json-c.tar.gz \
+    && tar -xvf json-c.tar.gz --strip-components=1 \
+    && mkdir build && cd build \
+    && cmake .. \
+       -DCMAKE_INSTALL_PREFIX=/usr \
+       -DBUILD_SHARED_LIBS=ON \
+       -DBUILD_STATIC_LIBS=OFF \
+       -DDISABLE_WERROR=ON \
+       -DENABLE_THREADING=ON \
+       -DENABLE_RDRAND=ON \
+       -DBUILD_TESTING=OFF \
+       -DBUILD_APPS=OFF \
+    && make -j$(nproc) && make install
+
+# 5. Compile Minimal unixODBC
+WORKDIR /tmp/unixodbc
+RUN wget -q https://github.com/lurcher/unixODBC/releases/download/v2.3.14/unixODBC-2.3.14.tar.gz -O unixodbc.tar.gz \
+    && tar -xvf unixodbc.tar.gz --strip-components=1 \
+    && ./configure --prefix=/usr --sysconfdir=/etc --disable-gui --disable-readline \
+       --enable-iconv --with-iconv-char-enc=UTF8 --with-iconv-ucode-enc=UTF16LE \
+    && make -j$(nproc) && make install
+
+# 6. Compile Minimal FreeTDS
+WORKDIR /tmp/freetds
+RUN wget -q https://www.freetds.org/files/stable/freetds-1.5.18.tar.gz -O freetds.tar.gz \
+    && tar -xvf freetds.tar.gz --strip-components=1 \
+    && ./configure --prefix=/usr --with-unixodbc=/usr --with-openssl=/usr \
+       --enable-msdblib --disable-libiconv --disable-krb5 --disable-gssapi \
+       --disable-apps --disable-server --disable-pool \
+    && make -j$(nproc) && make install
+
+# 7. Compile Minimal libqrencode
+WORKDIR /tmp/qrencode
+RUN wget -q https://github.com/fukuchi/libqrencode/archive/refs/tags/v4.1.1.tar.gz -O qrencode.tar.gz \
+    && tar -xvf qrencode.tar.gz --strip-components=1 \
+    && ./autogen.sh \
+    && ./configure --prefix=/usr --without-png --without-tools --without-tests \
+    && make -j$(nproc) && make install
+
+# 8. Compile Minimal libsodium
+WORKDIR /tmp/libsodium
+RUN wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.22-stable.tar.gz -O libsodium.tar.gz \
+    && tar -xvf libsodium.tar.gz --strip-components=1 \
+    && ./configure --prefix=/usr --disable-static \
+    && make -j$(nproc) && make install
+
+# 9. Compile Minimal libpq (Drop-in replacement)
+WORKDIR /tmp/postgresql
+RUN wget -q https://ftp.postgresql.org/pub/source/v18.4/postgresql-18.4.tar.bz2 -O postgresql.tar.bz2 \
+    && tar -xjf postgresql.tar.bz2 --strip-components=1 \
+    && ./configure --without-readline --without-zlib --without-gssapi \
+       --without-ldap --without-pam --without-icu --without-bonjour --with-ssl=openssl \
+    && make -C src/interfaces/libpq \
+    && cp -f src/interfaces/libpq/libpq.so.5.* /usr/lib/x86_64-linux-gnu/libpq.so.5
