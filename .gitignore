@@ -37,6 +37,7 @@ sonar_violations.md
 sonar.md
 .antigravity/
 .dockerignore
+LIBPQ*.md
 
 examples/
 
