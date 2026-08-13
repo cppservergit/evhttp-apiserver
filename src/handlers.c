@@ -79,7 +79,7 @@ void build_sysinfo_json_string(char* buf, size_t max_len) {
     json_encode_string(server_get_start_time(), esc_start, sizeof(esc_start));
     json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
 
-    snprintf(buf, max_len,
+    (void)snprintf(buf, max_len,
         "{"
         "\"start_time\":\"%s\","
         "\"total_requests\":%" PRIu64 ","

@@ -165,7 +165,7 @@ static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const c
         if (http_code >= 400) {
             char trunc_body[256] = {0};
             if (chunk->memory) {
-                snprintf(trunc_body, sizeof(trunc_body), "%s", chunk->memory);
+                (void)snprintf(trunc_body, sizeof(trunc_body), "%s", chunk->memory);
             }
             set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, trunc_body[0] ? trunc_body : "<empty>");
         }
