@@ -314,20 +314,7 @@ void server_wait_startup_barrier(void) {
 void server_drain_reactor_queues(void) {
     if (!g_reactor_queues) return;
     
-    int initial_pending = 0;
-    for (size_t i = 0; i < g_num_reactors; ++i) {
-        pthread_mutex_lock(&g_reactor_queues[i].lock);
-        http_task_t* curr = g_reactor_queues[i].head;
-        while (curr) {
-            initial_pending++;
-            curr = curr->next;
-        }
-        pthread_mutex_unlock(&g_reactor_queues[i].lock);
-    }
-    
-    LOG_AUDIT("Executing drain on reactor completion queues. Pending tasks currently visible: %d", initial_pending);
-    
-    bool drained_any = (initial_pending > 0);
+    bool drained_any = false;
     for (size_t i = 0; i < g_num_reactors; ++i) {
         while (1) {
             pthread_mutex_lock(&g_reactor_queues[i].lock);
