@@ -10,6 +10,7 @@
 #include <event2/thread.h>
 #include <event2/event.h>
 #include <stdatomic.h>
+#include <string.h>
 #include "worker_pool.h"
 
 static void setup_signals(sigset_t* sigmask) {
@@ -77,13 +78,7 @@ static void wait_and_shutdown(const sigset_t* sigmask, pthread_t* threads, long 
             LOG_AUDIT("Caught SIGHUP signal. Hot-reloading configuration...");
             config_reload();
         } else {
-            const char* sig_name = "UNKNOWN";
-            if (caught_sig == SIGINT) {
-                sig_name = "SIGINT";
-            } else if (caught_sig == SIGTERM) {
-                sig_name = "SIGTERM";
-            }
-            LOG_INFO("Caught signal %s. Initiating graceful shutdown across all workers...", sig_name);
+            LOG_INFO("Caught signal %s. Initiating graceful shutdown across all workers...", strsignal(caught_sig));
             break;
         }
     }
