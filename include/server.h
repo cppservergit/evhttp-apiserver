@@ -29,6 +29,9 @@ void server_wait_startup_barrier(void);
 /** \brief Returns true if any reactor thread failed to initialize. */
 bool server_did_startup_fail(void);
 
+/** \brief Blocks until all reactor completion queues are fully drained. */
+void server_drain_reactor_queues(void);
+
 /** \brief Instructs all worker threads to safely shut down and breaks the main reactor. */
 void server_shutdown_workers(void);
 

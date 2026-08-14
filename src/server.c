@@ -311,6 +311,39 @@ void server_wait_startup_barrier(void) {
     pthread_barrier_wait(&g_startup_barrier);
 }
 
+void server_drain_reactor_queues(void) {
+    if (!g_reactor_queues) return;
+    
+    int initial_pending = 0;
+    for (size_t i = 0; i < g_num_reactors; ++i) {
+        pthread_mutex_lock(&g_reactor_queues[i].lock);
+        http_task_t* curr = g_reactor_queues[i].head;
+        while (curr) {
+            initial_pending++;
+            curr = curr->next;
+        }
+        pthread_mutex_unlock(&g_reactor_queues[i].lock);
+    }
+    
+    LOG_AUDIT("Executing drain on reactor completion queues. Pending tasks currently visible: %d", initial_pending);
+    
+    bool drained_any = (initial_pending > 0);
+    for (size_t i = 0; i < g_num_reactors; ++i) {
+        while (1) {
+            pthread_mutex_lock(&g_reactor_queues[i].lock);
+            bool is_empty = (g_reactor_queues[i].head == nullptr);
+            pthread_mutex_unlock(&g_reactor_queues[i].lock);
+            if (is_empty) break;
+            drained_any = true;
+            usleep(1000);
+        }
+    }
+    
+    if (drained_any) {
+        LOG_AUDIT("Reactor completion queues have been fully drained.");
+    }
+}
+
 void server_shutdown_workers(void) {
     if (!g_reactor_bases) return;
     for (size_t i = 0; i < g_num_reactors; ++i) {
@@ -698,11 +731,15 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
         evbuffer_add(out_buf, msg, strlen(msg));
         evhttp_send_reply(req, HTTP_SERVUNAVAIL, "Service Unavailable", nullptr);
         task_pool_free(task);
-        evhttp_request_free(req);
     }
 }
 
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
+    if (evhttp_request_get_connection(req) == nullptr) {
+        LOG_AUDIT("Client disconnected abruptly. Ignoring duplicate callback trigger.");
+        return;
+    }
+    
     inject_security_headers(req);
 
     const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;

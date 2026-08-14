@@ -274,7 +274,7 @@ int worker_pool_init(size_t num_workers) {
     return 0;
 }
 
-void worker_pool_shutdown(void) {
+void worker_pool_stop(void) {
     if (g_fast_pool.initialized) {
         pthread_mutex_lock(&g_fast_pool.mutex);
         g_fast_pool.shutdown = true;
@@ -304,6 +304,10 @@ void worker_pool_shutdown(void) {
         free(g_slow_pool.workers);
         g_slow_pool.workers = nullptr;
     }
+}
+
+void worker_pool_shutdown(void) {
+    worker_pool_stop();
     
     if (g_fast_pool.initialized) {
         pthread_mutex_destroy(&g_fast_pool.mutex);
@@ -322,6 +326,11 @@ bool worker_pool_enqueue(http_task_t* task) {
     pool_t* pool = (ctx && ctx->is_fast) ? &g_fast_pool : &g_slow_pool;
     
     pthread_mutex_lock(&pool->mutex);
+    
+    if (pool->shutdown) {
+        pthread_mutex_unlock(&pool->mutex);
+        return false;
+    }
     
     size_t max_size = config_get_max_queue_size();
     if (max_size > 0 && pool->size >= max_size) {

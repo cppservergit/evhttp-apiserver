@@ -36,7 +36,10 @@ typedef struct http_task_s {
 /** \brief Initializes the worker thread pools, splitting them into fast and slow pools (Bulkheading). */
 int worker_pool_init(size_t num_workers);
 
-/** \brief Gracefully shuts down the worker pool. */
+/** \brief Gracefully stops the worker pool threads. */
+void worker_pool_stop(void);
+
+/** \brief Gracefully shuts down the worker pool and destroys primitives. */
 void worker_pool_shutdown(void);
 
 /** \brief Retrieves the number of worker threads currently running. */

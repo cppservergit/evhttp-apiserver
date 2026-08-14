@@ -114,6 +114,9 @@ void task_pool_free(http_task_t* task) {
         LOG_ERROR("Out-of-bounds pointer passed to task_pool_free (%p). Ignoring.", (void*)task);
         return;
     }
+    
+    task->req = nullptr;
+    task->parsed_body = nullptr;
 
     size_t idx = (size_t)(task - g_task_slab);
     bool expected = false;

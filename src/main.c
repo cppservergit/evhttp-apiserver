@@ -88,6 +88,9 @@ static void wait_and_shutdown(const sigset_t* sigmask, pthread_t* threads, long 
         }
     }
     
+    worker_pool_stop();
+    server_drain_reactor_queues();
+    
     server_shutdown_workers();
 
     for (size_t i = 0; i < (size_t)num_cores; ++i) {
