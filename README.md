@@ -150,6 +150,9 @@ TRUST_PROXY_IP=127.0.0.1
 # cors configuration
 CORS_ALLOWED_ORIGINS=file://,null,https://cppserver.com
 
+# uploads directory - must be writable by the apiserver user
+UPLOADS_DIR=/opt/uploads
+
 # remote backend API configuration
 API_URL=https://cppserver.com
 API_USER=your_api_user

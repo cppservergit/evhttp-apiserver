@@ -13,7 +13,11 @@ sudo apt-get install -y libevent-2.1-7 \
                         libjson-c5 \
                         libcurl4t64 \
                         unixodbc \
-                        tdsodbc
+                        tdsodbc \
+                        odbc-postgresql \
+                        libsodium23 \
+                        libqrencode4 \
+                        liboath0
 ```
 
 ### For Ubuntu 24.04 (t64 ABI transition)
@@ -24,7 +28,11 @@ sudo apt-get install -y libevent-2.1-7t64 \
                         libjson-c5 \
                         libcurl4t64 \
                         unixodbc \
-                        tdsodbc
+                        tdsodbc \
+                        odbc-postgresql \
+                        libsodium23 \
+                        libqrencode4 \
+                        liboath0t64
 ```
 
 ## 2. Deploy the Binary
@@ -54,15 +62,9 @@ sudo nano apiserver.env
 
 Ensure `apiserver.env` contains the required keys:
 ```env
-# database access
-ODBC_CONN_STR=Driver=FreeTDS;SERVER=demodb.mshome.net;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
-
-# remote backend API configuration
-API_URL=https://cppserver.com
-API_USER=your_api_user
-API_PASS=your_api_pass
-REMOTE_API_KEY=your_api_key
-TELEMETRY_API_KEY=your_telemetry_key
+# ODBC connection strings - you can define from DB_0 to DB_3
+DB_0=Driver=FreeTDS;SERVER=DatabaseServerAddr;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8
+#DB_1=Driver={PostgreSQL Unicode};Server=DatabaseServerAddr;Port=5432;Database=testdb;Username=YourUsername;Password=YourPassword;ConnSettings=SET application_name='apiserver';TextAsLongVarchar=1;MaxLongVarcharSize=0;BoolsAsChar=0;
 
 # enable access logs - can be changed on the fly and supports service reload
 ACCESS_LOG=true
@@ -71,6 +73,7 @@ ACCESS_LOG=true
 NUM_THREADS=80
 MAX_QUEUE_SIZE=10000
 FAST_POOL_PERCENTAGE=25
+MAX_PAYLOAD_SIZE=5242880
 
 # remote login provider
 LOGIN_PROVIDER=http://demodb.mshome.net:8080
@@ -78,12 +81,25 @@ LOGIN_URI=/login
 
 # jwt configuration
 
-# generated with: openssl rand -hex 32
+# secret and api key generated with: openssl rand -hex 32
 JWT_SECRET=your_jwt_secret
 JWT_TIMEOUT_SECONDS=300
+TELEMETRY_API_KEY=your_telemetry_key
 
 # trust haproxy IP for accepting X-Forwarded-For header
 TRUST_PROXY_IP=127.0.0.1
+
+# cors configuration
+CORS_ALLOWED_ORIGINS=file://,null,https://cppserver.com
+
+# uploads directory - must be writable by the apiserver user
+UPLOADS_DIR=/opt/uploads
+
+# remote backend API configuration
+API_URL=https://cppserver.com
+API_USER=your_api_user
+API_PASS=your_api_pass
+REMOTE_API_KEY=your_api_key
 ```
 
 ## 4. Install the Systemd Service
