@@ -13,6 +13,8 @@
 #include "worker_pool.h"
 
 static void setup_signals(sigset_t* sigmask) {
+    signal(SIGPIPE, SIG_IGN);
+    
     sigemptyset(sigmask);
     sigaddset(sigmask, SIGINT);
     sigaddset(sigmask, SIGTERM);
