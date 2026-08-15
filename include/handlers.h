@@ -2,6 +2,7 @@
 #include <json-c/json.h>
 #include <event2/http.h>
 #include "validation.h"
+#include "mcp.h"
 
 /**
  * \file handlers.h

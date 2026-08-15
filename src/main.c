@@ -1,9 +1,5 @@
 #include "server.h"
-#include "logger.h"
-#include "config.h"
 #include "handlers.h"
-#include "mcp.h"
-#include <stdlib.h>
 
 static const middleware_ctx_t g_routes[] = {
     { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &ping_handler, .is_fast = true, .auth_mode = AUTH_NONE },
@@ -32,9 +28,6 @@ static const middleware_ctx_t g_routes[] = {
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
 int main(void) {
-    logger_init();
-    config_init();
-
-    apiserver_register_routes(g_routes, g_route_count);
-    return apiserver_run();
+    server_register_routes(g_routes, g_route_count);
+    return server_start();
 }

@@ -429,7 +429,7 @@ void server_get_memory_stats(uint64_t* total_ram_kb, uint64_t* mem_usage_kb) {
 static const middleware_ctx_t* g_server_routes = nullptr;
 static size_t g_server_route_count = 0;
 
-void apiserver_register_routes(const middleware_ctx_t* routes, size_t num_routes) {
+void server_register_routes(const middleware_ctx_t* routes, size_t num_routes) {
     g_server_routes = routes;
     g_server_route_count = num_routes;
 }
@@ -959,7 +959,10 @@ static void wait_and_shutdown(const sigset_t* sigmask, pthread_t* threads, long 
     logger_shutdown();
 }
 
-int apiserver_run(void) {
+int server_start(void) {
+    logger_init();
+    config_init();
+
     sigset_t sigmask;
     setup_signals(&sigmask);
 
