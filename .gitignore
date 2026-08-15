@@ -38,6 +38,7 @@ sonar.md
 .antigravity/
 .dockerignore
 LIBPQ*.md
+*plan.md
 
 examples/
 
