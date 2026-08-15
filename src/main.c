@@ -1,140 +1,40 @@
 #include "server.h"
 #include "logger.h"
 #include "config.h"
-#include <stdio.h>
+#include "handlers.h"
+#include "mcp.h"
 #include <stdlib.h>
-#include <signal.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <sched.h>
-#include <event2/thread.h>
-#include <event2/event.h>
-#include <stdatomic.h>
-#include <string.h>
-#include "worker_pool.h"
 
-static void setup_signals(sigset_t* sigmask) {
-    signal(SIGPIPE, SIG_IGN);
-    
-    sigemptyset(sigmask);
-    sigaddset(sigmask, SIGINT);
-    sigaddset(sigmask, SIGTERM);
-    sigaddset(sigmask, SIGHUP);
-    pthread_sigmask(SIG_BLOCK, sigmask, nullptr);
-}
-
-static int setup_core_tracking(pthread_t** out_threads, long* out_num_cores) {
-    long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    if (num_cores <= 0 || num_cores > 64) num_cores = 4;
-    *out_num_cores = num_cores;
-
-    *out_threads = calloc((size_t)num_cores, sizeof(pthread_t));
-
-    if (*out_threads == nullptr) {
-        LOG_FATAL("Out of memory preparing tracking structures.");
-        return -1;
-    }
-    
-    if (server_init_globals((size_t)num_cores) != 0) {
-        LOG_FATAL("Initialization of global tracking arrays failed (OOM).");
-        free(*out_threads);
-        return -1;
-    }
-    return 0;
-}
-
-static int spawn_worker_threads(pthread_t* threads, long num_cores) {
-    for (size_t i = 0; i < (size_t)num_cores; ++i) {
-        pthread_attr_t attr;
-        pthread_attr_init(&attr);
-
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        // Modulo ensures round-robin affinity if we ever configure num_reactors > num_cores (oversubscription)
-        CPU_SET((long)i % num_cores, &cpuset);
-        int aff_ret = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-        if (aff_ret != 0) {
-            LOG_WARN("Could not set CPU affinity for reactor thread %zu (container restriction?). OS will schedule automatically.", i);
-        }
-
-        if (pthread_create(&threads[i], &attr, reactor_thread_logic, (void*)i) != 0) {
-            LOG_FATAL("Could not bootstrap reactor thread %zu", i);
-            pthread_attr_destroy(&attr);
-            return -1;
-        }
-        pthread_attr_destroy(&attr);
-    }
-    return 0;
-}
-
-static void wait_and_shutdown(const sigset_t* sigmask, pthread_t* threads, long num_cores) {
-    int caught_sig = 0;
-
-    LOG_INFO("All reactors operational. Waiting for OS signals...");
-    
-    while (1) {
-        sigwait(sigmask, &caught_sig);
-        if (caught_sig == SIGHUP) {
-            LOG_AUDIT("Caught SIGHUP signal. Hot-reloading configuration...");
-            config_reload();
-        } else {
-            LOG_INFO("Caught signal %s. Initiating graceful shutdown across all workers...", strsignal(caught_sig));
-            break;
-        }
-    }
-    
-    worker_pool_stop();
-    server_drain_reactor_queues();
-    
-    server_shutdown_workers();
-
-    for (size_t i = 0; i < (size_t)num_cores; ++i) {
-        pthread_join(threads[i], nullptr);
-    }
-
-    free(threads);
-    server_cleanup_globals();
-    LOG_INFO("APIServer system halted safely. Network loops unlinked cleanly.");
-    logger_shutdown();
-}
+static const middleware_ctx_t g_routes[] = {
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &ping_handler, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/version", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &version_handler, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/sysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &sysinfo_handler, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/rsysinfo", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &rsysinfo_handler, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/rcustomer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &rcustomer_handler, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customer_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/shippers", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &shippers_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/products", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &products_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/uuid", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &uuid_handler, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/secretb32", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &secretb32_handler, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/login", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &LoginContext, .handler = &login_handler, .is_fast = false, .auth_mode = AUTH_NONE },
+    { .path = "/getqr", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &getqr_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/verifytotp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &VerifyTotpContext, .handler = &verifytotp_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &metrics_handler, .is_fast = true, .auth_mode = AUTH_API_KEY },
+    { .path = "/employee", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &employee_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/prodget", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &ProdgetContext, .handler = &prodget_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/supplier", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SupplierContext, .handler = &supplier_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = &customers_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_pgsql_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/upload", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &UploadContext, .handler = &upload_handler, .is_fast = false, .auth_mode = AUTH_JWT },
+    { .path = "/mcp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = nullptr, .handler = &mcp_handler, .is_fast = true, .auth_mode = AUTH_NONE }
+};
+static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 
 int main(void) {
     logger_init();
-    
     config_init();
 
-    sigset_t sigmask;
-    setup_signals(&sigmask);
-
-    pthread_t* threads = nullptr;
-    long num_cores = 0;
-    
-    if (setup_core_tracking(&threads, &num_cores) != 0) {
-        return EXIT_FAILURE;
-    }
-
-    LOG_INFO("Spawning Multi-Reactor engine across %ld core-isolated pipes...", num_cores);
-    LOG_INFO("Background Async Worker Pool size: %zu threads", worker_pool_get_size());
-    LOG_INFO("Server started on http://%s:%d/", SERVER_ADDR, config_get_server_port());
-
-    if (spawn_worker_threads(threads, num_cores) != 0) {
-        return EXIT_FAILURE;
-    }
-
-    server_wait_startup_barrier();
-
-    if (server_did_startup_fail()) {
-        LOG_FATAL("One or more reactors failed to start. Shutting down immediately.");
-        server_shutdown_workers();
-        for (size_t i = 0; i < (size_t)num_cores; ++i) {
-            pthread_join(threads[i], nullptr);
-        }
-        free(threads);
-        server_cleanup_globals();
-        logger_shutdown();
-        return EXIT_FAILURE;
-    }
-
-    wait_and_shutdown(&sigmask, threads, num_cores);
-    return EXIT_SUCCESS;
+    apiserver_register_routes(g_routes, g_route_count);
+    return apiserver_run();
 }

@@ -64,6 +64,12 @@ typedef struct {
     char _padding[7];
 } middleware_ctx_t;
 
+/** \brief Registers the application routes with the API server. Must be called before apiserver_run. */
+void apiserver_register_routes(const middleware_ctx_t* routes, size_t num_routes);
+
+/** \brief Starts the API server, blocking until a termination signal is received. */
+int apiserver_run(void);
+
 /** \brief Retrieves the hardcoded server version string. */
 const char* get_server_version(void);
 
