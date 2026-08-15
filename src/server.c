@@ -850,7 +850,7 @@ void* reactor_thread_logic(void* arg) {
     struct event* efd_ev = event_new(base, efd, EV_READ | EV_PERSIST, reactor_eventfd_cb, nullptr);
     event_add(efd_ev, nullptr);
 
-    evutil_socket_t fd = create_and_bind_socket((uint16_t)SERVER_PORT, SERVER_ADDR);
+    evutil_socket_t fd = create_and_bind_socket((uint16_t)config_get_server_port(), SERVER_ADDR);
     if (fd < 0) {
         char errbuf[256];
         LOG_FATAL("Failed to bind socket for Reactor %zu: %s", worker_id, strerror_r(errno, errbuf, sizeof(errbuf)));

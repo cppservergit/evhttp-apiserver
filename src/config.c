@@ -60,6 +60,7 @@ static size_t g_max_queue_size = 10000; // Default backpressure limit
 static size_t g_fast_pool_percentage = 25; // Default fast pool allocation
 static size_t g_max_payload_size = 5242880; // Default 5MB payload max
 static char g_uploads_dir[MAX_CONFIG_STR] = {0};
+static int g_server_port = 8080;
 
 static char* trim_whitespace(char* str) {
     while (isspace((unsigned char)*str)) str++;
@@ -208,6 +209,7 @@ void config_reload(void) {
     g_max_queue_size = (size_t)safe_strtoul_env(getenv("MAX_QUEUE_SIZE"), 10000, 1000000);
     g_fast_pool_percentage = (size_t)safe_strtoul_env(getenv("FAST_POOL_PERCENTAGE"), 25, 100);
     g_max_payload_size = (size_t)safe_strtoul_env(getenv("MAX_PAYLOAD_SIZE"), 5242880, 104857600);
+    g_server_port = (int)safe_strtol_env(getenv("SERVER_PORT"), 8080, 1, 65535);
     
     bool access_log = parse_boolean_env(getenv("ACCESS_LOG"), true);
     atomic_store_explicit(&g_access_log, access_log, memory_order_relaxed);
@@ -294,6 +296,10 @@ long config_get_jwt_timeout_seconds(void) {
 
 bool config_get_access_log(void) {
     return atomic_load_explicit(&g_access_log, memory_order_relaxed);
+}
+
+int config_get_server_port(void) {
+    return g_server_port;
 }
 
 size_t config_get_num_threads(void) {

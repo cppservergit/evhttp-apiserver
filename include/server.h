@@ -17,7 +17,6 @@
 /** \brief Retrieves the global ODBC environment handle. \return SQLHENV handle. */
 SQLHENV server_get_odbc_env(void);
 
-constexpr int SERVER_PORT = 8080;
 constexpr char SERVER_ADDR[] = "0.0.0.0";
 
 /** \brief Initializes the global server state and ODBC environment. */

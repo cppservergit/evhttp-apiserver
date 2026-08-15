@@ -115,7 +115,7 @@ int main(void) {
 
     LOG_INFO("Spawning Multi-Reactor engine across %ld core-isolated pipes...", num_cores);
     LOG_INFO("Background Async Worker Pool size: %zu threads", worker_pool_get_size());
-    LOG_INFO("Server started on http://%s:%d/", SERVER_ADDR, SERVER_PORT);
+    LOG_INFO("Server started on http://%s:%d/", SERVER_ADDR, config_get_server_port());
 
     if (spawn_worker_threads(threads, num_cores) != 0) {
         return EXIT_FAILURE;

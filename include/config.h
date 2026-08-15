@@ -22,6 +22,9 @@ bool config_get_access_log(void);
 /** \brief Retrieves the configured number of worker threads, or 0 if not set. */
 size_t config_get_num_threads(void);
 
+/** \brief Retrieves the configured server port. */
+int config_get_server_port(void);
+
 /** \brief Retrieves the maximum allowed size of the background task queue. */
 size_t config_get_max_queue_size(void);
 
