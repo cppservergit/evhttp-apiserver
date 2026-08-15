@@ -1,9 +1,9 @@
-#include "worker_pool.h"
-#include "server.h"
-#include "http_client.h"
-#include "logger.h"
-#include "config.h"
-#include "jwt.h"
+#include <apiserver/worker_pool.h>
+#include <apiserver/server.h>
+#include <apiserver/http_client.h>
+#include <apiserver/logger.h>
+#include <apiserver/config.h>
+#include <apiserver/jwt.h>
 #include "handlers.h"
 #include <pthread.h>
 #include <stdlib.h>
@@ -13,8 +13,8 @@
 #include <errno.h>
 #include <sodium.h>
 #include <event2/buffer.h>
-#include "raii.h"
-#include "thread_error.h"
+#include <apiserver/raii.h>
+#include <apiserver/thread_error.h>
 
 typedef struct {
     pthread_cond_t cond;

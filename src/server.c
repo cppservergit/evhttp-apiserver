@@ -1,9 +1,9 @@
-#include "server.h"
+#include <apiserver/server.h>
 #include <sched.h>
 #include "mcp.h"
-#include "validation.h"
+#include <apiserver/validation.h>
 #include <json-c/json.h>
-#include "raii.h"
+#include <apiserver/raii.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -16,23 +16,23 @@
 #include <sodium.h>
 #include <liboath/oath.h>
 #include <event2/thread.h>
-#include "http_client.h"
+#include <apiserver/http_client.h>
 #include "customer.h"
-#include "jwt.h"
+#include <apiserver/jwt.h>
 
-#include "config.h"
+#include <apiserver/config.h>
 #include "login.h"
 #include <arpa/inet.h>
 #include <sql.h>
 #include <sqlext.h>
 #include <errno.h>
-#include "logger.h"
+#include <apiserver/logger.h>
 #include <time.h>
 #include <string.h>
 #include <stdatomic.h>
 #include <event2/bufferevent.h>
-#include "worker_pool.h"
-#include "task_pool.h"
+#include <apiserver/worker_pool.h>
+#include <apiserver/task_pool.h>
 #include <sys/eventfd.h>
 
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;

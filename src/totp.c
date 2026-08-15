@@ -1,7 +1,7 @@
 #include "totp.h"
-#include "odbcutil.h"
-#include "thread_error.h"
-#include "raii.h"
+#include <apiserver/odbcutil.h>
+#include <apiserver/thread_error.h>
+#include <apiserver/raii.h>
 #include <qrencode.h>
 #include <stdio.h>
 #include <stdlib.h>

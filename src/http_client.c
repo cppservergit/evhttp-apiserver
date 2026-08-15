@@ -1,14 +1,14 @@
 #define HTTP_CLIENT_CHUNK_SIZE 4096
-#include "http_client.h"
+#include <apiserver/http_client.h>
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <event2/http.h>
-#include "thread_error.h"
-#include "config.h"
-#include "logger.h"
+#include <apiserver/thread_error.h>
+#include <apiserver/config.h>
+#include <apiserver/logger.h>
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
 

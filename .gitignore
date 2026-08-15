@@ -6,7 +6,7 @@ obj/
 bin/
 test_asan
 test_tsan
-apiserver
+/apiserver
 
 
 # Backups and temporary files

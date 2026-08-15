@@ -1,7 +1,7 @@
 #include "mcp.h"
 #include "handlers.h"
-#include "config.h"
-#include "logger.h"
+#include <apiserver/config.h>
+#include <apiserver/logger.h>
 #include <string.h>
 #include <sodium.h>
 #include <event2/buffer.h>
