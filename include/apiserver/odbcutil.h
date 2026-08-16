@@ -12,8 +12,8 @@ struct evbuffer;
  * \brief ODBC database utility wrappers and abstractions.
  */
 
-#define MAX_ODBC_CONN_STR_LEN 1024
-#define ODBC_FETCH_CHUNK_SIZE 4096
+constexpr int MAX_ODBC_CONN_STR_LEN = 1024;
+constexpr int ODBC_FETCH_CHUNK_SIZE = 4096;
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))

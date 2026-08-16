@@ -1,4 +1,4 @@
-#define HTTP_CLIENT_CHUNK_SIZE 4096
+constexpr int HTTP_CLIENT_CHUNK_SIZE = 4096;
 #include <apiserver/http_client.h>
 #include <curl/curl.h>
 #include <stdlib.h>

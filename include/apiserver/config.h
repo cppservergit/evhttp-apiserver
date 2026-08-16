@@ -8,7 +8,7 @@
  */
 
 /** \brief Maximum length for a configuration string value. */
-#define MAX_CONFIG_STR 1024
+constexpr int MAX_CONFIG_STR = 1024;
 
 /** \brief Initializes the configuration subsystem. */
 void config_init(void);

@@ -110,7 +110,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
         return false;
     }
 
-    char* secret_bin = NULL;
+    char* secret_bin = nullptr;
     size_t secret_bin_len = 0;
     
     int decode_ret = oath_base32_decode(secret_b32, strlen(secret_b32), &secret_bin, &secret_bin_len);
@@ -119,7 +119,7 @@ bool is_valid_totp(const char* username, const char* totp_code) {
         return false;
     }
 
-    int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, time(NULL), 30, 0, 1, NULL, NULL, OATH_TOTP_HMAC_SHA256, totp_code);
+    int validate_ret = oath_totp_validate4(secret_bin, secret_bin_len, time(nullptr), 30, 0, 1, nullptr, nullptr, OATH_TOTP_HMAC_SHA256, totp_code);
     
     sodium_memzero(secret_b32, sizeof(secret_b32));
     sodium_memzero(secret_bin, secret_bin_len);
@@ -135,7 +135,7 @@ bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
     unsigned char random_bytes[20];
     randombytes_buf(random_bytes, sizeof(random_bytes));
 
-    char* b32 = NULL;
+    char* b32 = nullptr;
     size_t b32_len = 0;
     int enc_ret = oath_base32_encode((const char*)random_bytes, sizeof(random_bytes), &b32, &b32_len);
     

@@ -18,7 +18,7 @@ static size_t g_stack_top = 0;
 static size_t g_pool_size = 0;
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define TL_CACHE_SIZE 64
+constexpr int TL_CACHE_SIZE = 64;
 static _Thread_local http_task_t* tl_cache[TL_CACHE_SIZE];
 static _Thread_local size_t tl_cache_count = 0;
 

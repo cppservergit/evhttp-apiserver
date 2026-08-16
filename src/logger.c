@@ -13,8 +13,8 @@
 #include <errno.h>
 #include <stdint.h>
 
-#define POOL_SIZE 4096
-#define SYNC_BUF_SIZE 4096
+constexpr int POOL_SIZE = 4096;
+constexpr int SYNC_BUF_SIZE = 4096;
 
 typedef struct {
     int len;
@@ -52,7 +52,7 @@ static void robust_write(int fd, const char* buf, size_t len) {
 static void* logger_thread_func(void* arg) {
     (void)arg;
     
-    #define BATCH_SIZE 128
+    constexpr int BATCH_SIZE = 128;
     log_entry_t* batch[BATCH_SIZE];
     struct iovec iov[BATCH_SIZE];
     

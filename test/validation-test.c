@@ -11,11 +11,11 @@
 #include "validation.h"
 
 // --- Custom Validators for Test ---
-#define ERR_NEGATIVE_AMOUNT ((ErrorCode)100)
-#define ERR_START_AFTER_END ((ErrorCode)101)
-#define ERR_INVALID_CUSTOMER_ID ((ErrorCode)102)
-#define ERR_DATE_TOO_EARLY ((ErrorCode)103)
-#define ERR_DATE_TOO_LATE ((ErrorCode)104)
+constexpr ErrorCode ERR_NEGATIVE_AMOUNT = (ErrorCode)100;
+constexpr ErrorCode ERR_START_AFTER_END = (ErrorCode)101;
+constexpr ErrorCode ERR_INVALID_CUSTOMER_ID = (ErrorCode)102;
+constexpr ErrorCode ERR_DATE_TOO_EARLY = (ErrorCode)103;
+constexpr ErrorCode ERR_DATE_TOO_LATE = (ErrorCode)104;
 
 #define assert_validation_error(ctx, root, expected_str) \
     do { \

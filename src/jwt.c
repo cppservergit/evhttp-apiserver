@@ -33,7 +33,7 @@ static bool b64_decode_segment(const char* start, size_t len, char* out, size_t 
     if (!out || out_maxlen == 0) return false;
     
     size_t bin_len = 0;
-    if (sodium_base642bin((unsigned char*)out, out_maxlen - 1, start, len, NULL, &bin_len, NULL, sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
+    if (sodium_base642bin((unsigned char*)out, out_maxlen - 1, start, len, nullptr, &bin_len, nullptr, sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
         return false;
     }
     
@@ -163,7 +163,7 @@ static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_h
     unsigned char provided_mac[crypto_auth_hmacsha256_BYTES];
     size_t provided_len = 0;
     if (sodium_base642bin(provided_mac, sizeof(provided_mac), signature, strlen(signature),
-                          NULL, &provided_len, NULL,
+                          nullptr, &provided_len, nullptr,
                           sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
         return false;
     }
@@ -214,7 +214,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     if (!dot1) return JWT_ERR_INVALID;
     const char* dot2 = strchr(dot1 + 1, '.');
     if (!dot2) return JWT_ERR_INVALID;
-    if (strchr(dot2 + 1, '.') != NULL) return JWT_ERR_INVALID;
+    if (strchr(dot2 + 1, '.') != nullptr) return JWT_ERR_INVALID;
 
     size_t msg_len = (size_t)(dot2 - token);
     

@@ -8,7 +8,7 @@
 #include <strings.h>
 #include <pthread.h>
 
-#define ODBC_MAX_COL_SIZE 65536
+constexpr int ODBC_MAX_COL_SIZE = 65536;
 
 void odbcutil_reset_connection(DbConnectionId db_id);
 
