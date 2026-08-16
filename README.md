@@ -23,6 +23,7 @@ flowchart TD
 ## Features
 * **Optimized Struct Memory Layout & False Sharing Prevention:** All C structures are strictly sorted from largest to smallest alignment requirements and explicitly padded to exact 64-byte cache-line boundaries. This mathematically eliminates internal compiler padding holes and guarantees that concurrent threads do not suffer performance penalties from False Sharing across all 64-bit architectures (x86-64, ARM64, etc.). Verified strictly with `-Wpadded`.
 * **Strict Security Compliance (SEI CERT C):** The codebase formally adheres to the SEI CERT C secure coding standards (`cert-*`).
+* **Hardware-Enforced Memory Safety:** Actively utilizes C23's `<stdckdint.h>` checked math macros (`ckd_add`, `ckd_mul`) for all dynamic memory allocations and buffer re-sizings to formally guarantee mathematical immunity against integer-overflow-induced heap corruption.
 * **Thread-Safety & Memory-Safety:** Rigorously profiled and tested under extreme stress loads (80 concurrent client threads hitting all API handlers simultaneously) using Google's AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind to validate the architecture against data races, memory leaks, and undefined behavior.
 * **Lock-Free Single-Flight JWT Authentication (Remote APIs):** For API handlers that connect to remote REST services, the server implements a leader-follower concurrency pattern to eliminate thundering herd requests. Ensures that out of thousands of concurrent worker threads, exactly ONE thread performs the network refresh for an expired JWT, while the others sleep efficiently on condition variables—avoiding global read/write lock contention.
 * **Zero-Copy Reactor/Worker Hot-Path:** Decouples JSON parsing, schema validation, and JWT verification from the `libevent` reactor threads. By explicitly taking ownership of the request memory (`evhttp_request_own()`), the reactors execute a safe, zero-copy handoff of the pointer to the background pool. This structurally prevents Use-After-Free races on client disconnects and allows the core loops to sustain massive TCP bursts without CPU blocking.
@@ -46,8 +47,12 @@ flowchart TD
 
 ## Clean data-driven C Design
 
+The codebase enforces a strict physical separation of concerns:
+* **`lib/`**: Contains the highly-optimized, reusable core framework (Reactors, Worker Pools, DB drivers). Compiled as `libapiserver.a`.
+* **`src/`**: Contains only the user's business logic, handlers, and the `main.c` entry point.
+
 ### Declarative API Routing
-Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas:
+Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas inside `src/main.c`:
 ```c
 static const middleware_ctx_t g_routes[] = {
     { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },

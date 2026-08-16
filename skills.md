@@ -87,10 +87,10 @@ void customer_handler(
 
 ## Step 4: Register the Route
 
-Finally, wire the handler into the `libevent` routing table inside `server.c`. To do this, the variable `g_routes[]` must be modified to add the route in `server.c`. You map the URI to your handler and validation schema, and specify security context flags.
+Finally, wire the handler into the `libevent` routing table inside `main.c`. To do this, the variable `g_routes[]` must be modified to add the route in `src/main.c`. You map the URI to your handler and validation schema, and specify security context flags.
 
 ```c
-// Inside server.c (e.g., in a route configuration function)
+// Inside src/main.c (in the g_routes array)
 { 
     .path = "/customer", 
     .allowed_method = EVHTTP_REQ_POST, 
@@ -129,7 +129,7 @@ void shippers_handler(
 ```
 
 ### The Route Registration
-In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nullptr`:
+In `src/main.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nullptr`:
 
 ```c
 { 
@@ -158,10 +158,10 @@ In `server.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = nul
 ```mermaid
 sequenceDiagram
     participant Client
-    participant RT as Reactor Thread (server.c)
-    participant WT as Worker Thread (worker_pool.c)
-    participant H as Domain Handler (handlers.c)
-    participant S as Services (odbcutil, etc.)
+    participant RT as Reactor Thread (lib/server.c)
+    participant WT as Worker Thread (lib/worker_pool.c)
+    participant H as Domain Handler (src/handlers.c)
+    participant S as Services (lib/odbcutil.c, etc.)
     participant TL as Thread-Local State
     
     Client->>RT: HTTP Request
