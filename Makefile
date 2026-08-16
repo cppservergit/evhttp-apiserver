@@ -3,11 +3,11 @@ AR = gcc-ar
 CFLAGS = -std=gnu2x -Wall -Wextra -Wpadded -Wdangling-pointer=2 -Wreturn-local-addr -Wpedantic -Wshadow -Werror -Wformat=2 -Wvla -Wimplicit-fallthrough -Wnull-dereference -Wundef -g -flto -O3 -D_GNU_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -march=x86-64-v3 -fPIE -Iinclude -ftrivial-auto-var-init=zero
 LDFLAGS = -levent_pthreads -levent -ljson-c -lcurl -lodbc -lpthread -lsodium -lqrencode -loath -pie -Wl,-z,relro,-z,now
 
-LIB_SRC = src/server.c src/http_client.c src/validation.c src/jwt.c src/odbcutil.c src/logger.c src/config.c src/worker_pool.c src/task_pool.c src/json_util.c src/thread_error.c
-LIB_OBJ = $(patsubst src/%.c,obj/%.o,$(LIB_SRC))
+LIB_SRC = $(wildcard lib/*.c)
+LIB_OBJ = $(patsubst lib/%.c,obj/%.o,$(LIB_SRC))
 LIB_TARGET = bin/libapiserver.a
 
-APP_SRC = src/main.c src/handlers.c src/customer.c src/login.c src/totp.c src/mcp.c
+APP_SRC = $(wildcard src/*.c)
 APP_OBJ = $(patsubst src/%.c,obj/%.o,$(APP_SRC))
 APP_TARGET = bin/apiserver
 
@@ -43,6 +43,10 @@ tsan:
 valgrind:
 	@mkdir -p bin
 	$(CC) -std=gnu2x -Wall -Wextra -Wpedantic -g -O1 -D_GNU_SOURCE -Iinclude $(APP_SRC) $(LIB_SRC) -o bin/test_valgrind $(LDFLAGS)
+
+obj/%.o: lib/%.c
+	@mkdir -p obj
+	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/%.o: src/%.c
 	@mkdir -p obj
