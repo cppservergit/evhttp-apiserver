@@ -19,6 +19,7 @@
 #include <apiserver/json_util.h>
 #include <event2/buffer.h>
 #include <event2/event.h>
+#include <curl/curl.h>
 #include <stdint.h>
 
 
@@ -233,22 +234,25 @@ void version_handler(struct json_object* body, int* out_status, struct evbuffer*
     char esc_hostname[256];
     char esc_os[256];
     char esc_libevent[128];
+    char esc_libcurl[256];
     json_encode_string(get_server_version(), esc_version, sizeof(esc_version));
     json_encode_string(__VERSION__, esc_compiler, sizeof(esc_compiler));
     json_encode_string(__DATE__ " " __TIME__, esc_date, sizeof(esc_date));
     json_encode_string(server_get_hostname(), esc_hostname, sizeof(esc_hostname));
     json_encode_string(server_get_os_version(), esc_os, sizeof(esc_os));
     json_encode_string(event_get_version(), esc_libevent, sizeof(esc_libevent));
+    json_encode_string(curl_version(), esc_libcurl, sizeof(esc_libcurl));
 
     char buf[1024];
     int len = snprintf(buf, sizeof(buf),
-        "{\"version\":\"%s\",\"compiler\":\"%s\",\"compile_date\":\"%s\",\"hostname\":\"%s\",\"os_version\":\"%s\",\"libevent_version\":\"%s\"}",
+        "{\"version\":\"%s\",\"compiler\":\"%s\",\"compile_date\":\"%s\",\"hostname\":\"%s\",\"os_version\":\"%s\",\"libevent_version\":\"%s\",\"libcurl_version\":\"%s\"}",
         esc_version,
         esc_compiler,
         esc_date,
         esc_hostname,
         esc_os,
-        esc_libevent
+        esc_libevent,
+        esc_libcurl
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
 }
