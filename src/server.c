@@ -876,7 +876,7 @@ void* reactor_thread_logic(void* arg) {
 }
 
 static void setup_signals(sigset_t* sigmask) {
-    signal(SIGPIPE, SIG_IGN);
+    (void)signal(SIGPIPE, SIG_IGN);
     
     sigemptyset(sigmask);
     sigaddset(sigmask, SIGINT);
