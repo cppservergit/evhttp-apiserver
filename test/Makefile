@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -std=gnu2x -Wall -Wextra -Wpedantic -O1 -g -I../include
 LDFLAGS = -ljson-c -lpthread
 
-SRC_VALIDATION = validation-test.c ../src/validation.c ../src/json_util.c ../src/thread_error.c
+SRC_VALIDATION = validation-test.c ../lib/validation.c ../lib/json_util.c ../lib/thread_error.c
 BIN_VALIDATION = test_validation
 ASAN_BIN_VALIDATION = test_validation_asan
 TSAN_BIN_VALIDATION = test_validation_tsan
@@ -32,4 +32,4 @@ $(TSAN_BIN_VALIDATION): $(SRC_VALIDATION)
 	$(CC) $(CFLAGS) -fsanitize=thread $^ -o $@ $(LDFLAGS)
 
 clean:
-	rm -f $(BIN_VALIDATION) $(ASAN_BIN_VALIDATION) $(TSAN_BIN_VALIDATION) *.gcda *.gcno *.gcov ../src/*.gcda ../src/*.gcno
+	rm -f $(BIN_VALIDATION) $(ASAN_BIN_VALIDATION) $(TSAN_BIN_VALIDATION) *.gcda *.gcno *.gcov ../src/*.gcda ../src/*.gcno ../lib/*.gcda ../lib/*.gcno

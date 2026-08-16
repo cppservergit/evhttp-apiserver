@@ -8,7 +8,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <math.h>
-#include "validation.h"
+#include <apiserver/validation.h>
 
 // --- Custom Validators for Test ---
 constexpr ErrorCode ERR_NEGATIVE_AMOUNT = (ErrorCode)100;
@@ -373,7 +373,7 @@ int main(void) {
     test_coverage();
     
     int num_threads = 8;
-    int iterations_per_thread = 2000;
+    int iterations_per_thread = 1000000;
     pthread_t threads[8];
     
     printf("Starting %d fuzzing threads (%d iterations each)...\n", num_threads, iterations_per_thread);
