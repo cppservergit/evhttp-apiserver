@@ -42,3 +42,4 @@ LIBPQ*.md
 
 examples/
 
+.agents/
