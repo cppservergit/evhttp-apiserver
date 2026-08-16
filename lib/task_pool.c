@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdckdint.h>
 #include <errno.h>
 #include <apiserver/logger.h>
 #include <event2/buffer.h>
@@ -25,8 +26,13 @@ static _Thread_local size_t tl_cache_count = 0;
 int task_pool_init(size_t pool_size) {
     if (pool_size == 0) pool_size = 100000;
     g_pool_size = pool_size;
+    size_t stack_alloc_sz;
+    if (ckd_mul(&stack_alloc_sz, pool_size, sizeof(http_task_t*))) {
+        LOG_FATAL("Task pool size multiplication overflow");
+        return -1;
+    }
     g_task_slab = calloc(pool_size, sizeof(http_task_t));
-    g_free_stack = malloc(pool_size * sizeof(http_task_t*));
+    g_free_stack = malloc(stack_alloc_sz);
     g_is_free_flag = calloc(pool_size, sizeof(_Atomic bool));
     
     if (!g_task_slab || !g_free_stack || !g_is_free_flag) {

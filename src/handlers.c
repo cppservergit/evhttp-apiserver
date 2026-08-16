@@ -19,6 +19,7 @@
 #include <apiserver/json_util.h>
 #include <event2/buffer.h>
 #include <event2/event.h>
+#include <stdckdint.h>
 #include <curl/curl.h>
 #include <stdint.h>
 
@@ -798,7 +799,11 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     (void)snprintf(out_path, sizeof(out_path), "%s/%s", uploads_dir, uuid_str);
     
     size_t b64_len = strlen(blob);
-    size_t bin_maxlen = (b64_len / 4) * 3 + 4; // Add padding buffer
+    size_t bin_maxlen;
+    if (ckd_mul(&bin_maxlen, b64_len / 4, 3) || ckd_add(&bin_maxlen, bin_maxlen, 4)) {
+        LOG_ERROR("Upload blob length overflow");
+        return;
+    }
     [[gnu::cleanup(cleanup_free)]] unsigned char* bin_buf = malloc(bin_maxlen);
     if (!bin_buf) {
         LOG_ERROR("Out of memory allocating %zu bytes for upload blob", bin_maxlen);

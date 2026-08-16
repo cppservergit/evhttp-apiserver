@@ -4,9 +4,11 @@
 #include <apiserver/server.h>
 #include <apiserver/config.h>
 #include <apiserver/logger.h>
+#include <stdarg.h>
 #include <string.h>
 #include <strings.h>
 #include <pthread.h>
+#include <stdckdint.h>
 
 constexpr int ODBC_MAX_COL_SIZE = 65536;
 
@@ -391,7 +393,12 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
             return false;
         }
         meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
-        total_arena_size += meta->cols[i].alloc_size;
+        if (ckd_add(&total_arena_size, total_arena_size, meta->cols[i].alloc_size)) {
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Column allocation size overflowed.");
+            free(meta->cols);
+            meta->cols = nullptr;
+            return false;
+        }
     }
 
     if (total_arena_size == 0) {

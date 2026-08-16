@@ -5,6 +5,7 @@ constexpr int HTTP_CLIENT_CHUNK_SIZE = 4096;
 #include <string.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <stdckdint.h>
 #include <event2/http.h>
 #include <apiserver/thread_error.h>
 #include <apiserver/config.h>
@@ -32,14 +33,25 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
     size_t realsize = size * nmemb;
     struct memory_struct* mem = (struct memory_struct*)userp;
 
-    if (mem->size + realsize > config_get_max_payload_size()) {
+    size_t new_size;
+    if (ckd_add(&new_size, mem->size, realsize)) {
+        return 0; // Overflow
+    }
+
+    if (new_size > config_get_max_payload_size()) {
         return 0; // Abort transfer, exceeds max size
     }
 
-    if (mem->size + realsize + 1 > mem->capacity) {
-        size_t new_cap = mem->capacity * 2;
-        if (new_cap < mem->size + realsize + 1) {
-            new_cap = mem->size + realsize + 1;
+    size_t req_cap;
+    if (ckd_add(&req_cap, new_size, 1)) {
+        return 0; // Overflow
+    }
+
+    if (req_cap > mem->capacity) {
+        size_t new_cap = mem->capacity;
+        if (ckd_mul(&new_cap, new_cap, 2)) new_cap = req_cap;
+        if (new_cap < req_cap) {
+            new_cap = req_cap;
         }
         char* ptr = realloc(mem->memory, new_cap);
         if (!ptr) {
@@ -54,7 +66,7 @@ static size_t write_memory_cb(void* contents, size_t size, size_t nmemb, void* u
         mem->capacity = new_cap;
     }
     memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
+    mem->size = new_size;
     mem->memory[mem->size] = 0;
 
     return realsize;
