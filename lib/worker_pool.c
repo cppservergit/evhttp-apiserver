@@ -4,7 +4,7 @@
 #include <apiserver/logger.h>
 #include <apiserver/config.h>
 #include <apiserver/jwt.h>
-#include "handlers.h"
+#include <apiserver/context.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +51,7 @@ static const char* get_http_status_text(int code) {
 
 static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
     if (!ctx || ctx->auth_mode != AUTH_JWT) {
-        handlers_set_context(nullptr, nullptr, task->client_ip, task->uri);
+        context_set(nullptr, nullptr, task->client_ip, task->uri);
         return true;
     }
 
@@ -86,7 +86,7 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
         return false;
     }
 
-    handlers_set_context(task->username, task->session_id, task->client_ip, task->uri);
+    context_set(task->username, task->session_id, task->client_ip, task->uri);
     return true;
 }
 
@@ -164,7 +164,7 @@ static void worker_process_task(http_task_t* task) {
             } else {
                 ctx->handler(nullptr, &task->status_code, task->worker_buf);
             }
-            const char* ctype = get_content_type();
+            const char* ctype = context_get_content_type();
             if (ctype) {
                 (void)snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
             } else {
@@ -190,7 +190,7 @@ static void worker_process_task(http_task_t* task) {
     clear_thread_error();
     
     logger_clear_request_id();
-    handlers_clear_context();
+    context_clear();
 }
 
 static void* worker_thread_main(void* arg) {

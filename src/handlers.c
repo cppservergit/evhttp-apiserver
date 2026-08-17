@@ -28,46 +28,7 @@
 // UTILITY FUNCTIONS & SHARED CONTEXT
 // ==============================================================================
 
-// --- Shared Utilities ---
-
-static _Thread_local char tl_user[33] = {0};
-static _Thread_local char tl_session[37] = {0};
-static _Thread_local char tl_client_ip[64] = {0};
-static _Thread_local char tl_uri[1024] = {0};
-static _Thread_local char tl_content_type[128] = {0};
-
-void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri) {
-    if (user) (void)snprintf(tl_user, sizeof(tl_user), "%s", user);
-    else tl_user[0] = '\0';
-    if (session) (void)snprintf(tl_session, sizeof(tl_session), "%s", session);
-    else tl_session[0] = '\0';
-    if (client_ip) (void)snprintf(tl_client_ip, sizeof(tl_client_ip), "%s", client_ip);
-    else tl_client_ip[0] = '\0';
-    if (uri) (void)snprintf(tl_uri, sizeof(tl_uri), "%s", uri);
-    else tl_uri[0] = '\0';
-}
-
-void handlers_clear_context(void) {
-    tl_user[0] = '\0';
-    tl_session[0] = '\0';
-    tl_client_ip[0] = '\0';
-    tl_uri[0] = '\0';
-    tl_content_type[0] = '\0';
-}
-
-const char* get_user(void) { return tl_user[0] ? tl_user : nullptr; }
-static const char* get_session_id(void) { return tl_session[0] ? tl_session : nullptr; }
-static const char* get_client_ip(void) { return tl_client_ip[0] ? tl_client_ip : nullptr; }
-
-static void set_content_type(const char* ctype) {
-    if (ctype) (void)snprintf(tl_content_type, sizeof(tl_content_type), "%s", ctype);
-    else tl_content_type[0] = '\0';
-}
-
-const char* get_content_type(void) {
-    return tl_content_type[0] ? tl_content_type : nullptr;
-}
-
+#include <apiserver/context.h>
 void build_sysinfo_json_string(char* buf, size_t max_len) {
     server_request_stats_t stats = {0};
     server_get_request_stats(&stats);
@@ -320,7 +281,7 @@ void metrics_handler(struct json_object* body, int* out_status, struct evbuffer*
     );
     evbuffer_add(out_buf, buf, len < (int)sizeof(buf) ? (size_t)len : sizeof(buf) - 1);
     
-    set_content_type("text/plain; version=0.0.4");
+    context_set_content_type("text/plain; version=0.0.4");
 }
 
 
@@ -508,8 +469,8 @@ void sales_handler(struct json_object* body, int* out_status, struct evbuffer* o
 void shippers_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
         
-    const char* user = get_user();
-    const char* session = get_session_id();
+    const char* user = context_get_user();
+    const char* session = context_get_session_id();
     LOG_AUDIT("shippers_handler accessed by User: %s, SessionID: %s", 
               user ? user : "unknown", 
               session ? session : "unknown");
@@ -527,11 +488,11 @@ void products_handler([[maybe_unused]] struct json_object* body, int* out_status
 }
 
 void getqr_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    const char* user = get_user();
+    const char* user = context_get_user();
     
     totp_generate_svg(user, out_status, out_buf);
     if (*out_status == HTTP_OK) {
-        set_content_type("image/svg+xml");
+        context_set_content_type("image/svg+xml");
     }
 }
 
@@ -567,10 +528,10 @@ const ValidationContext VerifyTotpContext = {
 };
 
 void verifytotp_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    const char* user = get_user();
-    const char* session = get_session_id();
+    const char* user = context_get_user();
+    const char* session = context_get_session_id();
     const char* totp_str = json_get_string(body, "totp");
-    const char* client_ip = get_client_ip();
+    const char* client_ip = context_get_client_ip();
     
     if (totp_str && is_valid_totp(user, totp_str)) {
         *out_status = HTTP_OK;
@@ -627,7 +588,7 @@ void login_handler(struct json_object* body, int* out_status, struct evbuffer* o
     const char* username = json_get_string(body, "username");
     const char* password = json_get_string(body, "password");
 
-    const char* remote_ip = get_client_ip();
+    const char* remote_ip = context_get_client_ip();
 
     long http_code = 0;
     [[gnu::cleanup(cleanup_json_object)]] struct json_object* remote_response = login_service_authenticate(username, password, &http_code);
@@ -781,7 +742,7 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     const char* content_type = json_get_string(body, "content_type");
     const char* title = json_get_string(body, "title");
     const char* blob = json_get_string(body, "blob");
-    const char* user = get_user();
+    const char* user = context_get_user();
 
     *out_status = HTTP_INTERNAL;
     

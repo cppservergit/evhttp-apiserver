@@ -41,17 +41,6 @@ void login_handler(struct json_object* body, int* out_status, struct evbuffer* o
 /** \brief Validation schema context for /login route. */
 extern const ValidationContext LoginContext;
 
-/** \brief Retrieves the internal JWT-authenticated username, if present. */
-const char* get_user(void);
-
-/** \brief Sets the authenticated identity for the current thread context. */
-void handlers_set_context(const char* user, const char* session, const char* client_ip, const char* uri);
-
-/** \brief Clears the authenticated identity from the current thread context. */
-void handlers_clear_context(void);
-
-/** \brief Gets the response content type set by the handler. */
-const char* get_content_type(void);
 
 /** \brief Handles /customer requests (external REST integration). */
 void rcustomer_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
