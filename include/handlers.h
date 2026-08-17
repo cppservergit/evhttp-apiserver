@@ -95,3 +95,11 @@ void sales_pgsql_handler(struct json_object* body, int* out_status, struct evbuf
 void upload_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
 /** \brief Validation schema context for /upload route. */
 extern const ValidationContext UploadContext;
+
+/** \brief Handles /gasto requests. */
+void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /gasto route. */
+extern const ValidationContext GastoContext;
+
+/** \brief Handles /customer/get requests. */
+void customerget_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);

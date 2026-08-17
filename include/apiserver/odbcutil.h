@@ -44,6 +44,16 @@ typedef struct {
     char      _padding[4];
 } OutParam;
 
+/** \brief Structure for binding an ODBC query output parameter with name for JSON. */
+typedef struct {
+    const char* name;      // JSON key name
+    void*     buffer;      // Pointer to the caller's stack/heap buffer
+    SQLLEN    buffer_len;  // Maximum capacity of the buffer
+    SQLLEN    ind;         // Will hold the returned length or SQL_NULL_DATA
+    ParamType type;        // Expected C data type
+    char      _padding[4];
+} SpOutParam;
+
 /** \brief Supported database connection identifiers. */
 typedef enum {
     DB_0 = 0,
@@ -68,12 +78,21 @@ bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* para
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
+/** \brief Executes query returning multiple resultsets as a JSON object with array fields r1, r2, ... */
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool odbcutil_get_jsonm(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+
+
 /** \brief Extracts and logs ODBC diagnostic records. */
 void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
 
 /** \brief Executes a query and fetches a single row directly into the provided OutParam buffers. */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
+
+/** \brief Executes a stored procedure without a resultset, returning output parameters as a JSON object. */
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool odbcutil_execute_sp_json(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, SpOutParam* out_params, size_t out_count, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);

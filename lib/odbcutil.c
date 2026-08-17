@@ -537,6 +537,79 @@ bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* p
     return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_rs2json);
 }
 
+static bool odbcutil_fetch_jsonm_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+    int rs_index = 1;
+    bool has_resultset = false;
+    
+    SQLSMALLINT col_count = 0;
+    SQLNumResultCols(hstmt, &col_count);
+    
+    while (true) {
+        if (col_count > 0) {
+            if (!has_resultset) {
+                evbuffer_add(out_buf, "{", 1);
+                has_resultset = true;
+            } else {
+                evbuffer_add(out_buf, ",", 1);
+            }
+            
+            evbuffer_add_printf(out_buf, "\"r%d\":[", rs_index);
+            
+            {
+                [[gnu::cleanup(metadata_destroy)]] ResultSetMetadata meta = {};
+                if (!odbc_bind_resultset_metadata(db_id, hstmt, func_name, &meta)) {
+                    return false;
+                }
+                
+                bool first_row = true;
+                while (true) {
+                    SQLRETURN ret = SQLFetch(hstmt);
+                    if (ret == SQL_NO_DATA) break;
+                    if (!SQL_SUCCEEDED(ret)) {
+                        char err_msg[256];
+                        (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
+                        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+                        return false;
+                    }
+                    
+                    if (!first_row) {
+                        evbuffer_add(out_buf, ",", 1);
+                    }
+                    first_row = false;
+                    evbuffer_append_row_object(out_buf, &meta);
+                }
+            }
+            
+            evbuffer_add(out_buf, "]", 1);
+            rs_index++;
+        }
+        
+        SQLRETURN more_ret = SQLMoreResults(hstmt);
+        if (more_ret == SQL_NO_DATA) {
+            break;
+        } else if (!SQL_SUCCEEDED(more_ret)) {
+            char err_msg[256];
+            (void)snprintf(err_msg, sizeof(err_msg), "SQLMoreResults failed for %s", func_name);
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+            return false;
+        }
+        SQLNumResultCols(hstmt, &col_count);
+    }
+    
+    if (has_resultset) {
+        evbuffer_add(out_buf, "}", 1);
+    } else {
+        evbuffer_add(out_buf, "[]", 2);
+    }
+    
+    return true;
+}
+
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool odbcutil_get_jsonm(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
+    return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_jsonm_native);
+}
+
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(
     DbConnectionId db_id,
@@ -600,6 +673,117 @@ bool odbcutil_query_single_row(
         odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Fetch completed with info (possible truncation)");
         return false;
     }
+
+    return true;
+}
+
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool odbcutil_execute_sp_json(
+    DbConnectionId db_id,
+    const char* query,
+    QueryParam* in_params, size_t in_count,
+    SpOutParam* out_params, size_t out_count,
+    struct evbuffer* out_buf,
+    const char* func_name
+) {
+    SQLHDBC hdbc = odbcutil_connect(db_id);
+    if (hdbc == SQL_NULL_HDBC) return false;
+
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    if (!hstmt) return false;
+
+    for (size_t i = 0; i < in_count; ++i) {
+        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &in_params[i])) {
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < out_count; ++i) {
+        SQLRETURN bind_ret;
+        switch (out_params[i].type) {
+            case PARAM_STRING:
+                bind_ret = SQLBindParameter(hstmt, (SQLUSMALLINT)(in_count + i + 1), SQL_PARAM_OUTPUT, SQL_C_CHAR, SQL_VARCHAR, out_params[i].buffer_len, 0, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            case PARAM_INT:
+                bind_ret = SQLBindParameter(hstmt, (SQLUSMALLINT)(in_count + i + 1), SQL_PARAM_OUTPUT, SQL_C_SLONG, SQL_INTEGER, 0, 0, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            case PARAM_DOUBLE:
+                bind_ret = SQLBindParameter(hstmt, (SQLUSMALLINT)(in_count + i + 1), SQL_PARAM_OUTPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0, (SQLPOINTER)out_params[i].buffer, out_params[i].buffer_len, &out_params[i].ind);
+                break;
+            default:
+                odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Unsupported output parameter type");
+                return false;
+        }
+        if (!SQL_SUCCEEDED(bind_ret)) {
+            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind output parameter");
+            return false;
+        }
+    }
+
+    SQLRETURN exec_ret = SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS);
+    if (!SQL_SUCCEEDED(exec_ret) && exec_ret != SQL_NO_DATA) {
+        SQLCHAR sqlState[6];
+        SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH];
+        SQLINTEGER nativeError = 0;
+        SQLSMALLINT msgLen = 0;
+        
+        if (SQL_SUCCEEDED(SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
+            if (nativeError >= 50000) {
+                // Return as JSON business rule error
+                evbuffer_add(out_buf, "{\"error-code\":", 14);
+                evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
+                evbuffer_add(out_buf, ",\"description\":", 15);
+                
+                // Skip the [Microsoft]...[SQL Server] prefixes if present
+                char* clean_msg = (char*)msg;
+                char* last_bracket = strrchr((char*)msg, ']');
+                if (last_bracket) {
+                    clean_msg = last_bracket + 1;
+                    while (*clean_msg == ' ') clean_msg++; // skip spaces
+                }
+                
+                evbuffer_append_escaped_str(out_buf, clean_msg, strlen(clean_msg));
+                evbuffer_add(out_buf, "}", 1);
+                
+                return true;
+            }
+        }
+
+        char err_msg[256];
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SP in %s", func_name);
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+        return false;
+    }
+
+    // Build JSON object
+    evbuffer_add(out_buf, "{", 1);
+    for (size_t i = 0; i < out_count; ++i) {
+        if (i > 0) evbuffer_add(out_buf, ",", 1);
+        
+        evbuffer_add(out_buf, "\"", 1);
+        evbuffer_add(out_buf, out_params[i].name, strlen(out_params[i].name));
+        evbuffer_add(out_buf, "\":", 2);
+
+        if (out_params[i].ind == SQL_NULL_DATA) {
+            evbuffer_add(out_buf, "null", 4);
+        } else {
+            switch (out_params[i].type) {
+                case PARAM_STRING:
+                    evbuffer_append_escaped_str(out_buf, (const char*)out_params[i].buffer, (size_t)out_params[i].ind);
+                    break;
+                case PARAM_INT:
+                    evbuffer_add_printf(out_buf, "%d", *(int*)out_params[i].buffer);
+                    break;
+                case PARAM_DOUBLE:
+                    evbuffer_add_printf(out_buf, "%.15g", *(double*)out_params[i].buffer);
+                    break;
+                default:
+                    evbuffer_add(out_buf, "null", 4);
+                    break;
+            }
+        }
+    }
+    evbuffer_add(out_buf, "}", 1);
 
     return true;
 }

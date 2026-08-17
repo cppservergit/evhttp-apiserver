@@ -23,7 +23,9 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/customers", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomersContext, .handler = &customers_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/salespgsql", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_pgsql_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/upload", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &UploadContext, .handler = &upload_handler, .is_fast = false, .auth_mode = AUTH_JWT },
-    { .path = "/mcp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = nullptr, .handler = &mcp_handler, .is_fast = true, .auth_mode = AUTH_NONE }
+    { .path = "/mcp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = nullptr, .handler = &mcp_handler, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/gasto", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &GastoContext, .handler = &gasto_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customerget_handler, .is_fast = true, .auth_mode = AUTH_JWT }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 

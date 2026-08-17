@@ -1,12 +1,8 @@
 #include "handlers.h"
 #include <apiserver/server.h>
 #include <apiserver/http_client.h>
-#include "customer.h"
-
 #include <apiserver/validation.h>
 #include <apiserver/config.h>
-#include "login.h"
-#include "totp.h"
 #include <apiserver/logger.h>
 #include <apiserver/jwt.h>
 #include <apiserver/odbcutil.h>
@@ -22,6 +18,9 @@
 #include <stdckdint.h>
 #include <curl/curl.h>
 #include <stdint.h>
+#include "customer.h"
+#include "login.h"
+#include "totp.h"
 
 
 // ==============================================================================
@@ -587,7 +586,6 @@ const ValidationContext LoginContext = {
 void login_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     const char* username = json_get_string(body, "username");
     const char* password = json_get_string(body, "password");
-
     const char* remote_ip = context_get_client_ip();
 
     long http_code = 0;
@@ -801,4 +799,73 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     char response[256];
     int len = snprintf(response, sizeof(response), "{\"status\":\"ok\",\"uuid\":\"%s\",\"size\":%zu}", uuid_str, bin_len);
     evbuffer_add(out_buf, response, len < (int)sizeof(response) ? (size_t)len : sizeof(response) - 1);
+}
+
+// --- Gasto Handler & Schema ---
+
+static const FieldValidator GastoSchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1}
+};
+
+const ValidationContext GastoContext = {
+    .schema = GastoSchema,
+    .schema_count = sizeof(GastoSchema) / sizeof(GastoSchema[0]),
+    .global_validator = nullptr
+};
+
+void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    int id = json_object_get_int(json_object_object_get(body, "id"));
+    
+    QueryParam in_params[1];
+    in_params[0].type = PARAM_INT;
+    in_params[0].value = &id;
+
+    SpOutParam out_params[4];
+    
+    char fecha[11];
+    out_params[0].name = "fecha";
+    out_params[0].buffer = fecha;
+    out_params[0].buffer_len = sizeof(fecha);
+    out_params[0].type = PARAM_STRING;
+    
+    int categ_id;
+    out_params[1].name = "categ_id";
+    out_params[1].buffer = &categ_id;
+    out_params[1].buffer_len = sizeof(int);
+    out_params[1].type = PARAM_INT;
+    
+    double monto;
+    out_params[2].name = "monto";
+    out_params[2].buffer = &monto;
+    out_params[2].buffer_len = sizeof(double);
+    out_params[2].type = PARAM_DOUBLE;
+    
+    char motivo[151];
+    out_params[3].name = "motivo";
+    out_params[3].buffer = motivo;
+    out_params[3].buffer_len = sizeof(motivo);
+    out_params[3].type = PARAM_STRING;
+
+    if (!odbcutil_execute_sp_json(DB_0, "{CALL dbo.ObtenerGasto(?, ?, ?, ?, ?)}", 
+                                  in_params, 1, 
+                                  out_params, 4, 
+                                  out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
+
+// --- Customer Get Handler ---
+
+void customerget_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    const char* id = json_get_string(body, "id");
+    
+    QueryParam in_params[1];
+    in_params[0].type = PARAM_STRING;
+    in_params[0].value = id;
+
+    if (!odbcutil_get_jsonm(DB_0, "{CALL dbo.get_customer_info(?)}", in_params, 1, out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
 }
