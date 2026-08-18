@@ -714,27 +714,27 @@ static bool handle_sp_execution_error(DbConnectionId db_id, SQLHSTMT hstmt, cons
     SQLINTEGER nativeError = 0;
     SQLSMALLINT msgLen = 0;
     
-    if (SQL_SUCCEEDED(SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen)) && nativeError >= 50000) {
-        evbuffer_add(out_buf, "{\"error-code\":", 14);
-        evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
-        evbuffer_add(out_buf, ",\"description\":", 15);
-        
-        const char* clean_msg = (const char*)msg;
-        const char* last_bracket = strrchr((const char*)msg, ']');
-        if (last_bracket) {
-            clean_msg = last_bracket + 1;
-            while (*clean_msg == ' ') clean_msg++;
-        }
-        
-        evbuffer_append_escaped_str(out_buf, clean_msg, strlen(clean_msg));
-        evbuffer_add(out_buf, "}", 1);
-        return true;
+    if (!SQL_SUCCEEDED(SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen)) || nativeError < 50000) {
+        char err_msg[256];
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SP in %s", func_name);
+        odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+        return false;
     }
 
-    char err_msg[256];
-    (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SP in %s", func_name);
-    odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
-    return false;
+    evbuffer_add(out_buf, "{\"error-code\":", 14);
+    evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
+    evbuffer_add(out_buf, ",\"description\":", 15);
+    
+    const char* clean_msg = (const char*)msg;
+    const char* last_bracket = strrchr((const char*)msg, ']');
+    if (last_bracket) {
+        clean_msg = last_bracket + 1;
+        while (*clean_msg == ' ') clean_msg++;
+    }
+    
+    evbuffer_append_escaped_str(out_buf, clean_msg, strlen(clean_msg));
+    evbuffer_add(out_buf, "}", 1);
+    return true;
 }
 
 static void format_sp_out_params_json(SpOutParam* out_params, size_t out_count, struct evbuffer* out_buf) {
