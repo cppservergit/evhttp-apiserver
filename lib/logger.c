@@ -149,14 +149,12 @@ void logger_init(void) {
 
 void logger_shutdown(void) {
     bool expected = false;
-    if (atomic_compare_exchange_strong(&g_shutdown_done, &expected, true)) {
-        if (atomic_load(&g_logger_running)) {
-            pthread_mutex_lock(&g_log_mutex);
-            atomic_store(&g_logger_running, false);
-            pthread_cond_broadcast(&g_log_cond);
-            pthread_mutex_unlock(&g_log_mutex);
-            pthread_join(g_logger_thread, nullptr);
-        }
+    if (atomic_compare_exchange_strong(&g_shutdown_done, &expected, true) && atomic_load(&g_logger_running)) {
+        pthread_mutex_lock(&g_log_mutex);
+        atomic_store(&g_logger_running, false);
+        pthread_cond_broadcast(&g_log_cond);
+        pthread_mutex_unlock(&g_log_mutex);
+        pthread_join(g_logger_thread, nullptr);
     }
 }
 
