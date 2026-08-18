@@ -719,8 +719,8 @@ static bool handle_sp_execution_error(DbConnectionId db_id, SQLHSTMT hstmt, cons
         evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
         evbuffer_add(out_buf, ",\"description\":", 15);
         
-        char* clean_msg = (char*)msg;
-        char* last_bracket = strrchr((char*)msg, ']');
+        const char* clean_msg = (const char*)msg;
+        const char* last_bracket = strrchr((const char*)msg, ']');
         if (last_bracket) {
             clean_msg = last_bracket + 1;
             while (*clean_msg == ' ') clean_msg++;
