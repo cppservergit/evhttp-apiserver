@@ -771,8 +771,7 @@ static void format_sp_out_params_json(SpOutParam* out_params, size_t out_count, 
 bool odbcutil_execute_sp_json(
     DbConnectionId db_id,
     const char* query,
-    QueryParam* in_params, size_t in_count,
-    SpOutParam* out_params, size_t out_count,
+    SpParams* params,
     struct evbuffer* out_buf,
     const char* func_name
 ) {
@@ -782,13 +781,13 @@ bool odbcutil_execute_sp_json(
     [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
     if (!hstmt) return false;
 
-    for (size_t i = 0; i < in_count; ++i) {
-        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &in_params[i])) {
+    for (size_t i = 0; i < params->in_count; ++i) {
+        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &params->in_params[i])) {
             return false;
         }
     }
 
-    if (!bind_sp_out_params(db_id, hstmt, out_params, out_count, in_count)) {
+    if (!bind_sp_out_params(db_id, hstmt, params->out_params, params->out_count, params->in_count)) {
         return false;
     }
 
@@ -797,6 +796,6 @@ bool odbcutil_execute_sp_json(
         return handle_sp_execution_error(db_id, hstmt, func_name, out_buf);
     }
 
-    format_sp_out_params_json(out_params, out_count, out_buf);
+    format_sp_out_params_json(params->out_params, params->out_count, out_buf);
     return true;
 }

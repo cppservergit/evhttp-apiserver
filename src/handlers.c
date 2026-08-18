@@ -847,10 +847,15 @@ void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* o
     out_params[3].buffer_len = sizeof(motivo);
     out_params[3].type = PARAM_STRING;
 
+    SpParams sp_params = {
+        .in_params = in_params,
+        .in_count = ARRAY_SIZE(in_params),
+        .out_params = out_params,
+        .out_count = ARRAY_SIZE(out_params)
+    };
+
     if (!odbcutil_execute_sp_json(DB_0, "{CALL dbo.ObtenerGasto(?, ?, ?, ?, ?)}", 
-                                  in_params, ARRAY_SIZE(in_params), 
-                                  out_params, ARRAY_SIZE(out_params), 
-                                  out_buf, __func__)) {
+                                  &sp_params, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }

@@ -90,9 +90,16 @@ void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
 
+typedef struct {
+    QueryParam* in_params;
+    size_t in_count;
+    SpOutParam* out_params;
+    size_t out_count;
+} SpParams;
+
 /** \brief Executes a stored procedure without a resultset, returning output parameters as a JSON object. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_execute_sp_json(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, SpOutParam* out_params, size_t out_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_execute_sp_json(DbConnectionId db_id, const char* query, SpParams* params, struct evbuffer* out_buf, const char* func_name);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);
