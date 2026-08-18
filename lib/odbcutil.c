@@ -297,9 +297,9 @@ typedef struct {
     char       *buffer;
     size_t      alloc_size;
     SQLLEN      ind;
-    SQLCHAR     name[128];
     SQLSMALLINT name_len;
     SQLSMALLINT sql_type;
+    SQLCHAR     name[128];
     char        _padding[4];
 } ColumnDescriptor;
 

@@ -38,18 +38,10 @@ typedef struct ValidationContext ValidationContext;
 /** \brief Function pointer definition for a custom field validator. */
 typedef bool (*CustomValidatorFunc)(const json_object *obj, char *err_buf, size_t err_len);
 
-/** \brief Defines a schema rule for a single JSON field. */
 typedef struct {
     const char *field_name;
     CustomValidatorFunc custom_validator;
-    FieldType type;
     
-    // 1-bit flags tightly packed into 4 bytes
-    uint32_t is_required : 1;
-    uint32_t has_min     : 1;
-    uint32_t has_max     : 1;
-    uint32_t _pad_bits   : 29;
-
     // C11/C23 anonymous unions to share memory between types
     union {
         int min_int;
@@ -60,6 +52,14 @@ typedef struct {
         int max_int;
         double max_dbl;
     };
+    
+    FieldType type;
+    
+    // 1-bit flags tightly packed into 4 bytes
+    uint32_t is_required : 1;
+    uint32_t has_min     : 1;
+    uint32_t has_max     : 1;
+    uint32_t _pad_bits   : 29;
 } FieldValidator;
 
 /** \brief Holds an entire JSON validation schema. */
