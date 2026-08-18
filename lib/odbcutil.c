@@ -258,6 +258,21 @@ static bool odbcutil_bind_param(DbConnectionId db_id, SQLHSTMT hstmt, SQLUSMALLI
     return true;
 }
 
+static bool odbcutil_prepare_and_bind(DbConnectionId db_id, const char* func_name, QueryParam* params, size_t param_count, SQLHSTMT* out_hstmt) {
+    SQLHDBC hdbc = odbcutil_connect(db_id);
+    if (hdbc == SQL_NULL_HDBC) return false;
+    
+    *out_hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
+    if (!*out_hstmt) return false;
+    
+    for (size_t i = 0; i < param_count; ++i) {
+        if (!odbcutil_bind_param(db_id, *out_hstmt, (SQLUSMALLINT)(i + 1), &params[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool odbcutil_execute_and_fetch(
     DbConnectionId db_id, const char* query, 
     QueryParam* params, 
@@ -266,17 +281,8 @@ static bool odbcutil_execute_and_fetch(
     const char* func_name,
     odbc_fetch_cb fetch_cb
 ) {
-    SQLHDBC hdbc = odbcutil_connect(db_id);
-    if (hdbc == SQL_NULL_HDBC) return false;
-    
-    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
-    if (!hstmt) return false;
-    
-    for (size_t i = 0; i < param_count; ++i) {
-        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &params[i])) {
-            return false;
-        }
-    }
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = SQL_NULL_HSTMT;
+    if (!odbcutil_prepare_and_bind(db_id, func_name, params, param_count, &hstmt)) return false;
     
     if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS))) {
         return fetch_cb(db_id, hstmt, func_name, out_buf);
@@ -494,19 +500,20 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
     evbuffer_add(buf, "}", 1);
 }
 
-bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+static bool fetch_resultset_array(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf, bool write_brackets) {
     [[gnu::cleanup(metadata_destroy)]] ResultSetMetadata meta = {};
 
     if (!odbc_bind_resultset_metadata(db_id, hstmt, func_name, &meta)) {
         return false;
     }
 
-    if (meta.count == 0) {
-        evbuffer_add(out_buf, "[]", 2);
-        return true;
+    if (write_brackets) {
+        if (meta.count == 0) {
+            evbuffer_add(out_buf, "[]", 2);
+            return true;
+        }
+        evbuffer_add(out_buf, "[", 1);
     }
-
-    evbuffer_add(out_buf, "[", 1);
 
     bool first_row = true;
 
@@ -528,39 +535,19 @@ bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* fu
         evbuffer_append_row_object(out_buf, &meta);
     }
 
-    evbuffer_add(out_buf, "]", 1);
+    if (write_brackets) {
+        evbuffer_add(out_buf, "]", 1);
+    }
     return true;
+}
+
+bool odbcutil_fetch_rs2json(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
+    return fetch_resultset_array(db_id, hstmt, func_name, out_buf, true);
 }
 
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name) {
     return odbcutil_execute_and_fetch(db_id, query, params, param_count, out_buf, func_name, odbcutil_fetch_rs2json);
-}
-
-static bool fetch_single_resultset_jsonm(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
-    [[gnu::cleanup(metadata_destroy)]] ResultSetMetadata meta = {};
-    if (!odbc_bind_resultset_metadata(db_id, hstmt, func_name, &meta)) {
-        return false;
-    }
-    
-    bool first_row = true;
-    while (true) {
-        SQLRETURN ret = SQLFetch(hstmt);
-        if (ret == SQL_NO_DATA) break;
-        if (!SQL_SUCCEEDED(ret)) {
-            char err_msg[256];
-            (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed for %s", func_name);
-            odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
-            return false;
-        }
-        
-        if (!first_row) {
-            evbuffer_add(out_buf, ",", 1);
-        }
-        first_row = false;
-        evbuffer_append_row_object(out_buf, &meta);
-    }
-    return true;
 }
 
 static bool odbcutil_fetch_jsonm_native(DbConnectionId db_id, SQLHSTMT hstmt, const char* func_name, struct evbuffer* out_buf) {
@@ -581,7 +568,7 @@ static bool odbcutil_fetch_jsonm_native(DbConnectionId db_id, SQLHSTMT hstmt, co
             
             evbuffer_add_printf(out_buf, "\"r%d\":[", rs_index);
             
-            if (!fetch_single_resultset_jsonm(db_id, hstmt, func_name, out_buf)) {
+            if (!fetch_resultset_array(db_id, hstmt, func_name, out_buf, false)) {
                 return false;
             }
             
@@ -623,17 +610,8 @@ bool odbcutil_query_single_row(
     OutParam* out_params, size_t out_count,
     const char* func_name
 ) {
-    SQLHDBC hdbc = odbcutil_connect(db_id);
-    if (hdbc == SQL_NULL_HDBC) return false;
-
-    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
-    if (!hstmt) return false;
-
-    for (size_t i = 0; i < in_count; ++i) {
-        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &in_params[i])) {
-            return false;
-        }
-    }
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = SQL_NULL_HSTMT;
+    if (!odbcutil_prepare_and_bind(db_id, func_name, in_params, in_count, &hstmt)) return false;
 
     for (size_t i = 0; i < out_count; ++i) {
         SQLRETURN bind_ret;
@@ -775,17 +753,8 @@ bool odbcutil_execute_sp_json(
     struct evbuffer* out_buf,
     const char* func_name
 ) {
-    SQLHDBC hdbc = odbcutil_connect(db_id);
-    if (hdbc == SQL_NULL_HDBC) return false;
-
-    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = odbcutil_alloc_stmt(db_id, hdbc, func_name);
-    if (!hstmt) return false;
-
-    for (size_t i = 0; i < params->in_count; ++i) {
-        if (!odbcutil_bind_param(db_id, hstmt, (SQLUSMALLINT)(i + 1), &params->in_params[i])) {
-            return false;
-        }
-    }
+    [[gnu::cleanup(odbcutil_cleanup_stmt)]] SQLHSTMT hstmt = SQL_NULL_HSTMT;
+    if (!odbcutil_prepare_and_bind(db_id, func_name, params->in_params, params->in_count, &hstmt)) return false;
 
     if (!bind_sp_out_params(db_id, hstmt, params->out_params, params->out_count, params->in_count)) {
         return false;
