@@ -79,6 +79,16 @@ static void write_batch_iovecs(struct iovec* iov, int batch_count, size_t total_
     }
 }
 
+static void return_batch_to_pool(log_entry_t** batch, int batch_count) {
+    pthread_mutex_lock(&g_log_mutex);
+    for (int i = 0; i < batch_count; i++) {
+        if (g_free_top < POOL_SIZE) {
+            g_free_stack[g_free_top++] = batch[i];
+        }
+    }
+    pthread_mutex_unlock(&g_log_mutex);
+}
+
 static void* logger_thread_func(void* arg) {
     (void)arg;
     
@@ -116,13 +126,7 @@ static void* logger_thread_func(void* arg) {
             
             write_batch_iovecs(iov, batch_count, total_to_write);
             
-            pthread_mutex_lock(&g_log_mutex);
-            for (int i = 0; i < batch_count; i++) {
-                if (g_free_top < POOL_SIZE) {
-                    g_free_stack[g_free_top++] = batch[i];
-                }
-            }
-            pthread_mutex_unlock(&g_log_mutex);
+            return_batch_to_pool(batch, batch_count);
         }
     }
     return nullptr;
@@ -256,10 +260,8 @@ void logger_log(LogLevel level, const char* format, ...) {
         to_write = len < SYNC_BUF_SIZE ? len : SYNC_BUF_SIZE - 1;
     }
     
-    if (to_write > 0) {
-        if (!try_enqueue_log(sync_buf, to_write)) {
-            fallback_write_log(level, sync_buf, to_write);
-        }
+    if (to_write > 0 && !try_enqueue_log(sync_buf, to_write)) {
+        fallback_write_log(level, sync_buf, to_write);
     }
     
     if (level == LOG_LEVEL_FATAL) {
