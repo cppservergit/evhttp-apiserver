@@ -322,7 +322,8 @@ void server_drain_reactor_queues(void) {
             pthread_mutex_unlock(&g_reactor_queues[i].lock);
             if (is_empty) break;
             drained_any = true;
-            usleep(1000);
+            struct timespec req = {0, 1000000};
+            nanosleep(&req, NULL);
         }
     }
     

@@ -49,6 +49,31 @@ static void robust_write(int fd, const char* buf, size_t len) {
     }
 }
 
+static void write_batch_iovecs(struct iovec* iov, int batch_count, size_t total_to_write) {
+    size_t total_written = 0;
+    int iov_offset = 0;
+    
+    while (total_written < total_to_write && iov_offset < batch_count) {
+        ssize_t n = writev(STDERR_FILENO, &iov[iov_offset], batch_count - iov_offset);
+        if (n > 0) {
+            total_written += (size_t)n;
+            size_t n_left = (size_t)n;
+            while (n_left > 0 && iov_offset < batch_count) {
+                if (n_left >= iov[iov_offset].iov_len) {
+                    n_left -= iov[iov_offset].iov_len;
+                    iov_offset++;
+                } else {
+                    iov[iov_offset].iov_base = (char*)iov[iov_offset].iov_base + n_left;
+                    iov[iov_offset].iov_len -= n_left;
+                    n_left = 0;
+                }
+            }
+        } else if (n < 0 && errno != EINTR) {
+            break;
+        }
+    }
+}
+
 static void* logger_thread_func(void* arg) {
     (void)arg;
     
@@ -84,28 +109,7 @@ static void* logger_thread_func(void* arg) {
                 total_to_write += iov[i].iov_len;
             }
             
-            size_t total_written = 0;
-            int iov_offset = 0;
-            
-            while (total_written < total_to_write && iov_offset < batch_count) {
-                ssize_t n = writev(STDERR_FILENO, &iov[iov_offset], batch_count - iov_offset);
-                if (n > 0) {
-                    total_written += (size_t)n;
-                    size_t n_left = (size_t)n;
-                    while (n_left > 0 && iov_offset < batch_count) {
-                        if (n_left >= iov[iov_offset].iov_len) {
-                            n_left -= iov[iov_offset].iov_len;
-                            iov_offset++;
-                        } else {
-                            iov[iov_offset].iov_base = (char*)iov[iov_offset].iov_base + n_left;
-                            iov[iov_offset].iov_len -= n_left;
-                            n_left = 0;
-                        }
-                    }
-                } else if (n < 0 && errno != EINTR) {
-                    break;
-                }
-            }
+            write_batch_iovecs(iov, batch_count, total_to_write);
             
             pthread_mutex_lock(&g_log_mutex);
             for (int i = 0; i < batch_count; i++) {
@@ -170,6 +174,42 @@ void logger_clear_request_id(void) {
     tl_request_id[0] = '\0';
 }
 
+static bool try_enqueue_log(const char* sync_buf, int to_write) {
+    if (!atomic_load(&g_logger_running)) return false;
+    
+    bool enqueued = false;
+    pthread_mutex_lock(&g_log_mutex);
+    if (g_free_top > 0 && g_log_count < POOL_SIZE) {
+        log_entry_t* entry = g_free_stack[--g_free_top];
+        memcpy(entry->data, sync_buf, (size_t)to_write);
+        entry->len = to_write;
+        
+        g_log_queue[g_log_head] = entry;
+        g_log_head = (g_log_head + 1) % POOL_SIZE;
+        g_log_count++;
+        
+        if (g_log_count == 1) {
+            pthread_cond_signal(&g_log_cond);
+        }
+        enqueued = true;
+    }
+    pthread_mutex_unlock(&g_log_mutex);
+    return enqueued;
+}
+
+static void fallback_write_log(LogLevel level, const char* sync_buf, int to_write) {
+    if (level == LOG_LEVEL_FATAL || level == LOG_LEVEL_ERROR || level == LOG_LEVEL_WARN || level == LOG_LEVEL_AUDIT) {
+        robust_write(STDERR_FILENO, sync_buf, (size_t)to_write);
+    } else {
+        uint64_t drops = atomic_fetch_add_explicit(&g_dropped_logs, 1, memory_order_relaxed) + 1;
+        if ((drops % 100) == 0) {
+            char drop_msg[128];
+            int dlen = snprintf(drop_msg, sizeof(drop_msg), "{\"level\":\"WARN\",\"msg\":\"Logger dropping messages. Total dropped: %lu\"}\n", (unsigned long)drops);
+            robust_write(STDERR_FILENO, drop_msg, (size_t)dlen);
+        }
+    }
+}
+
 void logger_log(LogLevel level, const char* format, ...) {
     if (tl_logger_tid[0] == '\0') {
         pid_t tid = (pid_t)syscall(SYS_gettid);
@@ -214,38 +254,8 @@ void logger_log(LogLevel level, const char* format, ...) {
     }
     
     if (to_write > 0) {
-        bool enqueued = false;
-        
-        if (atomic_load(&g_logger_running)) {
-            pthread_mutex_lock(&g_log_mutex);
-            if (g_free_top > 0 && g_log_count < POOL_SIZE) {
-                log_entry_t* entry = g_free_stack[--g_free_top];
-                memcpy(entry->data, sync_buf, (size_t)to_write);
-                entry->len = to_write;
-                
-                g_log_queue[g_log_head] = entry;
-                g_log_head = (g_log_head + 1) % POOL_SIZE;
-                g_log_count++;
-                
-                if (g_log_count == 1) {
-                    pthread_cond_signal(&g_log_cond);
-                }
-                enqueued = true;
-            }
-            pthread_mutex_unlock(&g_log_mutex);
-        }
-        
-        if (!enqueued) {
-            if (level == LOG_LEVEL_FATAL || level == LOG_LEVEL_ERROR || level == LOG_LEVEL_WARN || level == LOG_LEVEL_AUDIT) {
-                robust_write(STDERR_FILENO, sync_buf, (size_t)to_write);
-            } else {
-                uint64_t drops = atomic_fetch_add_explicit(&g_dropped_logs, 1, memory_order_relaxed) + 1;
-                if ((drops % 100) == 0) {
-                    char drop_msg[128];
-                    int dlen = snprintf(drop_msg, sizeof(drop_msg), "{\"level\":\"WARN\",\"msg\":\"Logger dropping messages. Total dropped: %lu\"}\n", (unsigned long)drops);
-                    robust_write(STDERR_FILENO, drop_msg, (size_t)dlen);
-                }
-            }
+        if (!try_enqueue_log(sync_buf, to_write)) {
+            fallback_write_log(level, sync_buf, to_write);
         }
     }
     

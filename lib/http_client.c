@@ -1,4 +1,3 @@
-constexpr int HTTP_CLIENT_CHUNK_SIZE = 4096;
 #include <apiserver/http_client.h>
 #include <curl/curl.h>
 #include <stdlib.h>
@@ -10,6 +9,7 @@ constexpr int HTTP_CLIENT_CHUNK_SIZE = 4096;
 #include <apiserver/thread_error.h>
 #include <apiserver/config.h>
 #include <apiserver/logger.h>
+constexpr int HTTP_CLIENT_CHUNK_SIZE = 4096;
 static pthread_key_t g_curl_tls_key;
 static pthread_once_t g_curl_tls_once = PTHREAD_ONCE_INIT;
 
