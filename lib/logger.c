@@ -49,6 +49,21 @@ static void robust_write(int fd, const char* buf, size_t len) {
     }
 }
 
+static void advance_iovecs(struct iovec* iov, int batch_count, int* iov_offset_ptr, size_t bytes_written) {
+    int offset = *iov_offset_ptr;
+    while (bytes_written > 0 && offset < batch_count) {
+        if (bytes_written >= iov[offset].iov_len) {
+            bytes_written -= iov[offset].iov_len;
+            offset++;
+        } else {
+            iov[offset].iov_base = (char*)iov[offset].iov_base + bytes_written;
+            iov[offset].iov_len -= bytes_written;
+            bytes_written = 0;
+        }
+    }
+    *iov_offset_ptr = offset;
+}
+
 static void write_batch_iovecs(struct iovec* iov, int batch_count, size_t total_to_write) {
     size_t total_written = 0;
     int iov_offset = 0;
@@ -57,17 +72,7 @@ static void write_batch_iovecs(struct iovec* iov, int batch_count, size_t total_
         ssize_t n = writev(STDERR_FILENO, &iov[iov_offset], batch_count - iov_offset);
         if (n > 0) {
             total_written += (size_t)n;
-            size_t n_left = (size_t)n;
-            while (n_left > 0 && iov_offset < batch_count) {
-                if (n_left >= iov[iov_offset].iov_len) {
-                    n_left -= iov[iov_offset].iov_len;
-                    iov_offset++;
-                } else {
-                    iov[iov_offset].iov_base = (char*)iov[iov_offset].iov_base + n_left;
-                    iov[iov_offset].iov_len -= n_left;
-                    n_left = 0;
-                }
-            }
+            advance_iovecs(iov, batch_count, &iov_offset, (size_t)n);
         } else if (n < 0 && errno != EINTR) {
             break;
         }
