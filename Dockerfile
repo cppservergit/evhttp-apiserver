@@ -18,6 +18,7 @@ WORKDIR /build
 COPY Makefile ./
 COPY include/ include/
 COPY src/ src/
+COPY lib/ lib/
 
 RUN make slim
 
