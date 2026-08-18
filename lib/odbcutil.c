@@ -714,23 +714,21 @@ static bool handle_sp_execution_error(DbConnectionId db_id, SQLHSTMT hstmt, cons
     SQLINTEGER nativeError = 0;
     SQLSMALLINT msgLen = 0;
     
-    if (SQL_SUCCEEDED(SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
-        if (nativeError >= 50000) {
-            evbuffer_add(out_buf, "{\"error-code\":", 14);
-            evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
-            evbuffer_add(out_buf, ",\"description\":", 15);
-            
-            char* clean_msg = (char*)msg;
-            char* last_bracket = strrchr((char*)msg, ']');
-            if (last_bracket) {
-                clean_msg = last_bracket + 1;
-                while (*clean_msg == ' ') clean_msg++;
-            }
-            
-            evbuffer_append_escaped_str(out_buf, clean_msg, strlen(clean_msg));
-            evbuffer_add(out_buf, "}", 1);
-            return true;
+    if (SQL_SUCCEEDED(SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, 1, sqlState, &nativeError, msg, sizeof(msg), &msgLen)) && nativeError >= 50000) {
+        evbuffer_add(out_buf, "{\"error-code\":", 14);
+        evbuffer_add_printf(out_buf, "%ld", (long)nativeError);
+        evbuffer_add(out_buf, ",\"description\":", 15);
+        
+        char* clean_msg = (char*)msg;
+        char* last_bracket = strrchr((char*)msg, ']');
+        if (last_bracket) {
+            clean_msg = last_bracket + 1;
+            while (*clean_msg == ' ') clean_msg++;
         }
+        
+        evbuffer_append_escaped_str(out_buf, clean_msg, strlen(clean_msg));
+        evbuffer_add(out_buf, "}", 1);
+        return true;
     }
 
     char err_msg[256];
