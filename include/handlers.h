@@ -103,3 +103,8 @@ extern const ValidationContext GastoContext;
 
 /** \brief Handles /customer/get requests. */
 void customerget_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+
+/** \brief Handles /emp/orders requests. */
+void emp_orders_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+/** \brief Validation schema context for /emp/orders route. */
+extern const ValidationContext EmpOrdersContext;

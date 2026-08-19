@@ -874,7 +874,32 @@ void customerget_handler(struct json_object* body, int* out_status, struct evbuf
     in_params[0].type = PARAM_STRING;
     in_params[0].value = id;
 
-    if (!odbcutil_get_jsonm(DB_0, "{CALL dbo.get_customer_info(?)}", in_params, 1, out_buf, __func__)) {
+    if (!odbcutil_get_jsonm(DB_0, "{CALL dbo.get_customer_info(?)}", in_params, ARRAY_SIZE(in_params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
+// --- Employee Orders Handler & Schema ---
+
+static const FieldValidator EmpOrdersSchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1}
+};
+
+const ValidationContext EmpOrdersContext = {
+    .schema = EmpOrdersSchema,
+    .schema_count = sizeof(EmpOrdersSchema) / sizeof(EmpOrdersSchema[0]),
+    .global_validator = nullptr
+};
+
+void emp_orders_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    if (!odbcutil_get_rs2json(DB_1, "SELECT * FROM demo.get_employee_orders(?)", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
