@@ -26,8 +26,8 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/mcp", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = nullptr, .handler = &mcp_handler, .is_fast = true, .auth_mode = AUTH_NONE },
     { .path = "/gasto", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &GastoContext, .handler = &gasto_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customerget_handler, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/emp/orders", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmpOrdersContext, .handler = &emp_orders_handler, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/emp/ordersj", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmpOrdersContext, .handler = &emp_ordersj_handler, .is_fast = true, .auth_mode = AUTH_JWT }
+    { .path = "/emp/orders", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &emp_orders_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/emp/ordersj", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &emp_ordersj_handler, .is_fast = true, .auth_mode = AUTH_JWT }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 

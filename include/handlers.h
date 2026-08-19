@@ -106,8 +106,6 @@ void customerget_handler(struct json_object* body, int* out_status, struct evbuf
 
 /** \brief Handles /emp/orders requests. */
 void emp_orders_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
-/** \brief Validation schema context for /emp/orders route. */
-extern const ValidationContext EmpOrdersContext;
 
 /** \brief Handles /emp/ordersj requests. */
 void emp_ordersj_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);

@@ -880,15 +880,7 @@ void customerget_handler(struct json_object* body, int* out_status, struct evbuf
 }
 // --- Employee Orders Handler & Schema ---
 
-static const FieldValidator EmpOrdersSchema[] = {
-    {.field_name = "id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1}
-};
 
-const ValidationContext EmpOrdersContext = {
-    .schema = EmpOrdersSchema,
-    .schema_count = sizeof(EmpOrdersSchema) / sizeof(EmpOrdersSchema[0]),
-    .global_validator = nullptr
-};
 
 void emp_orders_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
