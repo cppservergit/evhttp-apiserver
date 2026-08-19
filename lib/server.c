@@ -1,4 +1,5 @@
 #include <apiserver/server.h>
+#include <stdalign.h>
 #include <sched.h>
 
 #include <apiserver/validation.h>
@@ -127,7 +128,7 @@ bool server_did_startup_fail(void) {
 }
 
 typedef struct {
-    http_task_t* head;
+    alignas(64) http_task_t* head;
     http_task_t* tail;
     pthread_mutex_t lock;
     int eventfd;
@@ -230,9 +231,11 @@ static int init_server_metadata(size_t num_reactors) {
 }
 
 static int init_reactor_queues(size_t bg_workers_count) {
-    g_reactor_stats = calloc(g_num_reactors, sizeof(struct reactor_stats));
+    g_reactor_stats = aligned_alloc(64, g_num_reactors * sizeof(struct reactor_stats));
+    if (g_reactor_stats) memset(g_reactor_stats, 0, g_num_reactors * sizeof(struct reactor_stats));
     g_reactor_bases = calloc(g_num_reactors, sizeof(_Atomic(struct event_base*)));
-    g_reactor_queues = calloc(g_num_reactors, sizeof(reactor_queue_t));
+    g_reactor_queues = aligned_alloc(64, g_num_reactors * sizeof(reactor_queue_t));
+    if (g_reactor_queues) memset(g_reactor_queues, 0, g_num_reactors * sizeof(reactor_queue_t));
     
     if (!g_reactor_stats || !g_reactor_bases || !g_reactor_queues) return -1;
     

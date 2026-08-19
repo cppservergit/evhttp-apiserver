@@ -4,16 +4,17 @@
 #include <json-c/json.h>
 #include <stdatomic.h>
 #include <time.h>
+#include <stdalign.h>
 #include <stdbool.h>
 
 /**
- * \\file worker_pool.h
- * \\brief Asynchronous worker thread pool and task queue.
+ * \file worker_pool.h
+ * \brief Asynchronous worker thread pool and task queue.
  */
 
 /** \brief Represents a single HTTP request task processed by a worker thread. */
 typedef struct http_task_s {
-    struct timespec start_time;
+    alignas(64) struct timespec start_time;
     struct evhttp_request* req;
     struct json_object* parsed_body;
     const void* middleware_ctx;
@@ -30,7 +31,7 @@ typedef struct http_task_s {
     char client_ip[64];
     char request_id[64];
     char uri[1024];
-    char _padding[5];
+    char _padding[45];
 } http_task_t;
 
 /** \brief Initializes the worker thread pools, splitting them into fast and slow pools (Bulkheading). */

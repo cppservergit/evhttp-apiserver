@@ -15,9 +15,10 @@
 #include <event2/buffer.h>
 #include <apiserver/raii.h>
 #include <apiserver/thread_error.h>
+#include <stdalign.h>
 
 typedef struct {
-    pthread_cond_t cond;
+    alignas(64) pthread_cond_t cond;
     pthread_mutex_t mutex;
     http_task_t* head;
     http_task_t* tail;
@@ -26,7 +27,7 @@ typedef struct {
     size_t num_workers;
     bool shutdown;
     bool initialized;
-    char _padding[6];
+    char _padding[62];
 } pool_t;
 
 static pool_t g_fast_pool = {0};

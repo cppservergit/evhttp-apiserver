@@ -31,7 +31,8 @@ int task_pool_init(size_t pool_size) {
         LOG_FATAL("Task pool size multiplication overflow");
         return -1;
     }
-    g_task_slab = calloc(pool_size, sizeof(http_task_t));
+    g_task_slab = aligned_alloc(64, pool_size * sizeof(http_task_t));
+    if (g_task_slab) memset(g_task_slab, 0, pool_size * sizeof(http_task_t));
     g_free_stack = malloc(stack_alloc_sz);
     g_is_free_flag = calloc(pool_size, sizeof(_Atomic bool));
     
