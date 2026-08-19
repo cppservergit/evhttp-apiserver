@@ -903,3 +903,17 @@ void emp_orders_handler(struct json_object* body, int* out_status, struct evbuff
         *out_status = HTTP_INTERNAL;
     }
 }
+
+void emp_ordersj_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    if (!odbcutil_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
