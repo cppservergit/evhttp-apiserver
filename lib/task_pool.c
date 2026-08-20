@@ -100,7 +100,25 @@ http_task_t* task_pool_alloc(void) {
     atomic_store_explicit(&g_is_free_flag[idx], false, memory_order_relaxed);
     
     struct evbuffer* cached_buf = task->worker_buf;
-    memset(task, 0, sizeof(http_task_t));
+    
+    task->start_time.tv_sec = 0;
+    task->start_time.tv_nsec = 0;
+    task->req = nullptr;
+    task->parsed_body = nullptr;
+    task->middleware_ctx = nullptr;
+    task->status_txt = nullptr;
+    task->next = nullptr;
+    task->reactor_id = 0;
+    task->status_code = 0;
+    atomic_store_explicit(&task->cancelled, false, memory_order_relaxed);
+    
+    task->out_content_type[0] = '\0';
+    task->username[0] = '\0';
+    task->session_id[0] = '\0';
+    task->client_ip[0] = '\0';
+    task->request_id[0] = '\0';
+    task->uri[0] = '\0';
+    
     if (cached_buf) {
         evbuffer_drain(cached_buf, evbuffer_get_length(cached_buf));
         task->worker_buf = cached_buf;
