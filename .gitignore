@@ -39,6 +39,7 @@ sonar.md
 .dockerignore
 LIBPQ*.md
 *plan.md
+summary.md
 
 examples/
 
