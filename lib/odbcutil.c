@@ -314,7 +314,9 @@ typedef struct {
     char             *arena;
     SQLHSTMT          hstmt;
     SQLSMALLINT       count;
-    char              _padding[6];
+    bool              uses_tls_cols;
+    bool              uses_tls_arena;
+    char              _padding[4];
 } ResultSetMetadata;
 
 static void metadata_destroy(ResultSetMetadata *meta) {
@@ -322,11 +324,13 @@ static void metadata_destroy(ResultSetMetadata *meta) {
     if (odbcutil_is_valid_stmt(meta->hstmt)) {
         SQLFreeStmt(meta->hstmt, SQL_UNBIND);
     }
-    free(meta->cols);
-    free(meta->arena);
+    if (!meta->uses_tls_cols) free(meta->cols);
+    if (!meta->uses_tls_arena) free(meta->arena);
     meta->cols = nullptr;
     meta->arena = nullptr;
     meta->count = 0;
+    meta->uses_tls_cols = false;
+    meta->uses_tls_arena = false;
     meta->hstmt = SQL_NULL_HSTMT;
 }
 
@@ -377,13 +381,28 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
     evbuffer_add(buf, "\"", 1);
 }
 
+#define TLS_MAX_COLS 256
+#define TLS_ARENA_SIZE (1024 * 1024)
+
+static _Thread_local ColumnDescriptor tl_cols[TLS_MAX_COLS];
+static _Thread_local char tl_arena[TLS_ARENA_SIZE];
+
 static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols) {
     if (num_cols <= 0) return false;
 
     meta->hstmt = hstmt;
-    meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
-    if (!meta->cols) return false;
     meta->count = num_cols;
+    
+    if (num_cols <= TLS_MAX_COLS) {
+        meta->cols = tl_cols;
+        meta->uses_tls_cols = true;
+        memset(meta->cols, 0, (size_t)num_cols * sizeof(ColumnDescriptor));
+    } else {
+        meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
+        meta->uses_tls_cols = false;
+    }
+    
+    if (!meta->cols) return false;
 
     size_t total_arena_size = 0;
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
@@ -394,28 +413,35 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
                                        &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
         if (!SQL_SUCCEEDED(ret)) {
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
-            free(meta->cols);
+            if (!meta->uses_tls_cols) free(meta->cols);
             meta->cols = nullptr;
             return false;
         }
         meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
         if (ckd_add(&total_arena_size, total_arena_size, meta->cols[i].alloc_size)) {
             odbcutil_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Column allocation size overflowed.");
-            free(meta->cols);
+            if (!meta->uses_tls_cols) free(meta->cols);
             meta->cols = nullptr;
             return false;
         }
     }
 
     if (total_arena_size == 0) {
-        free(meta->cols);
+        if (!meta->uses_tls_cols) free(meta->cols);
         meta->cols = nullptr;
         return false;
     }
 
-    meta->arena = malloc(total_arena_size);
+    if (total_arena_size <= TLS_ARENA_SIZE) {
+        meta->arena = tl_arena;
+        meta->uses_tls_arena = true;
+    } else {
+        meta->arena = malloc(total_arena_size);
+        meta->uses_tls_arena = false;
+    }
+    
     if (!meta->arena) {
-        free(meta->cols);
+        if (!meta->uses_tls_cols) free(meta->cols);
         meta->cols = nullptr;
         return false;
     }
