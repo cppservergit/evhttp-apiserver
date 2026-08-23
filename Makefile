@@ -1,6 +1,6 @@
 CC = gcc
 AR = gcc-ar
-CFLAGS = -std=gnu2x -Wall -Wextra -Wpadded -Wdangling-pointer=2 -Wreturn-local-addr -Wpedantic -Wshadow -Werror -Wformat=2 -Wvla -Wimplicit-fallthrough -Wnull-dereference -Wundef -g -flto -O3 -D_GNU_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -march=x86-64-v3 -fPIE -Iinclude -ftrivial-auto-var-init=zero
+CFLAGS = -std=gnu2x -Wall -Wextra -Wpadded -Wdangling-pointer=2 -Wreturn-local-addr -Wpedantic -Wshadow -Werror -Wformat=2 -Wvla -Wimplicit-fallthrough -Wnull-dereference -Wundef -g -flto=auto -O3 -D_GNU_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -march=x86-64-v3 -fPIE -Iinclude
 LDFLAGS = -levent_pthreads -levent -ljson-c -lcurl -lodbc -lpthread -lsodium -lqrencode -loath -pie -Wl,-z,relro,-z,now
 
 LIB_SRC = $(wildcard lib/*.c)

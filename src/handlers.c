@@ -819,13 +819,13 @@ const ValidationContext GastoContext = {
 
 void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
-    int id = json_object_get_int(json_object_object_get(body, "id"));
+    int id = json_get_int(body, "id");
     
     QueryParam in_params[1];
     in_params[0].type = PARAM_INT;
     in_params[0].value = &id;
 
-    SpOutParam out_params[4];
+    OutParam out_params[4];
     
     char fecha[11];
     out_params[0].name = "fecha";
@@ -906,6 +906,47 @@ void emp_ordersj_handler(struct json_object* body, int* out_status, struct evbuf
     };
     
     if (!odbcutil_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", params, ARRAY_SIZE(params), out_buf, __func__)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
+
+
+// --- Dummy Handler & Schema ---
+
+static const FieldValidator DummySchema[] = {
+    {.field_name = "id", .type = TYPE_INT, .is_required = true}
+};
+
+const ValidationContext DummyContext = {
+    .schema = DummySchema,
+    .schema_count = sizeof(DummySchema) / sizeof(DummySchema[0]),
+    .global_validator = nullptr
+};
+
+void dummy_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int in_param1 = json_get_int(body, "id");
+
+    QueryParam in_params[1];
+    in_params[0].type = PARAM_INT;
+    in_params[0].value = &in_param1;
+
+    int my_out1 = 0;
+    char my_out3[64] = {0};
+
+    OutParam out_params[2] = {
+        { .name = "CapturedOut1", .buffer = &my_out1, .buffer_len = sizeof(my_out1), .type = PARAM_INT },
+        { .name = "CapturedOut3", .buffer = my_out3, .buffer_len = sizeof(my_out3), .type = PARAM_STRING }
+    };
+
+    const char* query = 
+        "DECLARE @Out1 INT;\n"
+        "DECLARE @Out3 DATETIME;\n"
+        "EXEC dbo.TestDummySP @InParam1=?, @OutParam1=@Out1 OUTPUT, @OutParam3=@Out3 OUTPUT;\n"
+        "SELECT @Out1 AS OutParam1, @Out3 AS OutParam3;";
+
+    if (!odbcutil_query_single_row_j(DB_0, query, in_params, ARRAY_SIZE(in_params), out_params, ARRAY_SIZE(out_params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }

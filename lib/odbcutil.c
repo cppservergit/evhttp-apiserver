@@ -687,7 +687,7 @@ bool odbcutil_query_single_row(
 }
 
 [[nodiscard("ODBC function return value must be evaluated")]]
-static bool bind_sp_out_params(DbConnectionId db_id, SQLHSTMT hstmt, SpOutParam* out_params, size_t out_count, size_t in_count) {
+static bool bind_sp_out_params(DbConnectionId db_id, SQLHSTMT hstmt, OutParam* out_params, size_t out_count, size_t in_count) {
     for (size_t i = 0; i < out_count; ++i) {
         SQLRETURN bind_ret;
         switch (out_params[i].type) {
@@ -741,7 +741,7 @@ static bool handle_sp_execution_error(DbConnectionId db_id, SQLHSTMT hstmt, cons
     return true;
 }
 
-static void format_sp_out_params_json(SpOutParam* out_params, size_t out_count, struct evbuffer* out_buf) {
+static void format_sp_out_params_json(OutParam* out_params, size_t out_count, struct evbuffer* out_buf) {
     evbuffer_add(out_buf, "{", 1);
     for (size_t i = 0; i < out_count; ++i) {
         if (i > 0) evbuffer_add(out_buf, ",", 1);
@@ -792,5 +792,48 @@ bool odbcutil_execute_sp_json(
     }
 
     format_sp_out_params_json(params->out_params, params->out_count, out_buf);
+    return true;
+}
+
+bool odbcutil_query_single_row_j(
+    DbConnectionId db_id,
+    const char* query,
+    QueryParam* in_params, size_t in_count,
+    OutParam* out_params, size_t out_count,
+    struct evbuffer* out_buf,
+    const char* func_name
+) {
+    if (!odbcutil_query_single_row(db_id, query, in_params, in_count, out_params, out_count, func_name)) {
+        return false;
+    }
+
+    evbuffer_add(out_buf, "{", 1);
+    for (size_t i = 0; i < out_count; ++i) {
+        if (i > 0) evbuffer_add(out_buf, ",", 1);
+        
+        evbuffer_add(out_buf, "\"", 1);
+        evbuffer_add(out_buf, out_params[i].name, strlen(out_params[i].name));
+        evbuffer_add(out_buf, "\":", 2);
+
+        if (out_params[i].ind == SQL_NULL_DATA) {
+            evbuffer_add(out_buf, "null", 4);
+        } else {
+            switch (out_params[i].type) {
+                case PARAM_STRING:
+                    evbuffer_append_escaped_str(out_buf, (const char*)out_params[i].buffer, (size_t)out_params[i].ind);
+                    break;
+                case PARAM_INT:
+                    evbuffer_add_printf(out_buf, "%d", *(int*)out_params[i].buffer);
+                    break;
+                case PARAM_DOUBLE:
+                    evbuffer_add_printf(out_buf, "%.15g", *(double*)out_params[i].buffer);
+                    break;
+                default:
+                    evbuffer_add(out_buf, "null", 4);
+                    break;
+            }
+        }
+    }
+    evbuffer_add(out_buf, "}", 1);
     return true;
 }

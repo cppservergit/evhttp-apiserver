@@ -98,6 +98,7 @@ extern const ValidationContext UploadContext;
 
 /** \brief Handles /gasto requests. */
 void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+void dummy_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
 /** \brief Validation schema context for /gasto route. */
 extern const ValidationContext GastoContext;
 

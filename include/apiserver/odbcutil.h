@@ -37,22 +37,13 @@ typedef struct {
 
 /** \brief Structure for binding an ODBC query output column. */
 typedef struct {
-    void*     buffer;      // Pointer to the caller's stack/heap buffer
-    SQLLEN    buffer_len;  // Maximum capacity of the buffer
-    SQLLEN    ind;         // Will hold the returned length or SQL_NULL_DATA
-    ParamType type;        // Expected C data type
-    char      _padding[4];
-} OutParam;
-
-/** \brief Structure for binding an ODBC query output parameter with name for JSON. */
-typedef struct {
     const char* name;      // JSON key name
     void*     buffer;      // Pointer to the caller's stack/heap buffer
     SQLLEN    buffer_len;  // Maximum capacity of the buffer
     SQLLEN    ind;         // Will hold the returned length or SQL_NULL_DATA
     ParamType type;        // Expected C data type
     char      _padding[4];
-} SpOutParam;
+} OutParam;
 
 /** \brief Supported database connection identifiers. */
 typedef enum {
@@ -93,7 +84,7 @@ bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryPar
 typedef struct {
     QueryParam* in_params;
     size_t in_count;
-    SpOutParam* out_params;
+    OutParam* out_params;
     size_t out_count;
 } SpParams;
 
@@ -112,3 +103,7 @@ bool odbcutil_is_valid_stmt(SQLHSTMT hstmt);
 
 
 
+
+/** \brief Executes a query and fetches a single row directly into the provided OutParam buffers, appending as JSON to evbuffer. */
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool odbcutil_query_single_row_j(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, struct evbuffer* out_buf, const char* func_name);

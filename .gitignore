@@ -44,3 +44,5 @@ summary.md
 examples/
 
 .agents/
+odbctest.c
+odbctest
