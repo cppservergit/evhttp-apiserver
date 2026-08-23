@@ -151,8 +151,10 @@ bool totp_generate_base32_secret(char* out_secret, size_t out_maxlen) {
         return false;
     }
 
-    strncpy(out_secret, b32, out_maxlen);
-    out_secret[out_maxlen - 1] = '\0';
+    size_t copy_len = b32_len;
+    if (copy_len >= out_maxlen) copy_len = out_maxlen - 1;
+    memcpy(out_secret, b32, copy_len);
+    out_secret[copy_len] = '\0';
 
     sodium_memzero(b32, b32_len);
     free(b32);
