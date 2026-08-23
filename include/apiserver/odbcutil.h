@@ -61,7 +61,7 @@ typedef enum {
 SQLHDBC odbcutil_connect(DbConnectionId db_id);
 
 
-/** \brief Encapsulates the entire connect, execute, fetch, and disconnect flow with data binding callback. */
+/** \brief Executes stores procedure that returns JSON. */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
 
@@ -81,6 +81,7 @@ void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
 
+/** \brief Structure for representing the input and output parameters of a stored procedure. */
 typedef struct {
     QueryParam* in_params;
     size_t in_count;
@@ -100,9 +101,6 @@ void odbcutil_cleanup_stmt(const SQLHSTMT* stmt);
 
 /** \brief Checks if a statement handle is still valid in the thread-local pool. */
 bool odbcutil_is_valid_stmt(SQLHSTMT hstmt);
-
-
-
 
 /** \brief Executes a query and fetches a single row directly into the provided OutParam buffers, appending as JSON to evbuffer. */
 [[nodiscard("ODBC function return value must be evaluated")]]
