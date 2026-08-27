@@ -63,15 +63,15 @@ SQLHDBC odbcutil_connect(DbConnectionId db_id);
 
 /** \brief Executes stores procedure that returns JSON. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
 /** \brief Executes query and converts traditional resultset to JSON array of objects. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
 /** \brief Executes query returning multiple resultsets as a JSON object with array fields r1, r2, ... */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_get_jsonm(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_get_jsonm(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
 
 /** \brief Extracts and logs ODBC diagnostic records. */
@@ -79,7 +79,7 @@ void odbcutil_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE
 
 /** \brief Executes a query and fetches a single row directly into the provided OutParam buffers. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, const char* func_name);
+bool odbcutil_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count);
 
 /** \brief Structure for representing the input and output parameters of a stored procedure. */
 typedef struct {
@@ -91,10 +91,10 @@ typedef struct {
 
 /** \brief Executes a stored procedure without a resultset, returning output parameters as a JSON object. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_execute_sp_json(DbConnectionId db_id, const char* query, SpParams* params, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_execute_sp_json(DbConnectionId db_id, const char* query, SpParams* params, struct evbuffer* out_buf);
 
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
-SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc, const char* func_name);
+SQLHSTMT odbcutil_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc);
 
 /** \brief Safely cleans up a statement handle, verifying it hasn't been freed by a reset. */
 void odbcutil_cleanup_stmt(const SQLHSTMT* stmt);
@@ -104,4 +104,4 @@ bool odbcutil_is_valid_stmt(SQLHSTMT hstmt);
 
 /** \brief Executes a query and fetches a single row directly into the provided OutParam buffers, appending as JSON to evbuffer. */
 [[nodiscard("ODBC function return value must be evaluated")]]
-bool odbcutil_query_single_row_j(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, struct evbuffer* out_buf, const char* func_name);
+bool odbcutil_query_single_row_j(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, struct evbuffer* out_buf);
