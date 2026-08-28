@@ -743,7 +743,8 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     const char* filename = json_get_string(body, "filename");
     const char* content_type = json_get_string(body, "content_type");
     const char* title = json_get_string(body, "title");
-    const char* blob = json_get_string(body, "blob");
+    int b64_len = 0;
+    const char* blob = json_get_string_ex(body, "blob", &b64_len);
     const char* user = context_get_user();
 
     *out_status = HTTP_INTERNAL;
@@ -761,7 +762,6 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     char out_path[MAX_CONFIG_STR + 64];
     (void)snprintf(out_path, sizeof(out_path), "%s/%s", uploads_dir, uuid_str);
     
-    size_t b64_len = strlen(blob);
     size_t bin_maxlen;
     if (ckd_mul(&bin_maxlen, b64_len / 4, 3) || ckd_add(&bin_maxlen, bin_maxlen, 4)) {
         LOG_ERROR("Upload blob length overflow");
@@ -896,9 +896,8 @@ void customerget_handler(struct json_object* body, int* out_status, struct evbuf
         *out_status = HTTP_INTERNAL;
     }
 }
+
 // --- Employee Orders Handler & Schema ---
-
-
 
 void emp_orders_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;

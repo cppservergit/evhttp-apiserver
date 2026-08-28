@@ -79,6 +79,9 @@ bool validate_json(const ValidationContext *ctx, const json_object *root, char *
 /** \brief Retrieves a string property from a JSON object. */
 const char* json_get_string(const struct json_object* obj, const char* key);
 
+/** \brief Retrieves a string property and its length from a JSON object. */
+const char* json_get_string_ex(const struct json_object* obj, const char* key, int* len);
+
 /** \brief Retrieves a 64-bit integer property from a JSON object. */
 int64_t json_get_int(const struct json_object* obj, const char* key);
 

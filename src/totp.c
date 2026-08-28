@@ -23,15 +23,10 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
 
     bool found = false;
     if (!db_query_single_row(DB_0, "{CALL cpp_get_secret(?)}", in_params, 1, out_params, 1, &found)) {
-        // db_query_single_row logs connection/execution errors automatically.
         return HTTP_INTERNAL; 
     }
 
-    if (!found) {
-        return HTTP_NOTFOUND;
-    }
-
-    if (out_params[0].ind == SQL_NULL_DATA || out_params[0].ind == 0) {
+    if (!found || out_params[0].ind == SQL_NULL_DATA || out_params[0].ind == 0) {
         return HTTP_NOTFOUND;
     }
 

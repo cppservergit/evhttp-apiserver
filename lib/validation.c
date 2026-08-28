@@ -239,6 +239,16 @@ const char* json_get_string(const struct json_object* obj, const char* key) {
     return nullptr;
 }
 
+const char* json_get_string_ex(const struct json_object* obj, const char* key, int* len) {
+    struct json_object* val;
+    if (json_object_object_get_ex(obj, key, &val)) {
+        *len = json_object_get_string_len(val);
+        return json_object_get_string(val);
+    }
+    return nullptr;
+}
+
+
 int64_t json_get_int(const struct json_object* obj, const char* key) {
     struct json_object* val;
     if (json_object_object_get_ex(obj, key, &val)) {

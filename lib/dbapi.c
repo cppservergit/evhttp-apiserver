@@ -305,8 +305,9 @@ typedef struct {
     SQLLEN      ind;
     SQLSMALLINT name_len;
     SQLSMALLINT sql_type;
+    SQLSMALLINT c_type;
     SQLCHAR     name[128];
-    char        _padding[4];
+    char        _padding[2];
 } ColumnDescriptor;
 
 typedef struct {
@@ -334,16 +335,6 @@ static void metadata_destroy(ResultSetMetadata *meta) {
     meta->hstmt = SQL_NULL_HSTMT;
 }
 
-static bool is_json_number_type(SQLSMALLINT sql_type) {
-    switch (sql_type) {
-        case SQL_INTEGER:    case SQL_SMALLINT:  case SQL_TINYINT:
-        case SQL_BIGINT:     case SQL_FLOAT:     case SQL_REAL:
-        case SQL_DOUBLE:     case SQL_DECIMAL:   case SQL_NUMERIC:
-            return true;
-        default:
-            return false;
-    }
-}
 
 static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, size_t len) {
     evbuffer_add(buf, "\"", 1);
@@ -417,7 +408,32 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
             meta->cols = nullptr;
             return false;
         }
-        meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
+        switch (meta->cols[i].sql_type) {
+            case SQL_BIT:
+                meta->cols[i].c_type = SQL_C_BIT;
+                meta->cols[i].alloc_size = sizeof(unsigned char);
+                break;
+            case SQL_TINYINT:
+            case SQL_SMALLINT:
+            case SQL_INTEGER:
+                meta->cols[i].c_type = SQL_C_SLONG;
+                meta->cols[i].alloc_size = sizeof(SQLINTEGER);
+                break;
+            case SQL_BIGINT:
+                meta->cols[i].c_type = SQL_C_SBIGINT;
+                meta->cols[i].alloc_size = sizeof(SQLBIGINT);
+                break;
+            case SQL_REAL:
+            case SQL_FLOAT:
+            case SQL_DOUBLE:
+                meta->cols[i].c_type = SQL_C_DOUBLE;
+                meta->cols[i].alloc_size = sizeof(SQLDOUBLE);
+                break;
+            default:
+                meta->cols[i].c_type = SQL_C_CHAR;
+                meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
+                break;
+        }
         if (ckd_add(&total_arena_size, total_arena_size, meta->cols[i].alloc_size)) {
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Column allocation size overflowed.");
             if (!meta->uses_tls_cols) free(meta->cols);
@@ -465,7 +481,7 @@ static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, R
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         meta->cols[i].buffer = meta->arena + current_offset;
         current_offset += meta->cols[i].alloc_size;
-        ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), SQL_C_CHAR, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
+        ret = SQLBindCol(hstmt, (SQLUSMALLINT)(i + 1), meta->cols[i].c_type, meta->cols[i].buffer, meta->cols[i].alloc_size, &meta->cols[i].ind);
         if (!SQL_SUCCEEDED(ret)) {
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to bind column.");
             return false;
@@ -475,31 +491,57 @@ static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, R
 }
 
 static void append_col_value(struct evbuffer *buf, const ColumnDescriptor *col) {
-    size_t val_len = 0;
-    if (col->ind == SQL_NO_TOTAL) {
-        val_len = strlen(col->buffer);
-    } else if ((size_t)col->ind >= col->alloc_size) {
-        val_len = col->alloc_size - 1;
-    } else {
-        val_len = (size_t)col->ind;
-    }
+    char num_buf[64];
+    int len = 0;
 
-    if (col->sql_type == SQL_BIT) {
-        bool val = (col->buffer[0] == '1' || strcasecmp(col->buffer, "true") == 0);
-        evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
-        return;
-    }
-
-    if (is_json_number_type(col->sql_type)) {
-        if (val_len == 0) {
-            evbuffer_add(buf, "null", 4);
-        } else {
-            evbuffer_add(buf, col->buffer, val_len);
+    switch (col->c_type) {
+        case SQL_C_BIT: {
+            bool val = (*(unsigned char*)col->buffer) != 0;
+            evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
+            return;
         }
-        return;
-    }
+        case SQL_C_SLONG: {
+            SQLINTEGER val = *(SQLINTEGER*)col->buffer;
+            len = fast_itoa((int)val, num_buf, sizeof(num_buf));
+            evbuffer_add(buf, num_buf, len);
+            return;
+        }
+        case SQL_C_SBIGINT: {
+            SQLBIGINT val = *(SQLBIGINT*)col->buffer;
+            len = fast_ltoa((long)val, num_buf, sizeof(num_buf));
+            evbuffer_add(buf, num_buf, len);
+            return;
+        }
+        case SQL_C_DOUBLE: {
+            SQLDOUBLE val = *(SQLDOUBLE*)col->buffer;
+            len = fast_dtoa((double)val, num_buf, sizeof(num_buf));
+            evbuffer_add(buf, num_buf, len);
+            return;
+        }
+        case SQL_C_CHAR:
+        default: {
+            size_t val_len = 0;
+            if (col->ind == SQL_NO_TOTAL) {
+                val_len = strlen(col->buffer);
+            } else if ((size_t)col->ind >= col->alloc_size) {
+                val_len = col->alloc_size - 1;
+            } else {
+                val_len = (size_t)col->ind;
+            }
 
-    evbuffer_append_escaped_str(buf, col->buffer, val_len);
+            if (col->sql_type == SQL_DECIMAL || col->sql_type == SQL_NUMERIC) {
+                if (val_len == 0) {
+                    evbuffer_add(buf, "null", 4);
+                } else {
+                    evbuffer_add(buf, col->buffer, val_len);
+                }
+                return;
+            }
+
+            evbuffer_append_escaped_str(buf, col->buffer, val_len);
+            return;
+        }
+    }
 }
 
 static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMetadata *meta) {
@@ -513,7 +555,7 @@ static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMeta
         if (col->ind == SQL_NULL_DATA) {
             evbuffer_add(buf, "null", 4);
         } else {
-            if (col->alloc_size > 0) {
+            if (col->alloc_size > 0 && col->c_type == SQL_C_CHAR) {
                 col->buffer[col->alloc_size - 1] = '\0';
             }
             append_col_value(buf, col);
