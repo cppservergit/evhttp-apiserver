@@ -132,13 +132,23 @@ static bool validate_type_double(const json_object *obj, const FieldValidator *f
     return true;
 }
 
+static size_t utf8_strlen(const char *s) {
+    size_t len = 0;
+    for (; *s; ++s) {
+        if (((unsigned char)*s & 0xC0) != 0x80) {
+            len++;
+        }
+    }
+    return len;
+}
+
 static bool validate_type_string(const json_object *obj, const FieldValidator *field, char *err, size_t len) {
     if (!json_object_is_type(obj, json_type_string)) {
         return emit_error(err, len, ERR_NOT_STRING, field->field_name);
     }
     if (field->max_len > 0) {
         const char *str = json_object_get_string((struct json_object*)(uintptr_t)obj);
-        if (str && strlen(str) > field->max_len) {
+        if (str && utf8_strlen(str) > field->max_len) {
             return emit_error(err, len, ERR_TOO_LONG, field->field_name);
         }
     }

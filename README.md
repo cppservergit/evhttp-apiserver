@@ -250,7 +250,7 @@ For a comprehensive guide on writing database API handlers, please see the [Deve
 Below is a complete example of how the framework handles a POST request to `/sales`, streaming the response directly from ODBC into the network socket without intermediate heap allocations.
 
 ### 1. The Request Handler (`src/handlers.c`)
-Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters into a `QueryParam` array and calls the `odbcutil` streaming abstraction:
+Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters into a `QueryParam` array and calls the `dbapi` streaming abstraction:
 
 ```c
 void sales_handler(
@@ -268,7 +268,7 @@ void sales_handler(
         { .type = PARAM_STRING, .value = end_date }
     };
     
-    if (!odbcutil_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }

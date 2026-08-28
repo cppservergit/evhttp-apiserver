@@ -1,5 +1,5 @@
 #include "totp.h"
-#include <apiserver/odbcutil.h>
+#include <apiserver/dbapi.h>
 #include <apiserver/thread_error.h>
 #include <apiserver/raii.h>
 #include <qrencode.h>
@@ -21,9 +21,14 @@ static int get_secret(const char* user, char* out_secret, size_t max_len) {
         { .buffer = out_secret, .buffer_len = (SQLLEN)max_len, .type = PARAM_STRING }
     };
 
-    if (!odbcutil_query_single_row(DB_0, "{CALL cpp_get_secret(?)}", in_params, 1, out_params, 1)) {
-        // odbcutil_query_single_row logs connection/execution errors automatically.
-        return HTTP_NOTFOUND; 
+    bool found = false;
+    if (!db_query_single_row(DB_0, "{CALL cpp_get_secret(?)}", in_params, 1, out_params, 1, &found)) {
+        // db_query_single_row logs connection/execution errors automatically.
+        return HTTP_INTERNAL; 
+    }
+
+    if (!found) {
+        return HTTP_NOTFOUND;
     }
 
     if (out_params[0].ind == SQL_NULL_DATA || out_params[0].ind == 0) {

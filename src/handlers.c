@@ -5,7 +5,7 @@
 #include <apiserver/config.h>
 #include <apiserver/logger.h>
 #include <apiserver/jwt.h>
-#include <apiserver/odbcutil.h>
+#include <apiserver/dbapi.h>
 #include <apiserver/raii.h>
 #include <string.h>
 #include <errno.h>
@@ -377,7 +377,7 @@ void customer_handler(struct json_object* body, int* out_status, struct evbuffer
         { .type = PARAM_STRING, .value = customer_id }
     };
     
-    if (!odbcutil_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -462,7 +462,7 @@ void sales_handler(struct json_object* body, int* out_status, struct evbuffer* o
         { .type = PARAM_STRING, .value = end_date }
     };
     
-    if (!odbcutil_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -478,14 +478,14 @@ void shippers_handler([[maybe_unused]] struct json_object* body, int* out_status
               user ? user : "unknown", 
               session ? session : "unknown");
               
-    if (!odbcutil_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf)) {
+    if (!db_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
 
 void products_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
-    if (!odbcutil_get_json(DB_0, "{CALL sp_products_view}", nullptr, 0, out_buf)) {
+    if (!db_get_json(DB_0, "{CALL sp_products_view}", nullptr, 0, out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -623,7 +623,7 @@ void employee_handler(struct json_object* body, int* out_status, struct evbuffer
         { .type = PARAM_INT, .value = &emp_id }
     };
     
-    if (!odbcutil_get_rs2json(DB_0, "{CALL emp_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_rs2json(DB_0, "{CALL emp_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -649,7 +649,7 @@ void prodget_handler(struct json_object* body, int* out_status, struct evbuffer*
         { .type = PARAM_INT, .value = &id }
     };
     
-    if (!odbcutil_get_rs2json(DB_0, "{CALL product_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_rs2json(DB_0, "{CALL product_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -675,7 +675,7 @@ void supplier_handler(struct json_object* body, int* out_status, struct evbuffer
         { .type = PARAM_INT, .value = &id }
     };
     
-    if (!odbcutil_get_rs2json(DB_0, "{CALL supplier_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_rs2json(DB_0, "{CALL supplier_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -701,7 +701,7 @@ void customers_handler(struct json_object* body, int* out_status, struct evbuffe
         { .type = PARAM_STRING, .value = filter }
     };
     
-    if (!odbcutil_get_json(DB_0, "{CALL sp_customers_like(?)}", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_json(DB_0, "{CALL sp_customers_like(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -716,7 +716,7 @@ void sales_pgsql_handler(struct json_object* body, int* out_status, struct evbuf
         { .type = PARAM_STRING, .value = end_date }
     };
     
-    if (!odbcutil_get_json(DB_1, "select get_sales_by_category(?, ?)", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_json(DB_1, "select get_sales_by_category(?, ?)", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -825,7 +825,7 @@ void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* o
     in_params[0].type = PARAM_INT;
     in_params[0].value = &id;
 
-    OutParam out_params[4];
+    /*OutParam out_params[4];
     
     char fecha[11];
     out_params[0].name = "fecha";
@@ -856,10 +856,28 @@ void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* o
         .in_count = ARRAY_SIZE(in_params),
         .out_params = out_params,
         .out_count = ARRAY_SIZE(out_params)
-    };
+    };*/
 
-    if (!odbcutil_execute_sp_json(DB_0, "{CALL dbo.ObtenerGasto(?, ?, ?, ?, ?)}", 
-                                  &sp_params, out_buf)) {
+    const char* sql = 
+    "DECLARE @out_fecha DATE;\n"
+    "DECLARE @out_categ_id INT;\n"
+    "DECLARE @out_monto MONEY;\n"
+    "DECLARE @out_motivo VARCHAR(150);\n"
+    "\n"
+    "EXEC dbo.ObtenerGasto\n"
+    "    @gasto_id = ?,\n" 
+    "    @fecha = @out_fecha OUTPUT,\n"
+    "    @categ_id = @out_categ_id OUTPUT,\n"
+    "    @monto = @out_monto OUTPUT,\n"
+    "    @motivo = @out_motivo OUTPUT;\n"
+    "\n"
+    "SELECT\n"
+    "    @out_fecha AS Fecha,\n"
+    "    @out_categ_id AS CategID,\n"
+    "    @out_monto AS Monto,\n"
+    "    @out_motivo AS Motivo;";
+
+    if (!db_get_rs2json(DB_0, sql, in_params, ARRAY_SIZE(in_params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -874,7 +892,7 @@ void customerget_handler(struct json_object* body, int* out_status, struct evbuf
     in_params[0].type = PARAM_STRING;
     in_params[0].value = id;
 
-    if (!odbcutil_get_jsonm(DB_0, "{CALL dbo.get_customer_info(?)}", in_params, ARRAY_SIZE(in_params), out_buf)) {
+    if (!db_get_rs2json_m(DB_0, "{CALL dbo.get_customer_info(?)}", in_params, ARRAY_SIZE(in_params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -891,7 +909,7 @@ void emp_orders_handler(struct json_object* body, int* out_status, struct evbuff
         { .type = PARAM_INT, .value = &id }
     };
     
-    if (!odbcutil_get_rs2json(DB_1, "SELECT * FROM demo.get_employee_orders(?)", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_rs2json_m(DB_0, "{CALL dbo.get_emp_orders(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -905,7 +923,7 @@ void emp_ordersj_handler(struct json_object* body, int* out_status, struct evbuf
         { .type = PARAM_INT, .value = &id }
     };
     
-    if (!odbcutil_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", params, ARRAY_SIZE(params), out_buf)) {
+    if (!db_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -932,21 +950,13 @@ void dummy_handler(struct json_object* body, int* out_status, struct evbuffer* o
     in_params[0].type = PARAM_INT;
     in_params[0].value = &in_param1;
 
-    int my_out1 = 0;
-    char my_out3[64] = {0};
-
-    OutParam out_params[2] = {
-        { .name = "CapturedOut1", .buffer = &my_out1, .buffer_len = sizeof(my_out1), .type = PARAM_INT },
-        { .name = "CapturedOut3", .buffer = my_out3, .buffer_len = sizeof(my_out3), .type = PARAM_STRING }
-    };
-
     const char* query = 
         "DECLARE @Out1 INT;\n"
-        "DECLARE @Out3 DATETIME;\n"
-        "EXEC dbo.TestDummySP @InParam1=?, @OutParam1=@Out1 OUTPUT, @OutParam3=@Out3 OUTPUT;\n"
-        "SELECT @Out1 AS OutParam1, @Out3 AS OutParam3;";
+        "DECLARE @Out2 VARCHAR(255);\n"
+        "EXEC dbo.TestDummySP @InParam1=?, @OutParam1=@Out1 OUTPUT, @OutParam2=@Out2 OUTPUT;\n"
+        "SELECT @Out1 AS OutParam1, @Out2 AS OutParam2;";
 
-    if (!odbcutil_query_single_row_j(DB_0, query, in_params, ARRAY_SIZE(in_params), out_params, ARRAY_SIZE(out_params), out_buf)) {
+    if (!db_get_rs2json(DB_0, query, in_params, ARRAY_SIZE(in_params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }

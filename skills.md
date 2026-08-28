@@ -52,7 +52,7 @@ const ValidationContext CustomerContext = {
 
 ## Step 2: Implement the Handler Function
 
-The handler function orchestrates the request. By using the `odbcutil_get_json` abstraction and a `QueryParam` array, you eliminate all boilerplate connection handling, fetching, and memory allocation.
+The handler function orchestrates the request. By using the `db_get_json` abstraction and a `QueryParam` array, you eliminate all boilerplate connection handling, fetching, and memory allocation.
 
 ```c
 void customer_handler(
@@ -73,15 +73,15 @@ void customer_handler(
     
     // 3. Execute the stored procedure and stream the results DIRECTLY to the network buffer.
     // The macro __func__ injects the caller name for robust telemetry.
-    if (!odbcutil_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
 ```
 
 ### ⚡ Why is this "Well-Behaved"?
-* **Zero Allocations:** `odbcutil_get_json` reads the `FOR JSON` chunks from SQL Server and pipes them instantly into `out_buf` (`evbuffer_add`). No intermediate `json-c` objects are allocated or freed.
-* **Thread-Local DB Multiplexing:** `odbcutil_connect` inherently utilizes `_Thread_local` connection pooling. There are **zero mutex locks** acquired during the execution path, allowing horizontal scaling across all CPU cores.
+* **Zero Allocations:** `db_get_json` reads the `FOR JSON` chunks from SQL Server and pipes them instantly into `out_buf` (`evbuffer_add`). No intermediate `json-c` objects are allocated or freed.
+* **Thread-Local DB Multiplexing:** `db_connect` inherently utilizes `_Thread_local` connection pooling. There are **zero mutex locks** acquired during the execution path, allowing horizontal scaling across all CPU cores.
 
 ---
 
@@ -111,7 +111,7 @@ If your endpoint doesn't accept a JSON payload and simply retrieves global data 
 You do **not** need a schema, `ValidationContext`, or parameter binder callback.
 
 ### The Handler
-Pass `nullptr` and `0` for the parameter arguments in `odbcutil_get_json`:
+Pass `nullptr` and `0` for the parameter arguments in `db_get_json`:
 
 ```c
 void shippers_handler(
@@ -122,7 +122,7 @@ void shippers_handler(
     *out_status = HTTP_OK;
         
     // Execute parameterless query and stream directly to client
-    if (!odbcutil_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -161,7 +161,7 @@ sequenceDiagram
     participant RT as Reactor Thread (lib/server.c)
     participant WT as Worker Thread (lib/worker_pool.c)
     participant H as Domain Handler (src/handlers.c)
-    participant S as Services (lib/odbcutil.c, etc.)
+    participant S as Services (lib/dbapi.c, etc.)
     participant TL as Thread-Local State
     
     Client->>RT: HTTP Request
@@ -176,7 +176,7 @@ sequenceDiagram
     WT->>WT: worker_process_validation()
     WT->>H: ctx->handler()
     
-    H->>S: odbcutil_get_json()
+    H->>S: db_get_json()
     alt Database Error
         S->>TL: set_thread_error(TL_ERR_ERROR, "DB Offline")
         S-->>H: false
@@ -207,12 +207,12 @@ The worker thread wakes up, dequeues the task, and executes `worker_thread_main(
 1. **Middleware & Validation**: It delegates authorization (`worker_process_jwt`), payload parsing (`worker_process_payload`), and schema enforcement (`worker_process_validation`) to modular helper functions.
 2. **Handler Execution**: It invokes your concise, domain-specific handler (e.g., `customer_handler`).
 3. **Response Status Extraction**: Once the handler returns, it inspects the modified integer `task->status_code` (e.g., `200` or `500`). The worker thread handles translating this into the standard HTTP string via `get_http_status_text(code)`.
-4. **Centralized Error Logging**: Instead of handlers or low-level services (like `odbcutil` or `http_client`) spamming the global logger directly, they use `set_thread_error(...)`. The worker thread pulls this contextual error string via `get_thread_error_level()` and logs it cleanly as `LOG_ERROR` or `LOG_WARN`. This preserves strict separation of concerns and allows 100% unit testing of backend services.
+4. **Centralized Error Logging**: Instead of handlers or low-level services (like `dbapi` or `http_client`) spamming the global logger directly, they use `set_thread_error(...)`. The worker thread pulls this contextual error string via `get_thread_error_level()` and logs it cleanly as `LOG_ERROR` or `LOG_WARN`. This preserves strict separation of concerns and allows 100% unit testing of backend services.
 5. **Completion Signaling**: It signals the completion queue and wakes the reactor thread via `eventfd`.
 
 ### 3. Thread-Local Error Engine
 To maintain strict thread safety across all layers without acquiring mutexes, the error engine relies on `_Thread_local` storage inside `thread_error.c`.
-When `odbcutil` loses a database connection, it calls `set_thread_error(TL_ERR_ERROR, "Database connection lost")`. Because the storage is `_Thread_local`, this completely avoids data races between concurrent workers. The `worker_thread_main` orchestration loop inspects and clears this error at the end of every task boundary.
+When `dbapi` loses a database connection, it calls `set_thread_error(TL_ERR_ERROR, "Database connection lost")`. Because the storage is `_Thread_local`, this completely avoids data races between concurrent workers. The `worker_thread_main` orchestration loop inspects and clears this error at the end of every task boundary.
 
 ---
 

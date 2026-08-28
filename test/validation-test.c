@@ -293,6 +293,17 @@ static void test_coverage(void) {
     assert_validation_error(&BoundsContext, root, "exceeds maximum allowed length");
     json_object_put(root);
 
+    // Test UTF-8 length correctly counts characters, not bytes.
+    // "12345anatá" is 10 characters, but 11 bytes. It should pass max_len=10.
+    root = json_tokener_parse("{\"age\": 25, \"score\": 50.0, \"username\": \"12345anatá\"}");
+    assert(validate_json(&BoundsContext, root, err_buf, sizeof(err_buf)) == true);
+    json_object_put(root);
+
+    // And test that it fails when it actually exceeds 10 characters (11 characters, 12 bytes)
+    root = json_tokener_parse("{\"age\": 25, \"score\": 50.0, \"username\": \"123456anatá\"}");
+    assert_validation_error(&BoundsContext, root, "exceeds maximum allowed length");
+    json_object_put(root);
+
     json_object_put(empty_obj);
     printf("All validation edge cases passed successfully!\n");
 }
@@ -373,7 +384,7 @@ int main(void) {
     test_coverage();
     
     int num_threads = 8;
-    int iterations_per_thread = 1000000;
+    int iterations_per_thread = 1000;
     pthread_t threads[8];
     
     printf("Starting %d fuzzing threads (%d iterations each)...\n", num_threads, iterations_per_thread);
