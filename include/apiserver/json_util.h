@@ -21,8 +21,8 @@
  */
 void json_encode_string(const char* src, char* dest, size_t dest_size);
 
-int fast_itoa(int val, char* buf);
-int fast_ltoa(long val, char* buf);
+int fast_itoa(int val, char* buf, size_t buf_size);
+int fast_ltoa(long val, char* buf, size_t buf_size);
 int fast_dtoa(double val, char* buf, size_t buf_size);
 
 #endif // JSON_UTIL_H

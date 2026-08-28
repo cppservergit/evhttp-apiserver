@@ -594,7 +594,7 @@ static bool db_fetch_jsonm_native(DbConnectionId db_id, SQLHSTMT hstmt, struct e
             
             evbuffer_add(out_buf, "\"r", 2);
             char num_buf[32];
-            int len = fast_itoa(rs_index, num_buf);
+            int len = fast_itoa(rs_index, num_buf, sizeof(num_buf));
             evbuffer_add(out_buf, num_buf, len);
             evbuffer_add(out_buf, "\":[", 3);
             

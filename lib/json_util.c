@@ -1,5 +1,8 @@
 #include <apiserver/json_util.h>
 #include <stdio.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 static const char hex[] = "0123456789abcdef";
 
@@ -38,66 +41,123 @@ void json_encode_string(const char* src, char* dest, size_t dest_size) {
     dest[j] = '\0';
 }
 
-#include <math.h>
-#include <stdint.h>
-#include <stdbool.h>
+static const char digits_lut[200] = {
+    '0','0', '0','1', '0','2', '0','3', '0','4', '0','5', '0','6', '0','7', '0','8', '0','9',
+    '1','0', '1','1', '1','2', '1','3', '1','4', '1','5', '1','6', '1','7', '1','8', '1','9',
+    '2','0', '2','1', '2','2', '2','3', '2','4', '2','5', '2','6', '2','7', '2','8', '2','9',
+    '3','0', '3','1', '3','2', '3','3', '3','4', '3','5', '3','6', '3','7', '3','8', '3','9',
+    '4','0', '4','1', '4','2', '4','3', '4','4', '4','5', '4','6', '4','7', '4','8', '4','9',
+    '5','0', '5','1', '5','2', '5','3', '5','4', '5','5', '5','6', '5','7', '5','8', '5','9',
+    '6','0', '6','1', '6','2', '6','3', '6','4', '6','5', '6','6', '6','7', '6','8', '6','9',
+    '7','0', '7','1', '7','2', '7','3', '7','4', '7','5', '7','6', '7','7', '7','8', '7','9',
+    '8','0', '8','1', '8','2', '8','3', '8','4', '8','5', '8','6', '8','7', '8','8', '8','9',
+    '9','0', '9','1', '9','2', '9','3', '9','4', '9','5', '9','6', '9','7', '9','8', '9','9'
+};
 
-int fast_itoa(int val, char* buf) {
-    if (val == 0) {
-        buf[0] = '0';
-        buf[1] = '\0';
-        return 1;
-    }
-    char temp[12];
-    int p = 0;
-    unsigned int uval;
-    bool neg = false;
-    if (val < 0) {
-        neg = true;
-        uval = 0 - (unsigned int)val;
-    } else {
-        uval = (unsigned int)val;
-    }
-    while (uval > 0) {
-        temp[p++] = (char)('0' + (uval % 10));
-        uval /= 10;
-    }
-    int out_p = 0;
-    if (neg) buf[out_p++] = '-';
-    while (p > 0) {
-        buf[out_p++] = temp[--p];
-    }
-    buf[out_p] = '\0';
-    return out_p;
+static inline unsigned int count_digits_u32(uint32_t val) {
+    if (val < 10) return 1;
+    if (val < 100) return 2;
+    if (val < 1000) return 3;
+    if (val < 10000) return 4;
+    if (val < 100000) return 5;
+    if (val < 1000000) return 6;
+    if (val < 10000000) return 7;
+    if (val < 100000000) return 8;
+    if (val < 1000000000) return 9;
+    return 10;
 }
 
-int fast_ltoa(long val, char* buf) {
-    if (val == 0) {
-        buf[0] = '0';
-        buf[1] = '\0';
-        return 1;
-    }
-    char temp[24];
-    int p = 0;
-    unsigned long uval;
+static inline unsigned int count_digits_u64(uint64_t val) {
+    if (val < 1000000000ULL) return count_digits_u32((uint32_t)val);
+    if (val < 10000000000ULL) return 10;
+    if (val < 100000000000ULL) return 11;
+    if (val < 1000000000000ULL) return 12;
+    if (val < 10000000000000ULL) return 13;
+    if (val < 100000000000000ULL) return 14;
+    if (val < 1000000000000000ULL) return 15;
+    if (val < 10000000000000000ULL) return 16;
+    if (val < 100000000000000000ULL) return 17;
+    if (val < 1000000000000000000ULL) return 18;
+    if (val < 10000000000000000000ULL) return 19;
+    return 20;
+}
+
+int fast_itoa(int val, char* buf, size_t buf_size) {
+    if (!buf || buf_size < 2) return 0;
+    uint32_t uval;
     bool neg = false;
     if (val < 0) {
         neg = true;
-        uval = 0 - (unsigned long)val;
+        uval = 0 - (uint32_t)val;
     } else {
-        uval = (unsigned long)val;
+        uval = (uint32_t)val;
     }
-    while (uval > 0) {
-        temp[p++] = (char)('0' + (uval % 10));
-        uval /= 10;
+
+    unsigned int len = count_digits_u32(uval);
+    if (neg) len++;
+
+    if (len + 1 > buf_size) return 0;
+
+    buf[len] = '\0';
+    unsigned int pos = len;
+
+    while (uval >= 100) {
+        unsigned int rem = uval % 100;
+        uval /= 100;
+        pos -= 2;
+        buf[pos] = digits_lut[rem * 2];
+        buf[pos + 1] = digits_lut[rem * 2 + 1];
     }
-    int out_p = 0;
-    if (neg) buf[out_p++] = '-';
-    while (p > 0) {
-        buf[out_p++] = temp[--p];
+
+    if (uval < 10) {
+        buf[--pos] = (char)('0' + uval);
+    } else {
+        pos -= 2;
+        buf[pos] = digits_lut[uval * 2];
+        buf[pos + 1] = digits_lut[uval * 2 + 1];
     }
-    buf[out_p] = '\0';
-    return out_p;
+
+    if (neg) buf[0] = '-';
+    return (int)len;
+}
+
+int fast_ltoa(long val, char* buf, size_t buf_size) {
+    if (!buf || buf_size < 2) return 0;
+    uint64_t uval;
+    bool neg = false;
+    if (val < 0) {
+        neg = true;
+        uval = 0 - (uint64_t)val;
+    } else {
+        uval = (uint64_t)val;
+    }
+
+    unsigned int len = count_digits_u64(uval);
+    if (neg) len++;
+
+    if (len + 1 > buf_size) return 0;
+
+    buf[len] = '\0';
+    unsigned int pos = len;
+
+    while (uval >= 100) {
+        unsigned int rem = uval % 100;
+        uval /= 100;
+        pos -= 2;
+        buf[pos] = digits_lut[rem * 2];
+        buf[pos + 1] = digits_lut[rem * 2 + 1];
+    }
+
+    if (uval < 10) {
+        buf[--pos] = (char)('0' + uval);
+    } else {
+        pos -= 2;
+        buf[pos] = digits_lut[uval * 2];
+        buf[pos + 1] = digits_lut[uval * 2 + 1];
+    }
+
+    if (neg) buf[0] = '-';
+    return (int)len;
 }
 
 int fast_dtoa(double val, char* buf, size_t buf_size) {
@@ -120,53 +180,58 @@ int fast_dtoa(double val, char* buf, size_t buf_size) {
     uint64_t int_part = (uint64_t)abs_val;
     double frac = abs_val - (double)int_part;
 
-    char temp[24];
-    int tp = 0;
-    if (int_part == 0) {
-        temp[tp++] = '0';
+    unsigned int len = count_digits_u64(int_part);
+    if (neg) len++;
+
+    if (len + 1 > buf_size) return 0;
+
+    unsigned int pos = len;
+    uint64_t temp_int = int_part;
+    
+    while (temp_int >= 100) {
+        unsigned int rem = temp_int % 100;
+        temp_int /= 100;
+        pos -= 2;
+        buf[pos] = digits_lut[rem * 2];
+        buf[pos + 1] = digits_lut[rem * 2 + 1];
+    }
+    if (temp_int < 10) {
+        buf[--pos] = (char)('0' + temp_int);
     } else {
-        while (int_part > 0) {
-            temp[tp++] = (char)('0' + (int_part % 10));
-            int_part /= 10;
+        pos -= 2;
+        buf[pos] = digits_lut[temp_int * 2];
+        buf[pos + 1] = digits_lut[temp_int * 2 + 1];
+    }
+    if (neg) buf[0] = '-';
+
+    pos = len;
+
+    if (frac > 1e-9 && pos + 2 < buf_size) {
+        buf[pos++] = '.';
+        uint32_t frac_digits = (uint32_t)(frac * 1000000.0 + 0.5);
+
+        if (pos + 6 < buf_size) {
+            for (int i = 5; i >= 1; i -= 2) {
+                unsigned int rem = frac_digits % 100;
+                frac_digits /= 100;
+                buf[pos + i - 1] = digits_lut[rem * 2];
+                buf[pos + i] = digits_lut[rem * 2 + 1];
+            }
+            pos += 6;
+            
+            while (pos > len && buf[pos - 1] == '0') {
+                pos--;
+            }
+            if (pos > len && buf[pos - 1] == '.') {
+                pos--;
+            }
         }
     }
-
-    size_t p = 0;
-    if (neg && p + 1 < buf_size) {
-        buf[p++] = '-';
-    }
-
-    while (tp > 0 && p + 1 < buf_size) {
-        buf[p++] = temp[--tp];
-    }
-
-    if (frac > 1e-9 && p + 2 < buf_size) {
-        buf[p++] = '.';
-        static const double POW10[] = {1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0};
-        uint64_t frac_digits = (uint64_t)(frac * POW10[6] + 0.5);
-
-        char frac_temp[6];
-        for (int i = 5; i >= 0; --i) {
-            frac_temp[i] = (char)('0' + (frac_digits % 10));
-            frac_digits /= 10;
-        }
-
-        for (int i = 0; i < 6 && p + 1 < buf_size; ++i) {
-            buf[p++] = frac_temp[i];
-        }
-
-        while (p > 0 && buf[p - 1] == '0') {
-            p--;
-        }
-        if (p > 0 && buf[p - 1] == '.') {
-            p--;
-        }
-    }
-
-    if (p == 1 && buf[0] == '-') {
+    
+    if (pos == 1 && buf[0] == '-') {
         buf[0] = '0';
     }
 
-    buf[p] = '\0';
-    return (int)p;
+    buf[pos] = '\0';
+    return (int)pos;
 }
