@@ -46,6 +46,9 @@ void db_reset_connection(DbConnectionId db_id) {
     }
 }
 
+static _Thread_local SQLINTEGER tl_last_native_error = 0;
+static _Thread_local char tl_last_error_msg[SQL_MAX_MESSAGE_LENGTH] = {0};
+
 void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
     SQLCHAR sqlState[6];
     SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH];
@@ -58,6 +61,20 @@ void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handl
     bool is_disconnect = false;
 
     while (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, rec_num, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
+        if (nativeError >= 50000) {
+            tl_last_native_error = nativeError;
+            const char* clean_msg = (const char*)msg;
+            while (*clean_msg == '[') {
+                const char* end_bracket = strchr(clean_msg, ']');
+                if (end_bracket) {
+                    clean_msg = end_bracket + 1;
+                    while (*clean_msg == ' ') clean_msg++;
+                } else {
+                    break;
+                }
+            }
+            (void)snprintf(tl_last_error_msg, sizeof(tl_last_error_msg), "%s", clean_msg);
+        }
         if (offset < (int)sizeof(full_msg) - 1) {
             int written = snprintf(full_msg + offset, sizeof(full_msg) - offset, "[%s] %s; ", sqlState, msg);
             if (written > 0) offset += written;
@@ -274,6 +291,8 @@ static bool db_prepare_and_bind(DbConnectionId db_id, QueryParam* params, size_t
     return true;
 }
 
+static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, size_t len);
+
 static bool db_execute_and_fetch(
     DbConnectionId db_id, const char* query, 
     QueryParam* params, 
@@ -281,16 +300,29 @@ static bool db_execute_and_fetch(
     struct evbuffer* out_buf,
     odbc_fetch_cb fetch_cb
 ) {
+    tl_last_native_error = 0;
+    tl_last_error_msg[0] = '\0';
+
     [[gnu::cleanup(db_cleanup_stmt)]] SQLHSTMT hstmt = SQL_NULL_HSTMT;
-    if (!db_prepare_and_bind(db_id, params, param_count, &hstmt)) return false;
+    if (!db_prepare_and_bind(db_id, params, param_count, &hstmt)) goto check_error;
     
     if (SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS))) {
-        return fetch_cb(db_id, hstmt, out_buf);
+        if (fetch_cb(db_id, hstmt, out_buf)) return true;
+    } else {
+        char err_msg[256];
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect");
+        db_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
     }
-    
-    char err_msg[256];
-    (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute SQLExecDirect");
-    db_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+
+check_error:
+    if (tl_last_native_error >= 50000) {
+        evbuffer_drain(out_buf, evbuffer_get_length(out_buf));
+        char prefix[128];
+        int len = snprintf(prefix, sizeof(prefix), "{\"error-code\":%ld,\"description\":", (long)tl_last_native_error);
+        evbuffer_add(out_buf, prefix, len);
+        evbuffer_append_escaped_str(out_buf, tl_last_error_msg, strlen(tl_last_error_msg));
+        evbuffer_add(out_buf, "}", 1);
+    }
     return false;
 }
 
