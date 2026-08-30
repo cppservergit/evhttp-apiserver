@@ -368,8 +368,41 @@ static void metadata_destroy(ResultSetMetadata *meta) {
 }
 
 
-static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, size_t len) {
-    evbuffer_add(buf, "\"", 1);
+typedef struct {
+    struct evbuffer *evbuf;
+    char stack_buf[8192];
+    size_t offset;
+} JsonBuffer;
+
+static inline void jbuf_flush(JsonBuffer *jbuf) {
+    if (jbuf->offset > 0) {
+        evbuffer_add(jbuf->evbuf, jbuf->stack_buf, jbuf->offset);
+        jbuf->offset = 0;
+    }
+}
+
+static inline void jbuf_add(JsonBuffer *jbuf, const void *data, size_t len) {
+    if (jbuf->offset + len > sizeof(jbuf->stack_buf)) {
+        if (len >= sizeof(jbuf->stack_buf)) {
+            jbuf_flush(jbuf);
+            evbuffer_add(jbuf->evbuf, data, len);
+            return;
+        }
+        jbuf_flush(jbuf);
+    }
+    memcpy(jbuf->stack_buf + jbuf->offset, data, len);
+    jbuf->offset += len;
+}
+
+static inline void jbuf_add_char(JsonBuffer *jbuf, char c) {
+    if (jbuf->offset + 1 > sizeof(jbuf->stack_buf)) {
+        jbuf_flush(jbuf);
+    }
+    jbuf->stack_buf[jbuf->offset++] = c;
+}
+
+static void jbuf_append_escaped_str(JsonBuffer *jbuf, const char *str, size_t len) {
+    jbuf_add_char(jbuf, '"');
     const char *start = str;
     const char *end = str + len;
     const char *p;
@@ -379,29 +412,38 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
 
         size_t clean_len = (size_t)(p - start);
         if (clean_len > 0) {
-            evbuffer_add(buf, start, clean_len);
+            jbuf_add(jbuf, start, clean_len);
         }
 
         switch (*p) {
-            case '"':  evbuffer_add(buf, "\\\"", 2); break;
-            case '\\': evbuffer_add(buf, "\\\\", 2); break;
-            case '\b': evbuffer_add(buf, "\\b",  2); break;
-            case '\f': evbuffer_add(buf, "\\f",  2); break;
-            case '\n': evbuffer_add(buf, "\\n",  2); break;
-            case '\r': evbuffer_add(buf, "\\r",  2); break;
-            case '\t': evbuffer_add(buf, "\\t",  2); break;
-            default:
-                evbuffer_add_printf(buf, "\\u%04x", (unsigned char)*p);
+            case '"':  jbuf_add(jbuf, "\\\"", 2); break;
+            case '\\': jbuf_add(jbuf, "\\\\", 2); break;
+            case '\b': jbuf_add(jbuf, "\\b",  2); break;
+            case '\f': jbuf_add(jbuf, "\\f",  2); break;
+            case '\n': jbuf_add(jbuf, "\\n",  2); break;
+            case '\r': jbuf_add(jbuf, "\\r",  2); break;
+            case '\t': jbuf_add(jbuf, "\\t",  2); break;
+            default: {
+                char hex[8];
+                int hlen = snprintf(hex, sizeof(hex), "\\u%04x", (unsigned char)*p);
+                jbuf_add(jbuf, hex, hlen);
                 break;
+            }
         }
         start = p + 1;
     }
 
-    size_t remaining_len = (size_t)(p - start);
-    if (remaining_len > 0) {
-        evbuffer_add(buf, start, remaining_len);
+    size_t clean_len = (size_t)(end - start);
+    if (clean_len > 0) {
+        jbuf_add(jbuf, start, clean_len);
     }
-    evbuffer_add(buf, "\"", 1);
+    jbuf_add_char(jbuf, '"');
+}
+
+static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, size_t len) {
+    JsonBuffer jbuf = { .evbuf = buf, .offset = 0 };
+    jbuf_append_escaped_str(&jbuf, str, len);
+    jbuf_flush(&jbuf);
 }
 
 #define TLS_MAX_COLS 256
@@ -522,32 +564,32 @@ static bool odbc_bind_resultset_metadata(DbConnectionId db_id, SQLHSTMT hstmt, R
     return true;
 }
 
-static void append_col_value(struct evbuffer *buf, const ColumnDescriptor *col) {
+static void append_col_value(JsonBuffer *jbuf, const ColumnDescriptor *col) {
     char num_buf[64];
     int len = 0;
 
     switch (col->c_type) {
         case SQL_C_BIT: {
             bool val = (*(unsigned char*)col->buffer) != 0;
-            evbuffer_add(buf, val ? "true" : "false", val ? 4 : 5);
+            jbuf_add(jbuf, val ? "true" : "false", val ? 4 : 5);
             return;
         }
         case SQL_C_SLONG: {
             SQLINTEGER val = *(SQLINTEGER*)col->buffer;
             len = fast_itoa((int)val, num_buf, sizeof(num_buf));
-            evbuffer_add(buf, num_buf, len);
+            jbuf_add(jbuf, num_buf, len);
             return;
         }
         case SQL_C_SBIGINT: {
             SQLBIGINT val = *(SQLBIGINT*)col->buffer;
             len = fast_ltoa((long)val, num_buf, sizeof(num_buf));
-            evbuffer_add(buf, num_buf, len);
+            jbuf_add(jbuf, num_buf, len);
             return;
         }
         case SQL_C_DOUBLE: {
             SQLDOUBLE val = *(SQLDOUBLE*)col->buffer;
             len = fast_dtoa((double)val, num_buf, sizeof(num_buf));
-            evbuffer_add(buf, num_buf, len);
+            jbuf_add(jbuf, num_buf, len);
             return;
         }
         case SQL_C_CHAR:
@@ -563,41 +605,41 @@ static void append_col_value(struct evbuffer *buf, const ColumnDescriptor *col) 
 
             if (col->sql_type == SQL_DECIMAL || col->sql_type == SQL_NUMERIC) {
                 if (val_len == 0) {
-                    evbuffer_add(buf, "null", 4);
+                    jbuf_add(jbuf, "null", 4);
                 } else {
-                    evbuffer_add(buf, col->buffer, val_len);
+                    jbuf_add(jbuf, col->buffer, val_len);
                 }
                 return;
             }
 
-            evbuffer_append_escaped_str(buf, col->buffer, val_len);
+            jbuf_append_escaped_str(jbuf, col->buffer, val_len);
             return;
         }
     }
 }
 
-static void evbuffer_append_row_object(struct evbuffer *buf, const ResultSetMetadata *meta) {
-    evbuffer_add(buf, "{", 1);
+static void jbuf_append_row_object(JsonBuffer *jbuf, const ResultSetMetadata *meta) {
+    jbuf_add_char(jbuf, '{');
     for (SQLSMALLINT i = 0; i < meta->count; ++i) {
         const ColumnDescriptor *col = &meta->cols[i];
 
-        evbuffer_append_escaped_str(buf, (const char*)col->name, col->name_len);
-        evbuffer_add(buf, ":", 1);
+        jbuf_append_escaped_str(jbuf, (const char*)col->name, col->name_len);
+        jbuf_add_char(jbuf, ':');
 
         if (col->ind == SQL_NULL_DATA) {
-            evbuffer_add(buf, "null", 4);
+            jbuf_add(jbuf, "null", 4);
         } else {
             if (col->alloc_size > 0 && col->c_type == SQL_C_CHAR) {
                 col->buffer[col->alloc_size - 1] = '\0';
             }
-            append_col_value(buf, col);
+            append_col_value(jbuf, col);
         }
 
         if (i < meta->count - 1) {
-            evbuffer_add(buf, ",", 1);
+            jbuf_add_char(jbuf, ',');
         }
     }
-    evbuffer_add(buf, "}", 1);
+    jbuf_add_char(jbuf, '}');
 }
 
 static bool fetch_resultset_array(DbConnectionId db_id, SQLHSTMT hstmt, struct evbuffer* out_buf, bool write_brackets) {
@@ -607,12 +649,15 @@ static bool fetch_resultset_array(DbConnectionId db_id, SQLHSTMT hstmt, struct e
         return false;
     }
 
+    JsonBuffer jbuf = { .evbuf = out_buf, .offset = 0 };
+
     if (write_brackets) {
         if (meta.count == 0) {
-            evbuffer_add(out_buf, "[]", 2);
+            jbuf_add(&jbuf, "[]", 2);
+            jbuf_flush(&jbuf);
             return true;
         }
-        evbuffer_add(out_buf, "[", 1);
+        jbuf_add(&jbuf, "[", 1);
     }
 
     bool first_row = true;
@@ -624,20 +669,22 @@ static bool fetch_resultset_array(DbConnectionId db_id, SQLHSTMT hstmt, struct e
             char err_msg[256];
             (void)snprintf(err_msg, sizeof(err_msg), "SQLFetch failed");
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+            jbuf_flush(&jbuf);
             return false;
         }
 
         if (!first_row) {
-            evbuffer_add(out_buf, ",", 1);
+            jbuf_add_char(&jbuf, ',');
         }
         first_row = false;
 
-        evbuffer_append_row_object(out_buf, &meta);
+        jbuf_append_row_object(&jbuf, &meta);
     }
 
     if (write_brackets) {
-        evbuffer_add(out_buf, "]", 1);
+        jbuf_add_char(&jbuf, ']');
     }
+    jbuf_flush(&jbuf);
     return true;
 }
 

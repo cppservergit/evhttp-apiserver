@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 static const char hex[] = "0123456789abcdef";
 
@@ -82,6 +83,10 @@ static inline unsigned int count_digits_u64(uint64_t val) {
     return 20;
 }
 
+static inline void write2(char* dst, uint32_t val) {
+    memcpy(dst, &digits_lut[val * 2], 2);
+}
+
 int fast_itoa(int val, char* buf, size_t buf_size) {
     if (!buf || buf_size < 2) return 0;
     uint32_t uval;
@@ -99,22 +104,26 @@ int fast_itoa(int val, char* buf, size_t buf_size) {
     if (len + 1 > buf_size) return 0;
 
     buf[len] = '\0';
-    unsigned int pos = len;
+    char* ptr = &buf[len];
 
-    while (uval >= 100) {
-        unsigned int rem = uval % 100;
-        uval /= 100;
-        pos -= 2;
-        buf[pos] = digits_lut[rem * 2];
-        buf[pos + 1] = digits_lut[rem * 2 + 1];
+    while (uval >= 10000) {
+        uint32_t rem = uval % 10000;
+        uval /= 10000;
+        ptr -= 4;
+        write2(ptr + 2, rem % 100);
+        write2(ptr, rem / 100);
     }
-
+    while (uval >= 100) {
+        uint32_t rem = uval % 100;
+        uval /= 100;
+        ptr -= 2;
+        write2(ptr, rem);
+    }
     if (uval < 10) {
-        buf[--pos] = (char)('0' + uval);
+        *--ptr = (char)('0' + uval);
     } else {
-        pos -= 2;
-        buf[pos] = digits_lut[uval * 2];
-        buf[pos + 1] = digits_lut[uval * 2 + 1];
+        ptr -= 2;
+        write2(ptr, uval);
     }
 
     if (neg) buf[0] = '-';
@@ -138,22 +147,38 @@ int fast_ltoa(long val, char* buf, size_t buf_size) {
     if (len + 1 > buf_size) return 0;
 
     buf[len] = '\0';
-    unsigned int pos = len;
+    char* ptr = &buf[len];
 
-    while (uval >= 100) {
-        unsigned int rem = uval % 100;
-        uval /= 100;
-        pos -= 2;
-        buf[pos] = digits_lut[rem * 2];
-        buf[pos + 1] = digits_lut[rem * 2 + 1];
+    while (uval >= 100000000) {
+        uint64_t rem = uval % 100000000;
+        uval /= 100000000;
+        ptr -= 8;
+        uint32_t r1 = rem % 10000;
+        uint32_t r2 = rem / 10000;
+        write2(ptr + 6, r1 % 100);
+        write2(ptr + 4, r1 / 100);
+        write2(ptr + 2, r2 % 100);
+        write2(ptr, r2 / 100);
     }
-
-    if (uval < 10) {
-        buf[--pos] = (char)('0' + uval);
+    uint32_t uval32 = (uint32_t)uval;
+    while (uval32 >= 10000) {
+        uint32_t rem = uval32 % 10000;
+        uval32 /= 10000;
+        ptr -= 4;
+        write2(ptr + 2, rem % 100);
+        write2(ptr, rem / 100);
+    }
+    while (uval32 >= 100) {
+        uint32_t rem = uval32 % 100;
+        uval32 /= 100;
+        ptr -= 2;
+        write2(ptr, rem);
+    }
+    if (uval32 < 10) {
+        *--ptr = (char)('0' + uval32);
     } else {
-        pos -= 2;
-        buf[pos] = digits_lut[uval * 2];
-        buf[pos + 1] = digits_lut[uval * 2 + 1];
+        ptr -= 2;
+        write2(ptr, uval32);
     }
 
     if (neg) buf[0] = '-';

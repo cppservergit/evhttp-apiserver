@@ -825,56 +825,21 @@ void gasto_handler(struct json_object* body, int* out_status, struct evbuffer* o
     in_params[0].type = PARAM_INT;
     in_params[0].value = &id;
 
-    /*OutParam out_params[4];
-    
-    char fecha[11];
-    out_params[0].name = "fecha";
-    out_params[0].buffer = fecha;
-    out_params[0].buffer_len = sizeof(fecha);
-    out_params[0].type = PARAM_STRING;
-    
-    int categ_id;
-    out_params[1].name = "categ_id";
-    out_params[1].buffer = &categ_id;
-    out_params[1].buffer_len = sizeof(int);
-    out_params[1].type = PARAM_INT;
-    
-    double monto;
-    out_params[2].name = "monto";
-    out_params[2].buffer = &monto;
-    out_params[2].buffer_len = sizeof(double);
-    out_params[2].type = PARAM_DOUBLE;
-    
-    char motivo[151];
-    out_params[3].name = "motivo";
-    out_params[3].buffer = motivo;
-    out_params[3].buffer_len = sizeof(motivo);
-    out_params[3].type = PARAM_STRING;
-
-    SpParams sp_params = {
-        .in_params = in_params,
-        .in_count = ARRAY_SIZE(in_params),
-        .out_params = out_params,
-        .out_count = ARRAY_SIZE(out_params)
-    };*/
-
     const char* sql = 
-    "DECLARE @out_fecha DATE;\n"
-    "DECLARE @out_categ_id INT;\n"
-    "DECLARE @out_monto MONEY;\n"
-    "DECLARE @out_motivo VARCHAR(150);\n"
-    "\n"
-    "EXEC dbo.ObtenerGasto\n"
-    "    @gasto_id = ?,\n" 
-    "    @fecha = @out_fecha OUTPUT,\n"
-    "    @categ_id = @out_categ_id OUTPUT,\n"
-    "    @monto = @out_monto OUTPUT,\n"
-    "    @motivo = @out_motivo OUTPUT;\n"
-    "\n"
-    "SELECT\n"
-    "    @out_fecha AS Fecha,\n"
-    "    @out_categ_id AS CategID,\n"
-    "    @out_monto AS Monto,\n"
+    "DECLARE @out_fecha DATE;"
+    "DECLARE @out_categ_id INT;"
+    "DECLARE @out_monto MONEY;"
+    "DECLARE @out_motivo VARCHAR(150);"
+    "EXEC dbo.ObtenerGasto"
+    "    @gasto_id = ?," 
+    "    @fecha = @out_fecha OUTPUT,"
+    "    @categ_id = @out_categ_id OUTPUT,"
+    "    @monto = @out_monto OUTPUT,"
+    "    @motivo = @out_motivo OUTPUT;"
+    "SELECT"
+    "    @out_fecha AS Fecha,"
+    "    @out_categ_id AS CategID,"
+    "    @out_monto AS Monto,"
     "    @out_motivo AS Motivo;";
 
     if (!db_get_rs2json(DB_0, sql, in_params, ARRAY_SIZE(in_params), out_buf)) {
