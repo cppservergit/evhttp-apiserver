@@ -924,3 +924,90 @@ void dummy_handler(struct json_object* body, int* out_status, struct evbuffer* o
         *out_status = HTTP_INTERNAL;
     }
 }
+
+static const FieldValidator CoordinatorSchema[] = {
+    {.field_name = "gasto_id", .type = TYPE_INT, .is_required = true, .has_min = true, .min_int = 1},
+    {.field_name = "customer_id", .type = TYPE_STRING, .is_required = true, .max_len = 5, .custom_validator = customer_id_validator}
+};
+
+const ValidationContext CoordinatorContext = {
+    .schema = CoordinatorSchema,
+    .schema_count = sizeof(CoordinatorSchema) / sizeof(CoordinatorSchema[0]),
+    .global_validator = nullptr
+};
+
+void coordinator_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int gasto_id = json_get_int(body, "gasto_id");
+    const char* customer_id = json_get_string(body, "customer_id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &gasto_id },
+        { .type = PARAM_STRING, .value = customer_id }
+    };
+    
+    if (!db_get_rs2json_m(DB_0, "{CALL dbo.coordinator(?, ?)}", params, ARRAY_SIZE(params), out_buf)) {
+        *out_status = HTTP_INTERNAL;
+    }
+}
+void coordinator2_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    evbuffer_add(out_buf, "{\"r1\":", 6);
+    
+    if (!db_get_rs2json(DB_0, "EXEC emp_get @id = ?", params, ARRAY_SIZE(params), out_buf)) {
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
+    
+    evbuffer_add(out_buf, ",\"r2\":", 6);
+    
+    if (!db_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", params, ARRAY_SIZE(params), out_buf)) {
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
+    
+    evbuffer_add(out_buf, "}", 1);
+}
+
+void coordinator3_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
+    *out_status = HTTP_OK;
+    
+    int id = json_get_int(body, "id");
+    
+    QueryParam in_params[] = {
+        { .type = PARAM_INT, .value = &id }
+    };
+    
+    int employee_id = 0;
+    OutParam out_params[] = {
+        { .type = PARAM_INT, .buffer = &employee_id, .buffer_len = sizeof(int) }
+    };
+    
+    bool found = false;
+    if (!db_query_single_row(DB_0, "EXEC emp_get @id = ?", in_params, ARRAY_SIZE(in_params), out_params, ARRAY_SIZE(out_params), &found)) {
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
+    
+    if (!found) {
+        evbuffer_add(out_buf, "{}", 2);
+        return;
+    }
+    
+    QueryParam db1_params[] = {
+        { .type = PARAM_INT, .value = &employee_id }
+    };
+    
+    if (!db_get_json(DB_1, "SELECT demo.get_employee_orders_j(?)", db1_params, ARRAY_SIZE(db1_params), out_buf)) {
+        *out_status = HTTP_INTERNAL;
+        return;
+    }
+}

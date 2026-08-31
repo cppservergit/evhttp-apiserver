@@ -28,7 +28,10 @@ static const middleware_ctx_t g_routes[] = {
     { .path = "/dummy", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &DummyContext, .handler = &dummy_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/customer/get", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customerget_handler, .is_fast = true, .auth_mode = AUTH_JWT },
     { .path = "/emp/orders", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &emp_orders_handler, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/emp/ordersj", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &emp_ordersj_handler, .is_fast = true, .auth_mode = AUTH_JWT }
+    { .path = "/emp/ordersj", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &emp_ordersj_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/coordinator", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CoordinatorContext, .handler = &coordinator_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/coordinator2", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &coordinator2_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/coordinator3", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &EmployeeContext, .handler = &coordinator3_handler, .is_fast = true, .auth_mode = AUTH_JWT }
 };
 static const size_t g_route_count = sizeof(g_routes) / sizeof(g_routes[0]);
 

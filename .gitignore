@@ -32,6 +32,7 @@ test/*
 issues*.md
 code*.md
 rules.md
+rules*.md
 .gemini/
 sonar_violations.md
 sonar.md

@@ -116,3 +116,8 @@ void emp_orders_handler(struct json_object* body, int* out_status, struct evbuff
 
 /** \brief Handles /emp/ordersj requests. */
 void emp_ordersj_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+
+extern const ValidationContext CoordinatorContext;
+void coordinator_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+void coordinator2_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
+void coordinator3_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf);
