@@ -40,3 +40,15 @@ struct json_object* http_client_get_json(const char* base_url, const char* uri, 
  * \note Caller must assign the return value to a variable marked with [[gnu::cleanup(cleanup_json_object)]] to prevent memory leaks.
  */
 struct json_object* http_client_post_json(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code);
+
+/** 
+ * \brief Performs an HTTP POST request and returns the raw response body.
+ * \param base_url The base URL.
+ * \param uri The URI.
+ * \param body The POST payload body.
+ * \param headers Array of HTTP headers, or nullptr.
+ * \param num_headers Number of headers in the array.
+ * \param out_http_code Pointer to store the HTTP status code.
+ * \return A newly allocated string containing the response, or nullptr on failure. Caller must free().
+ */
+char* http_client_post_raw(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code);

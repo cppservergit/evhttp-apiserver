@@ -242,3 +242,57 @@ void http_client_cleanup_thread(void) {
     // Curl handles are automatically destroyed by the pthread_key destructor 
     // (curl_thread_destructor) when the thread exits.
 }
+
+char* http_client_post_raw(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
+    char url[1024];
+    int written = 0;
+    if (base_url && uri) {
+        written = snprintf(url, sizeof(url), "%s%s", base_url, uri);
+    } else if (base_url) {
+        written = snprintf(url, sizeof(url), "%s", base_url);
+    } else if (uri) {
+        written = snprintf(url, sizeof(url), "%s", uri);
+    } else {
+        return nullptr;
+    }
+    
+    if (written < 0 || written >= (int)sizeof(url)) {
+        set_thread_error(TL_ERR_ERROR, "URL truncation error");
+        if (out_http_code) *out_http_code = HTTP_INTERNAL;
+        return nullptr;
+    }
+
+    [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
+    [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist* chunk_headers = nullptr;
+    CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
+    if (!curl) return nullptr;
+
+    char errbuf[CURL_ERROR_SIZE] = {0};
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
+
+    char* raw_response = nullptr;
+    if (res == CURLE_OK) {
+        long http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        if (out_http_code) *out_http_code = http_code;
+        
+        if (http_code >= 400) {
+            char trunc_body[256] = {0};
+            if (chunk.memory) {
+                (void)snprintf(trunc_body, sizeof(trunc_body), "%s", chunk.memory);
+            }
+            set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, trunc_body[0] ? trunc_body : "<empty>");
+        }
+        
+        if (chunk.size > 0 && chunk.memory) {
+            raw_response = strdup(chunk.memory);
+        }
+    } else {
+        set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s (%s) | URL: %s", curl_easy_strerror(res), errbuf[0] ? errbuf : "no details", url);
+        if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
+    }
+    return raw_response;
+}
