@@ -176,18 +176,13 @@ static bool upload_is_valid_dir(const char* uploads_dir) {
 // ==============================================================================
 
 
-void ping_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    (void)body; 
-    
+void ping_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
-    
     const char* msg = "{\"status\":\"OK\"}";
     evbuffer_add(out_buf, msg, strlen(msg));
 }
-
-void version_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    (void)body; 
     
+void version_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     char esc_version[64];
@@ -223,9 +218,7 @@ void version_handler(struct json_object* body, int* out_status, struct evbuffer*
 }
 
 
-void sysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    (void)body; 
-    
+void sysinfo_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     char buf[1024];
@@ -234,9 +227,7 @@ void sysinfo_handler(struct json_object* body, int* out_status, struct evbuffer*
     evbuffer_add(out_buf, buf, strlen(buf));
 }
 
-void metrics_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    (void)body; 
-    
+void metrics_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     server_request_stats_t stats = {0};
@@ -288,9 +279,7 @@ void metrics_handler(struct json_object* body, int* out_status, struct evbuffer*
 }
 
 
-void rsysinfo_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
-    (void)body; 
-    
+void rsysinfo_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
 
     char api_key[256] = {0};
