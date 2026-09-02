@@ -17,7 +17,7 @@ static bool customer_id_validator(
     char *err_buf, 
     size_t err_len
 ) {
-    const char *id = json_object_get_string((json_object *)obj);
+    const char *id = json_object_get_string((struct json_object*)(uintptr_t)obj);
     if (!id || strlen(id) != 5) {
         snprintf(err_buf, err_len, "Invalid customer ID format: %s", id ? id : "null");
         return false;
@@ -35,7 +35,7 @@ static bool customer_id_validator(
 // Note: For simple strings, you can use `.max_len = 250` instead of a custom validator!
 static const FieldValidator CustomerSchema[] = {
     // We use a custom validator here to enforce the ID is exactly 5 alphabetical chars
-    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .custom_validator = customer_id_validator}
+    {.field_name = "id", .type = TYPE_STRING, .is_required = true, .max_len = 5, .custom_validator = customer_id_validator}
 };
 
 // 3. Wrap it in a ValidationContext
@@ -55,11 +55,7 @@ const ValidationContext CustomerContext = {
 The handler function orchestrates the request. By using the `db_get_json` abstraction and a `QueryParam` array, you eliminate all boilerplate connection handling, fetching, and memory allocation.
 
 ```c
-void customer_handler(
-    struct json_object* body, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void customer_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     // Set default success headers
     *out_status = HTTP_OK;
     
@@ -72,8 +68,7 @@ void customer_handler(
     };
     
     // 3. Execute the stored procedure and stream the results DIRECTLY to the network buffer.
-    // The macro __func__ injects the caller name for robust telemetry.
-    if (!db_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_customer_get(?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -96,7 +91,6 @@ Finally, wire the handler into the `libevent` routing table inside `main.c`. To 
     .allowed_method = EVHTTP_REQ_POST, 
     .validation_ctx = &CustomerContext, 
     .handler = &customer_handler, 
-    .user_arg = nullptr, 
     .is_fast = true,   // True if the query is extremely fast (< 5ms)
     .auth_mode = AUTH_JWT  // Require Bearer JWT Authentication
 }
@@ -122,7 +116,7 @@ void shippers_handler(
     *out_status = HTTP_OK;
         
     // Execute parameterless query and stream directly to client
-    if (!db_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_shippers_view}", nullptr, 0, out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
@@ -137,7 +131,6 @@ In `src/main.c`, set `.allowed_method = EVHTTP_REQ_GET` and `.validation_ctx = n
     .allowed_method = EVHTTP_REQ_GET, 
     .validation_ctx = nullptr, 
     .handler = &shippers_handler, 
-    .user_arg = nullptr, 
     .is_fast = true, 
     .auth_mode = AUTH_JWT 
 }

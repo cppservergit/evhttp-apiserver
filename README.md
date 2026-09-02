@@ -55,10 +55,10 @@ The codebase enforces a strict physical separation of concerns:
 Endpoints are defined using a crisp, array-based routing table mapped directly to callback handlers and optional validation schemas inside `src/main.c`:
 ```c
 static const middleware_ctx_t g_routes[] = {
-    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = ping_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_NONE },
-    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = sales_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = customer_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_JWT },
-    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = metrics_handler, .user_arg = nullptr, .is_fast = true, .auth_mode = AUTH_API_KEY }
+    { .path = "/ping", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &ping_handler, .is_fast = true, .auth_mode = AUTH_NONE },
+    { .path = "/sales", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &SalesContext, .handler = &sales_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/customer", .allowed_method = EVHTTP_REQ_POST, .validation_ctx = &CustomerContext, .handler = &customer_handler, .is_fast = true, .auth_mode = AUTH_JWT },
+    { .path = "/metrics", .allowed_method = EVHTTP_REQ_GET, .validation_ctx = nullptr, .handler = &metrics_handler, .is_fast = true, .auth_mode = AUTH_API_KEY }
 };
 ```
 
@@ -66,8 +66,8 @@ static const middleware_ctx_t g_routes[] = {
 Avoid messy manual JSON parsing. Define a strict schema and let the framework automatically validate types and execute custom logical boundaries before the handler is even invoked:
 ```c
 static const FieldValidator SalesSchema[] = {
-    {.field_name = "start_date", .type = TYPE_DATE,   .is_required = true},
-    {.field_name = "end_date",   .type = TYPE_DATE,   .is_required = true}
+    {.field_name = "start_date", .type = TYPE_DATE, .is_required = true, .custom_validator = validate_sales_start_date},
+    {.field_name = "end_date",   .type = TYPE_DATE, .is_required = true, .custom_validator = validate_sales_end_date}
 };
 
 const ValidationContext SalesContext = {
@@ -253,11 +253,7 @@ Below is a complete example of how the framework handles a POST request to `/sal
 Because the framework handles the JSON parsing and validation automatically, the handler simply binds the validated parameters into a `QueryParam` array and calls the `dbapi` streaming abstraction:
 
 ```c
-void sales_handler(
-    struct json_object* body, 
-    int* out_status, 
-    struct evbuffer* out_buf
-) {
+void sales_handler(struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
     
     const char* start_date = json_get_string(body, "start_date");
@@ -268,7 +264,7 @@ void sales_handler(
         { .type = PARAM_STRING, .value = end_date }
     };
     
-    if (!db_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf, __func__)) {
+    if (!db_get_json(DB_0, "{CALL sp_sales_by_category(?,?)}", params, ARRAY_SIZE(params), out_buf)) {
         *out_status = HTTP_INTERNAL;
     }
 }
