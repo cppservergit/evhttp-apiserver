@@ -250,60 +250,50 @@ void config_init(void) {
     config_reload();
 }
 
-void config_get_odbc_conn_str(int db_id, char* out, size_t max_len) {
-    if (!out || max_len == 0 || db_id < 0 || db_id >= 4) return;
-    (void)snprintf(out, max_len, "%s", g_odbc_conn_strs[db_id]);
+const char* config_get_odbc_conn_str(int db_id) {
+    if (db_id >= 0 && db_id < 4) return g_odbc_conn_strs[db_id];
+    return "";
 }
 
-void config_get_api_url(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_api_url);
+const char* config_get_api_url(void) {
+    return g_api_url;
 }
 
-void config_get_api_user(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_api_user);
+const char* config_get_api_user(void) {
+    return g_api_user;
 }
 
-void config_get_api_pass(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_api_pass);
+const char* config_get_api_pass(void) {
+    return g_api_pass;
 }
 
-void config_get_login_provider(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_login_provider);
+const char* config_get_login_provider(void) {
+    return g_login_provider;
 }
 
-void config_get_login_uri(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_login_uri);
+const char* config_get_login_uri(void) {
+    return g_login_uri;
 }
 
 
-void config_get_jwt_secret(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_jwt_secret);
+const char* config_get_jwt_secret(void) {
+    return g_jwt_secret;
 }
 
-void config_get_remote_api_key(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_remote_api_key);
+const char* config_get_remote_api_key(void) {
+    return g_remote_api_key;
 }
 
-void config_get_telemetry_api_key(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_telemetry_api_key);
+const char* config_get_telemetry_api_key(void) {
+    return g_telemetry_api_key;
 }
 
-void config_get_trust_proxy_ip(char* buf, size_t max_len) {
-    if (!buf || max_len == 0) return;
-    (void)snprintf(buf, max_len, "%s", g_trust_proxy_ip);
+const char* config_get_trust_proxy_ip(void) {
+    return g_trust_proxy_ip;
 }
 
-void config_get_uploads_dir(char* out, size_t max_len) {
-    if (!out || max_len == 0) return;
-    (void)snprintf(out, max_len, "%s", g_uploads_dir);
+const char* config_get_uploads_dir(void) {
+    return g_uploads_dir;
 }
 
 long config_get_jwt_timeout_seconds(void) {

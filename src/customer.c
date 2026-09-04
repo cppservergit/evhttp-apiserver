@@ -29,12 +29,9 @@ static struct jwt_cache* get_jwt_cache(void) {
 }
 
 static struct json_object* execute_login_request(void) {
-    char api_user[MAX_CONFIG_STR];
-    char api_pass[MAX_CONFIG_STR];
-    char api_url[MAX_CONFIG_STR];
-    config_get_api_user(api_user, sizeof(api_user));
-    config_get_api_pass(api_pass, sizeof(api_pass));
-    config_get_api_url(api_url, sizeof(api_url));
+    const char* api_user = config_get_api_user();
+    const char* api_pass = config_get_api_pass();
+    const char* api_url = config_get_api_url();
     
     char escaped_user[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR)];
     char escaped_pass[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR)];
@@ -44,7 +41,7 @@ static struct json_object* execute_login_request(void) {
     char body_str[JSON_ENCODE_BUFSIZE(MAX_CONFIG_STR) * 2 + 128];
     int len = snprintf(body_str, sizeof(body_str), "{\"username\":\"%s\",\"password\":\"%s\"}", escaped_user, escaped_pass);
     if (len >= (int)sizeof(body_str)) {
-        sodium_memzero(api_pass, sizeof(api_pass));
+
         sodium_memzero(escaped_pass, sizeof(escaped_pass));
         sodium_memzero(body_str, sizeof(body_str));
         set_thread_error(TL_ERR_ERROR, "Login payload truncated");
@@ -56,7 +53,7 @@ static struct json_object* execute_login_request(void) {
     
     struct json_object* login_response = http_client_post_json(api_url, "/api/login", body_str, headers, 1, &http_code);
     
-    sodium_memzero(api_pass, sizeof(api_pass));
+
     sodium_memzero(escaped_pass, sizeof(escaped_pass));
     sodium_memzero(body_str, sizeof(body_str));
     
@@ -167,8 +164,7 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
         "Content-Type: application/json"
     };
     
-    char api_url[MAX_CONFIG_STR];
-    config_get_api_url(api_url, sizeof(api_url));
+    const char* api_url = config_get_api_url();
     
     struct json_object* remote_response = http_client_post_json(api_url, "/api/customer", body, headers, 2, out_http_code);
 

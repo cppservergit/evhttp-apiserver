@@ -137,16 +137,13 @@ static void handle_sysinfo_tool(struct json_object* arguments, struct evbuffer* 
     }
     
     // Validate API Key securely
-    char expected_key[MAX_CONFIG_STR] = {0};
-    config_get_telemetry_api_key(expected_key, sizeof(expected_key));
+    const char* expected_key = config_get_telemetry_api_key();
     
     char provided_key[MAX_CONFIG_STR] = {0};
     (void)snprintf(provided_key, sizeof(provided_key), "%s", apikey);
     
     int match = sodium_memcmp(provided_key, expected_key, MAX_CONFIG_STR);
     bool valid_len = (provided_key[0] != '\0' && expected_key[0] != '\0');
-    
-    sodium_memzero(expected_key, sizeof(expected_key));
     sodium_memzero(provided_key, sizeof(provided_key));
     
     if (match != 0 || !valid_len) {

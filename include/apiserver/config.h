@@ -39,53 +39,53 @@ size_t config_get_fast_pool_percentage(void);
  * \param out Buffer to copy the string into.
  * \param max_len Size of the buffer.
  */
-void config_get_odbc_conn_str(int db_id, char* out, size_t max_len);
+const char* config_get_odbc_conn_str(int db_id);
 
 /** 
  * \brief Safely retrieves the remote API URL.
  * \param out Buffer to copy the string into.
  * \param max_len Size of the buffer.
  */
-void config_get_api_url(char* out, size_t max_len);
+const char* config_get_api_url(void);
 
 /** 
  * \brief Safely retrieves the remote API username.
  * \param out Buffer to copy the string into.
  * \param max_len Size of the buffer.
  */
-void config_get_api_user(char* out, size_t max_len);
+const char* config_get_api_user(void);
 
 /** 
  * \brief Safely retrieves the remote API password.
  * \param out Buffer to copy the string into.
  * \param max_len Size of the buffer.
  */
-void config_get_api_pass(char* out, size_t max_len);
+const char* config_get_api_pass(void);
 
 /** \brief Retrieves the remote login provider URL. */
-void config_get_login_provider(char* out, size_t max_len);
+const char* config_get_login_provider(void);
 
 /** \brief Retrieves the remote login URI. */
-void config_get_login_uri(char* out, size_t max_len);
+const char* config_get_login_uri(void);
 
 /** \brief Retrieves the JWT secret key. */
-void config_get_jwt_secret(char* out, size_t max_len);
+const char* config_get_jwt_secret(void);
 
 /** \brief Retrieves the remote API key. */
-void config_get_remote_api_key(char* out, size_t max_len);
+const char* config_get_remote_api_key(void);
 
 /** \brief Retrieves the telemetry API key. */
-void config_get_telemetry_api_key(char* out, size_t max_len);
+const char* config_get_telemetry_api_key(void);
 
 /** \brief Retrieves the JWT expiration timeout in seconds. */
 long config_get_jwt_timeout_seconds(void);
 
 /** \brief Retrieves the trusted proxy IP for X-Forwarded-For processing. */
-void config_get_trust_proxy_ip(char* buf, size_t max_len);
+const char* config_get_trust_proxy_ip(void);
 
 /** \brief Checks if a CORS Origin is allowed by configuration. */
 bool config_is_origin_allowed(const char* origin);
 
 /** \brief Retrieves the uploads directory. */
-void config_get_uploads_dir(char* out, size_t max_len);
+const char* config_get_uploads_dir(void);
 

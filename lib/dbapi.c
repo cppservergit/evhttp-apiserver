@@ -101,8 +101,7 @@ SQLHDBC db_connect(DbConnectionId db_id) {
     if (tl_hdbc[db_id] != SQL_NULL_HDBC) {
         return tl_hdbc[db_id];
     }
-    char conn_str[MAX_CONFIG_STR];
-    config_get_odbc_conn_str(db_id, conn_str, sizeof(conn_str));
+    const char* conn_str = config_get_odbc_conn_str(db_id);
     if (conn_str[0] == '\0') {
         set_thread_error(TL_ERR_ERROR, "Attempted to connect to unconfigured database DB_%d", db_id);
         return SQL_NULL_HDBC;

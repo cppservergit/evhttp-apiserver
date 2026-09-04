@@ -8,11 +8,8 @@
 #include <string.h>
 
 struct json_object* login_service_authenticate(const char* username, const char* password, long* out_http_code) {
-    char provider[MAX_CONFIG_STR];
-    char uri[MAX_CONFIG_STR];
-
-    config_get_login_provider(provider, sizeof(provider));
-    config_get_login_uri(uri, sizeof(uri));
+    const char* provider = config_get_login_provider();
+    const char* uri = config_get_login_uri();
 
     char escaped_user[JSON_ENCODE_BUFSIZE(96)];
     char escaped_pass[JSON_ENCODE_BUFSIZE(96)];

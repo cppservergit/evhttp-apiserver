@@ -60,8 +60,7 @@ static bool is_trusted_proxy(struct evhttp_request* req, const char** out_peer_i
 
     if (strcmp(peer_ip, "unknown") == 0) return false;
 
-    char trusted_proxy[MAX_CONFIG_STR];
-    config_get_trust_proxy_ip(trusted_proxy, sizeof(trusted_proxy));
+    const char* trusted_proxy = config_get_trust_proxy_ip();
 
     if (trusted_proxy[0] != '\0' && strcmp(peer_ip, trusted_proxy) == 0) {
         return true;
@@ -564,8 +563,7 @@ static void inject_security_headers(struct evhttp_request* req) {
 }
 
 static bool validate_telemetry_api_key(struct evhttp_request* req) {
-    char expected_key[MAX_CONFIG_STR] = {0};
-    config_get_telemetry_api_key(expected_key, sizeof(expected_key));
+    const char* expected_key = config_get_telemetry_api_key();
     if (expected_key[0] == '\0') {
         LOG_WARN("TELEMETRY_API_KEY is not configured!");
         return false;
@@ -585,8 +583,6 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     // Constant-time compare over the entire maximum buffer size to prevent length leakage
     int match = sodium_memcmp(provided_key, expected_key, MAX_CONFIG_STR);
     bool valid_len = (provided_key[0] != '\0');
-    
-    sodium_memzero(expected_key, sizeof(expected_key));
     sodium_memzero(provided_key, sizeof(provided_key));
     
     return (match == 0 && valid_len);

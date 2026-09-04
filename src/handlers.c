@@ -92,8 +92,7 @@ static void handle_login_success(
     char session_id[37];
     generate_uuidv4(session_id);
 
-    char jwt_secret[MAX_CONFIG_STR];
-    config_get_jwt_secret(jwt_secret, sizeof(jwt_secret));
+    const char* jwt_secret = config_get_jwt_secret();
     long jwt_timeout = config_get_jwt_timeout_seconds();
 
     char token[1024];
@@ -111,8 +110,6 @@ static void handle_login_success(
         *out_status = HTTP_INTERNAL;
         LOG_WARN("Failed to generate token for Username: %s, RemoteIP: %s", username, remote_ip);
     }
-    
-    sodium_memzero(jwt_secret, sizeof(jwt_secret));
     sodium_memzero(token, sizeof(token));
 }
 
@@ -282,8 +279,7 @@ void metrics_handler([[maybe_unused]] struct json_object* body, int* out_status,
 void rsysinfo_handler([[maybe_unused]] struct json_object* body, int* out_status, struct evbuffer* out_buf) {
     *out_status = HTTP_OK;
 
-    char api_key[256] = {0};
-    config_get_remote_api_key(api_key, sizeof(api_key));
+    const char* api_key = config_get_remote_api_key();
     char auth_header[512];
     (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
 
@@ -291,13 +287,10 @@ void rsysinfo_handler([[maybe_unused]] struct json_object* body, int* out_status
         auth_header
     };
 
-    char api_url[256];
-    config_get_api_url(api_url, sizeof(api_url));
+    const char* api_url = config_get_api_url();
 
     long http_code = 0;
     struct json_object* remote_json = http_client_get_json(api_url, "/api/metrics", headers, 1, &http_code);
-    
-    sodium_memzero(api_key, sizeof(api_key));
     sodium_memzero(auth_header, sizeof(auth_header));
 
     append_remote_json_response(out_buf, remote_json, http_code);
@@ -741,8 +734,7 @@ void upload_handler(struct json_object* body, int* out_status, struct evbuffer* 
     char uuid_str[37];
     generate_uuidv4(uuid_str);
     
-    char uploads_dir[MAX_CONFIG_STR];
-    config_get_uploads_dir(uploads_dir, sizeof(uploads_dir));
+    const char* uploads_dir = config_get_uploads_dir();
     
     if (!upload_is_valid_dir(uploads_dir)) {
         return;
