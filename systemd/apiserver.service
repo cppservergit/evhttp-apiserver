@@ -14,8 +14,8 @@ ExecStart=/opt/evhttp/bin/apiserver
 ExecReload=/bin/kill -SIGHUP $MAINPID
 Restart=always
 RestartSec=3
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal
+StandardError=journal
 SyslogIdentifier=apiserver
 
 [Install]

@@ -61,15 +61,39 @@ typedef enum {
 SQLHDBC db_connect(DbConnectionId db_id);
 
 
-/** \brief Executes stores procedure that returns JSON. */
+/** 
+ * \brief Executes a query or stored procedure that returns a native JSON document.
+ * \param db_id The database connection ID from the thread-local pool.
+ * \param query The SQL query or stored procedure call string (e.g. "{CALL sp_customer_get(?)}").
+ * \param params Array of input query parameters to bind, or nullptr if none.
+ * \param param_count Number of parameters in the params array.
+ * \param out_buf The output evbuffer where the resulting JSON payload (or error JSON) is appended.
+ * \return true if the query executed and returned JSON successfully, false on error.
+ */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool db_get_json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
-/** \brief Executes query and converts traditional resultset to JSON array of objects. */
+/** 
+ * \brief Executes a query and converts a traditional tabular resultset into a JSON array of objects.
+ * \param db_id The database connection ID from the thread-local pool.
+ * \param query The SQL query or stored procedure call string.
+ * \param params Array of input query parameters to bind, or nullptr if none.
+ * \param param_count Number of parameters in the params array.
+ * \param out_buf The output evbuffer where the generated JSON array is appended.
+ * \return true on successful execution and resultset serialization, false on error.
+ */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool db_get_rs2json(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
-/** \brief Executes query returning multiple resultsets as a JSON object with array fields r1, r2, ... */
+/** 
+ * \brief Executes a query returning multiple resultsets as a JSON object with array fields (r1, r2, ...).
+ * \param db_id The database connection ID from the thread-local pool.
+ * \param query The SQL query or stored procedure call string.
+ * \param params Array of input query parameters to bind, or nullptr if none.
+ * \param param_count Number of parameters in the params array.
+ * \param out_buf The output evbuffer where the multi-resultset JSON object is appended.
+ * \return true on successful execution and serialization of all resultsets, false on error.
+ */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool db_get_rs2json_m(DbConnectionId db_id, const char* query, QueryParam* params, size_t param_count, struct evbuffer* out_buf);
 
@@ -77,7 +101,17 @@ bool db_get_rs2json_m(DbConnectionId db_id, const char* query, QueryParam* param
 /** \brief Extracts and logs ODBC diagnostic records. */
 void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg);
 
-/** \brief Executes a query and fetches a single row directly into the provided OutParam buffers. */
+/** 
+ * \brief Executes a query and fetches a single row directly into the provided OutParam buffers.
+ * \param db_id The database connection ID from the thread-local pool.
+ * \param query The SQL query or stored procedure call string.
+ * \param in_params Array of input query parameters to bind, or nullptr if none.
+ * \param in_count Number of parameters in the in_params array.
+ * \param out_params Array of output parameter column bindings defining destination buffers and types.
+ * \param out_count Number of output columns in the out_params array.
+ * \param found Pointer to a boolean set to true if a row was found and fetched, or false if zero rows matched.
+ * \return true if execution and fetch completed without error (check found for row presence), false on error or data truncation.
+ */
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool db_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, bool* found);
 

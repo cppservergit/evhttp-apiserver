@@ -44,26 +44,10 @@ const char* get_server_version(void) {
 }
 
 static const char* server_get_client_ip_fast(struct evhttp_connection* evcon) {
-    static _Thread_local char ip_buf[INET6_ADDRSTRLEN];
-    
-    struct bufferevent* bev = evhttp_connection_get_bufferevent(evcon);
-    if (!bev) return "unknown";
-    
-    int fd = bufferevent_getfd(bev);
-    if (fd < 0) return "unknown";
-    
-    struct sockaddr_storage addr = {0};
-    socklen_t addr_len = sizeof(addr);
-    
-    if (getpeername(fd, (struct sockaddr*)&addr, &addr_len) == 0) {
-        if (addr.ss_family == AF_INET) {
-            const struct sockaddr_in* s = (const struct sockaddr_in*)&addr;
-            if (inet_ntop(AF_INET, &s->sin_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
-        } else if (addr.ss_family == AF_INET6) {
-            const struct sockaddr_in6* s = (const struct sockaddr_in6*)&addr;
-            if (inet_ntop(AF_INET6, &s->sin6_addr, ip_buf, sizeof(ip_buf))) return ip_buf;
-        }
-    }
+    char* address = NULL;
+    uint16_t port = 0;
+    evhttp_connection_get_peer(evcon, &address, &port);
+    if (address && address[0] != '\0') return address;
     return "unknown";
 }
 

@@ -115,18 +115,23 @@ static bool worker_process_payload(http_task_t* task) {
         evbuffer_add(task->worker_buf, msg, strlen(msg));
         return false;
     }
+    [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener* tok = json_tokener_new();
     
-    unsigned char* data = evbuffer_pullup(in_buf, -1);
-    if (!data) {
-        task->status_code = HTTP_INTERNAL;
-        task->status_txt = "Internal Server Error";
-        const char* msg = "{\"error\":\"Failed to pull up request body buffer.\"}";
-        evbuffer_add(task->worker_buf, msg, strlen(msg));
-        return false;
+    struct evbuffer_ptr ptr;
+    evbuffer_ptr_set(in_buf, &ptr, 0, EVBUFFER_PTR_SET);
+    struct evbuffer_iovec v[1];
+    
+    while (evbuffer_peek(in_buf, -1, &ptr, v, 1) > 0) {
+        struct json_object* obj = json_tokener_parse_ex(tok, (const char*)v[0].iov_base, (int)v[0].iov_len);
+        if (obj) {
+            task->parsed_body = obj;
+        }
+        enum json_tokener_error jerr = json_tokener_get_error(tok);
+        if (jerr == json_tokener_success) break;
+        if (jerr != json_tokener_continue) break;
+        if (evbuffer_ptr_set(in_buf, &ptr, v[0].iov_len, EVBUFFER_PTR_ADD) < 0) break;
     }
     
-    [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener* tok = json_tokener_new();
-    task->parsed_body = json_tokener_parse_ex(tok, (const char*)data, (int)len);
     enum json_tokener_error jerr = json_tokener_get_error(tok);
     if (!task->parsed_body || jerr != json_tokener_success || !json_object_is_type(task->parsed_body, json_type_object)) {
         task->status_code = HTTP_BADREQUEST;

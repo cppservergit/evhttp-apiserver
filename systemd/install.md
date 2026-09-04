@@ -3,7 +3,7 @@
 This guide details how to deploy and run the pre-compiled EvHttp API server binary as a persistent `systemd` daemon on Ubuntu 24.04 or Ubuntu 26.04.
 
 ## 1. Install Runtime Dependencies
-Ensure that all required shared libraries are natively installed on your container.
+Ensure that all required shared libraries are natively installed on your host or VM.
 
 ### For Ubuntu 26.04
 ```bash
@@ -35,20 +35,30 @@ sudo apt-get install -y libevent-2.1-7t64 \
                         liboath0t64
 ```
 
-## 2. Deploy the Binary
-For this example, we will assume you are deploying the pre-compiled application bundle to `/opt/evhttp`.
+> [!NOTE]
+> If you compile optimized runtime libraries (e.g. `libevent` or `libcurl`) from source into `/usr/local/lib`, verify that `/usr/local/lib` is included in `/etc/ld.so.conf.d/` and refresh the linker cache:
+> ```bash
+> sudo ldconfig
+> ```
+
+## 2. Deploy Binary and Directories
+Deploy the pre-compiled application bundle, environment configuration, and upload directory:
 
 ```bash
-sudo mkdir -p /opt/evhttp/bin
-sudo cp apiserver /opt/evhttp/bin/
-sudo cp apiserver.env /opt/evhttp/bin/
+# Create deployment directories and uploads directory
+sudo mkdir -p /opt/evhttp/bin /opt/evhttp/systemd /opt/uploads
+
+# Copy binary, environment configuration, and systemd service file from repo root
+sudo cp bin/apiserver /opt/evhttp/bin/
+sudo cp bin/apiserver.env /opt/evhttp/bin/
+sudo cp systemd/apiserver.service /opt/evhttp/systemd/
 sudo chmod +x /opt/evhttp/bin/apiserver
 
-# Create an unprivileged system user for security
-sudo useradd -r -s /bin/false apiserver
+# Create an unprivileged system user if it does not already exist
+id -u apiserver &>/dev/null || sudo useradd -r -s /bin/false apiserver
 
-# Grant ownership of the deployment directory to the unprivileged user
-sudo chown -R apiserver:apiserver /opt/evhttp
+# Grant ownership of deployment and uploads directory to the unprivileged user
+sudo chown -R apiserver:apiserver /opt/evhttp /opt/uploads
 ```
 
 ## 3. Configure the Environment
@@ -102,6 +112,32 @@ API_PASS=your_api_pass
 REMOTE_API_KEY=your_api_key
 ```
 
+### ODBC Driver Configuration
+Verify that the ODBC drivers referenced in `DB_0` and `DB_1` are registered in `/etc/odbcinst.ini`:
+
+```ini
+[FreeTDS]
+Description=FreeTDS Driver
+Driver=/usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so
+Setup=/usr/lib/x86_64-linux-gnu/odbc/libtdsS.so
+UsageCount=1
+
+[PostgreSQL Unicode]
+Description=PostgreSQL ODBC driver (Unicode version)
+Driver=/usr/lib/x86_64-linux-gnu/odbc/psqlodbcw.so
+Setup=/usr/lib/x86_64-linux-gnu/odbc/libodbcpsqlS.so
+UsageCount=1
+```
+
+*(If you compiled FreeTDS from source into `/usr/local/lib`, point the Driver path to `/usr/local/lib/libtdsodbc.so`)*
+
+Also ensure `/etc/freetds/freetds.conf` includes:
+```ini
+[global]
+    text size = 64512
+    client charset = UTF-8
+```
+
 ## 4. Install the Systemd Service
 Link the provided systemd service file into the global systemd directory and start the service.
 
@@ -117,6 +153,9 @@ sudo systemctl enable apiserver.service
 
 # Start the service
 sudo systemctl start apiserver.service
+
+# Verify service status
+sudo systemctl status apiserver.service
 ```
 
 ## 5. View Logs and Telemetry

@@ -54,6 +54,9 @@ static char g_telemetry_api_key[MAX_CONFIG_STR] = {0};
 static long g_jwt_timeout_seconds = 3600;
 static char g_trust_proxy_ip[MAX_CONFIG_STR] = {0};
 static char g_allowed_origin[MAX_CONFIG_STR] = {0};
+static char g_allowed_origin_copy[MAX_CONFIG_STR] = {0};
+static char* g_allowed_origin_ptrs[64] = {0};
+static size_t g_allowed_origin_count = 0;
 static _Atomic bool g_access_log = true;
 static size_t g_num_threads = 0;
 static size_t g_max_queue_size = 10000; // Default backpressure limit
@@ -175,6 +178,19 @@ static void apply_initial_config_vars(void) {
     
     if (getenv("UPLOADS_DIR")) (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "%s", getenv("UPLOADS_DIR"));
     else g_uploads_dir[0] = '\0';
+    
+    if (g_allowed_origin[0] != '\0') {
+        (void)snprintf(g_allowed_origin_copy, sizeof(g_allowed_origin_copy), "%s", g_allowed_origin);
+        char* saveptr = nullptr;
+        char* token = strtok_r(g_allowed_origin_copy, ",", &saveptr);
+        while (token != nullptr && g_allowed_origin_count < 64) {
+            token = trim_whitespace(token);
+            if (token[0] != '\0') {
+                g_allowed_origin_ptrs[g_allowed_origin_count++] = token;
+            }
+            token = strtok_r(nullptr, ",", &saveptr);
+        }
+    }
 }
 
 void config_reload(void) {
@@ -319,20 +335,12 @@ size_t config_get_max_payload_size(void) {
 }
 
 bool config_is_origin_allowed(const char* origin) {
-    if (!origin || g_allowed_origin[0] == '\0') return false;
+    if (!origin || g_allowed_origin_count == 0) return false;
     
-    bool allowed = false;
-    char copy[MAX_CONFIG_STR];
-    (void)snprintf(copy, sizeof(copy), "%s", g_allowed_origin);
-    char* saveptr = nullptr;
-    char* token = strtok_r(copy, ",", &saveptr);
-    while (token != nullptr) {
-        token = trim_whitespace(token);
-        if (strcmp(token, origin) == 0) {
-            allowed = true;
-            break;
+    for (size_t i = 0; i < g_allowed_origin_count; i++) {
+        if (strcmp(g_allowed_origin_ptrs[i], origin) == 0) {
+            return true;
         }
-        token = strtok_r(nullptr, ",", &saveptr);
     }
-    return allowed;
+    return false;
 }
