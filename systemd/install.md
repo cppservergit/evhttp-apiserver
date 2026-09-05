@@ -138,7 +138,80 @@ Also ensure `/etc/freetds/freetds.conf` includes:
     client charset = UTF-8
 ```
 
-## 4. Install the Systemd Service
+## 4. Advanced: Native Encrypted Secrets via `systemd-creds` (Optional)
+If your customer or compliance policy requires sensitive credentials (`DB_0`, `JWT_SECRET`, `API_PASS`, etc.) to be **encrypted at rest** inside the container or host, you can leverage native `systemd` credentials without modifying the C application.
+
+### How it Works
+1. Secrets are encrypted at rest using `systemd-creds` bound to the machine's identity (`/etc/machine-id` or TPM2).
+2. When the service starts, systemd decrypts the secrets into a transient, secure RAM filesystem (`ramfs`) accessible only by the service user at `$CREDENTIALS_DIRECTORY` (mode `0400`).
+3. A lightweight 3-line launcher wrapper exports the decrypted files as standard environment variables right before executing the binary.
+4. The API server reads them with `getenv()` and immediately scrubs them from memory and the environment table using `explicit_bzero()` and `unsetenv()`.
+
+### Step 1: Encrypt Secrets at Rest
+Generate encrypted credential files inside `/opt/evhttp/credentials.encrypted`:
+
+```bash
+sudo mkdir -p /opt/evhttp/credentials.encrypted
+
+# Encrypt ODBC connection string
+echo -n "Driver=FreeTDS;SERVER=DatabaseServerAddr;PORT=1433;DATABASE=demodb;UID=your_username;PWD=your_password;APP=apiserver;Encryption=off;ClientCharset=UTF-8" | \
+    sudo systemd-creds encrypt --name=db_0 - /opt/evhttp/credentials.encrypted/db_0.cred
+
+# Encrypt JWT secret
+echo -n "your_jwt_secret" | \
+    sudo systemd-creds encrypt --name=jwt_secret - /opt/evhttp/credentials.encrypted/jwt_secret.cred
+
+# Encrypt API password
+echo -n "your_api_pass" | \
+    sudo systemd-creds encrypt --name=api_pass - /opt/evhttp/credentials.encrypted/api_pass.cred
+```
+
+### Step 2: Create the Launcher Wrapper
+Create `/opt/evhttp/bin/apiserver-launcher.sh`:
+
+```bash
+sudo nano /opt/evhttp/bin/apiserver-launcher.sh
+```
+
+Add the following wrapper:
+```sh
+#!/bin/sh
+# /opt/evhttp/bin/apiserver-launcher.sh
+
+if [ -n "$CREDENTIALS_DIRECTORY" ]; then
+    [ -f "$CREDENTIALS_DIRECTORY/db_0" ]       && export DB_0=$(cat "$CREDENTIALS_DIRECTORY/db_0")
+    [ -f "$CREDENTIALS_DIRECTORY/jwt_secret" ] && export JWT_SECRET=$(cat "$CREDENTIALS_DIRECTORY/jwt_secret")
+    [ -f "$CREDENTIALS_DIRECTORY/api_pass" ]   && export API_PASS=$(cat "$CREDENTIALS_DIRECTORY/api_pass")
+fi
+
+exec /opt/evhttp/bin/apiserver "$@"
+```
+
+Make the script executable:
+```bash
+sudo chmod +x /opt/evhttp/bin/apiserver-launcher.sh
+```
+
+### Step 3: Configure the Systemd Service Unit
+In `/etc/systemd/system/apiserver.service`, add the `LoadCredentialEncrypted=` directives and update `ExecStart` to point to the launcher wrapper:
+
+```ini
+[Service]
+...
+WorkingDirectory=/opt/evhttp/bin
+ExecStart=/opt/evhttp/bin/apiserver-launcher.sh
+
+# Load encrypted credentials into $CREDENTIALS_DIRECTORY at runtime
+LoadCredentialEncrypted=db_0:/opt/evhttp/credentials.encrypted/db_0.cred
+LoadCredentialEncrypted=jwt_secret:/opt/evhttp/credentials.encrypted/jwt_secret.cred
+LoadCredentialEncrypted=api_pass:/opt/evhttp/credentials.encrypted/api_pass.cred
+...
+```
+
+> [!TIP]
+> This pattern allows the binary to remain 100% 12-Factor and Cloud/Kubernetes-native (consuming standard environment variables), while satisfying enterprise at-rest encryption requirements under systemd.
+
+## 5. Install the Systemd Service
 Link the provided systemd service file into the global systemd directory and start the service.
 
 ```bash
@@ -158,7 +231,7 @@ sudo systemctl start apiserver.service
 sudo systemctl status apiserver.service
 ```
 
-## 5. View Logs and Telemetry
+## 6. View Logs and Telemetry
 Since the application strictly logs JSON to standard error, systemd automatically captures and routes this to `journalctl`.
 
 ```bash
@@ -166,9 +239,10 @@ Since the application strictly logs JSON to standard error, systemd automaticall
 sudo journalctl -u apiserver -f -o cat
 ```
 
-## 6. Trigger a Hot-Reload
+## 7. Trigger a Hot-Reload
 If you update `apiserver.env`, you do not need to restart the server and drop active requests. You can trigger the internal `SIGHUP` reload using `systemctl`:
 
 ```bash
 sudo systemctl reload apiserver.service
 ```
+
