@@ -401,11 +401,9 @@ static inline void jbuf_add(JsonBuffer *jbuf, const void *data, size_t len) {
 }
 
 static inline void jbuf_add_char(JsonBuffer *jbuf, char c) {
-    if (jbuf->offset + 1 > sizeof(jbuf->stack_buf)) {
-        if (jbuf->offset > 0) {
-            evbuffer_add(jbuf->evbuf, jbuf->stack_buf, jbuf->offset);
-            jbuf->offset = 0;
-        }
+    if (jbuf->offset + 1 > sizeof(jbuf->stack_buf) && jbuf->offset > 0) {
+        evbuffer_add(jbuf->evbuf, jbuf->stack_buf, jbuf->offset);
+        jbuf->offset = 0;
     }
     jbuf->stack_buf[jbuf->offset++] = c;
 }
