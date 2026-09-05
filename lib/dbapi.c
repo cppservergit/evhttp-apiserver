@@ -49,6 +49,20 @@ void db_reset_connection(DbConnectionId db_id) {
 static _Thread_local SQLINTEGER tl_last_native_error = 0;
 static _Thread_local char tl_last_error_msg[SQL_MAX_MESSAGE_LENGTH] = {0};
 
+static const char* clean_odbc_error_message(const char* msg) {
+    const char* clean_msg = msg;
+    while (*clean_msg == '[') {
+        const char* end_bracket = strchr(clean_msg, ']');
+        if (end_bracket) {
+            clean_msg = end_bracket + 1;
+            while (*clean_msg == ' ') clean_msg++;
+        } else {
+            break;
+        }
+    }
+    return clean_msg;
+}
+
 void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handle, const char* context_msg) {
     SQLCHAR sqlState[6];
     SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH];
@@ -63,16 +77,7 @@ void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handl
     while (SQL_SUCCEEDED(SQLGetDiagRec(handle_type, handle, rec_num, sqlState, &nativeError, msg, sizeof(msg), &msgLen))) {
         if (nativeError >= 50000) {
             tl_last_native_error = nativeError;
-            const char* clean_msg = (const char*)msg;
-            while (*clean_msg == '[') {
-                const char* end_bracket = strchr(clean_msg, ']');
-                if (end_bracket) {
-                    clean_msg = end_bracket + 1;
-                    while (*clean_msg == ' ') clean_msg++;
-                } else {
-                    break;
-                }
-            }
+            const char* clean_msg = clean_odbc_error_message((const char*)msg);
             (void)snprintf(tl_last_error_msg, sizeof(tl_last_error_msg), "%s", clean_msg);
         }
         if (offset < (int)sizeof(full_msg) - 1) {
