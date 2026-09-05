@@ -185,7 +185,49 @@ int fast_ltoa(long val, char* buf, size_t buf_size) {
     return (int)len;
 }
 
+
+static inline void format_int_part(uint64_t temp_int, char* buf, unsigned int pos) {
+    while (temp_int >= 100) {
+        unsigned int rem = temp_int % 100;
+        temp_int /= 100;
+        pos -= 2;
+        buf[pos] = digits_lut[rem * 2];
+        buf[pos + 1] = digits_lut[rem * 2 + 1];
+    }
+    if (temp_int < 10) {
+        buf[pos - 1] = (char)('0' + temp_int);
+    } else {
+        pos -= 2;
+        buf[pos] = digits_lut[temp_int * 2];
+        buf[pos + 1] = digits_lut[temp_int * 2 + 1];
+    }
+}
+
+static inline unsigned int format_frac_part(double frac, char* buf, unsigned int pos, size_t buf_size, unsigned int len) {
+    if (frac > 1e-9 && pos + 8 < buf_size) {
+        buf[pos++] = '.';
+        uint32_t frac_digits = (uint32_t)(frac * 1000000.0 + 0.5);
+
+        for (int i = 5; i >= 1; i -= 2) {
+            unsigned int rem = frac_digits % 100;
+            frac_digits /= 100;
+            buf[pos + i - 1] = digits_lut[rem * 2];
+            buf[pos + i] = digits_lut[rem * 2 + 1];
+        }
+        pos += 6;
+        
+        while (pos > len && buf[pos - 1] == '0') {
+            pos--;
+        }
+        if (pos > len && buf[pos - 1] == '.') {
+            pos--;
+        }
+    }
+    return pos;
+}
+
 int fast_dtoa(double val, char* buf, size_t buf_size) {
+
     if (!buf || buf_size < 2) return 0;
 
     if (isnan(val) || isinf(val)) {
@@ -211,47 +253,11 @@ int fast_dtoa(double val, char* buf, size_t buf_size) {
     if (len + 1 > buf_size) return 0;
 
     unsigned int pos = len;
-    uint64_t temp_int = int_part;
+    format_int_part(int_part, buf, pos);
     
-    while (temp_int >= 100) {
-        unsigned int rem = temp_int % 100;
-        temp_int /= 100;
-        pos -= 2;
-        buf[pos] = digits_lut[rem * 2];
-        buf[pos + 1] = digits_lut[rem * 2 + 1];
-    }
-    if (temp_int < 10) {
-        buf[--pos] = (char)('0' + temp_int);
-    } else {
-        pos -= 2;
-        buf[pos] = digits_lut[temp_int * 2];
-        buf[pos + 1] = digits_lut[temp_int * 2 + 1];
-    }
     if (neg) buf[0] = '-';
 
-    pos = len;
-
-    if (frac > 1e-9 && pos + 2 < buf_size) {
-        buf[pos++] = '.';
-        uint32_t frac_digits = (uint32_t)(frac * 1000000.0 + 0.5);
-
-        if (pos + 6 < buf_size) {
-            for (int i = 5; i >= 1; i -= 2) {
-                unsigned int rem = frac_digits % 100;
-                frac_digits /= 100;
-                buf[pos + i - 1] = digits_lut[rem * 2];
-                buf[pos + i] = digits_lut[rem * 2 + 1];
-            }
-            pos += 6;
-            
-            while (pos > len && buf[pos - 1] == '0') {
-                pos--;
-            }
-            if (pos > len && buf[pos - 1] == '.') {
-                pos--;
-            }
-        }
-    }
+    pos = format_frac_part(frac, buf, len, buf_size, len);
     
     if (pos == 1 && buf[0] == '-') {
         buf[0] = '0';
