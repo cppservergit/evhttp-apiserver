@@ -412,9 +412,8 @@ static void jbuf_append_escaped_str(JsonBuffer *jbuf, const char *str, size_t le
     jbuf_add_char(jbuf, '"');
     const char *start = str;
     const char *end = str + len;
-    const char *p;
 
-    for (p = str; p < end; ++p) {
+    for (const char *p = str; p < end; ++p) {
         if (*p != '"' && *p != '\\' && (unsigned char)*p >= 0x20) continue;
 
         size_t clean_len = (size_t)(p - start);
