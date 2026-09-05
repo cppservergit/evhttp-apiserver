@@ -143,54 +143,56 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
 // (or hot reload of ACCESS_LOG which bypasses this). If config reloading
 // is expanded to these variables in the future, explicit synchronization
 // (e.g. read-write locks or RCU) MUST be implemented to prevent race conditions.
+static void load_env_string(const char* key, char* dest, size_t dest_size, bool clear_on_miss) {
+    const char* val = getenv(key);
+    if (val) {
+        (void)snprintf(dest, dest_size, "%s", val);
+    } else if (clear_on_miss) {
+        dest[0] = '\0';
+    }
+}
+
+static void parse_cors_origins(void) {
+    if (g_allowed_origin[0] == '\0') return;
+    
+    (void)snprintf(g_allowed_origin_copy, sizeof(g_allowed_origin_copy), "%s", g_allowed_origin);
+    char* saveptr = nullptr;
+    char* token = strtok_r(g_allowed_origin_copy, ",", &saveptr);
+    while (token != nullptr && g_allowed_origin_count < 64) {
+        token = trim_whitespace(token);
+        if (token[0] != '\0') {
+            g_allowed_origin_ptrs[g_allowed_origin_count++] = token;
+        }
+        token = strtok_r(nullptr, ",", &saveptr);
+    }
+}
+
 static void apply_initial_config_vars(void) {
     for (int i = 0; i < 4; i++) {
         char env_key[8];
         (void)snprintf(env_key, sizeof(env_key), "DB_%d", i);
-        const char* val = getenv(env_key);
-        if (val) {
-            (void)snprintf(g_odbc_conn_strs[i], sizeof(g_odbc_conn_strs[i]), "%s", val);
-        }
+        load_env_string(env_key, g_odbc_conn_strs[i], sizeof(g_odbc_conn_strs[i]), false);
     }
-    if (getenv("API_URL")) (void)snprintf(g_api_url, sizeof(g_api_url), "%s", getenv("API_URL"));
-    if (getenv("API_USER")) (void)snprintf(g_api_user, sizeof(g_api_user), "%s", getenv("API_USER"));
-    if (getenv("API_PASS")) (void)snprintf(g_api_pass, sizeof(g_api_pass), "%s", getenv("API_PASS"));
     
-    if (getenv("LOGIN_PROVIDER")) (void)snprintf(g_login_provider, sizeof(g_login_provider), "%s", getenv("LOGIN_PROVIDER"));
-    if (getenv("LOGIN_URI")) (void)snprintf(g_login_uri, sizeof(g_login_uri), "%s", getenv("LOGIN_URI"));
-    if (getenv("JWT_SECRET")) (void)snprintf(g_jwt_secret, sizeof(g_jwt_secret), "%s", getenv("JWT_SECRET"));
+    load_env_string("API_URL", g_api_url, sizeof(g_api_url), false);
+    load_env_string("API_USER", g_api_user, sizeof(g_api_user), false);
+    load_env_string("API_PASS", g_api_pass, sizeof(g_api_pass), false);
     
-    if (getenv("REMOTE_API_KEY")) (void)snprintf(g_remote_api_key, sizeof(g_remote_api_key), "%s", getenv("REMOTE_API_KEY"));
-    else g_remote_api_key[0] = '\0';
+    load_env_string("LOGIN_PROVIDER", g_login_provider, sizeof(g_login_provider), false);
+    load_env_string("LOGIN_URI", g_login_uri, sizeof(g_login_uri), false);
+    load_env_string("JWT_SECRET", g_jwt_secret, sizeof(g_jwt_secret), false);
     
-    if (getenv("TELEMETRY_API_KEY")) (void)snprintf(g_telemetry_api_key, sizeof(g_telemetry_api_key), "%s", getenv("TELEMETRY_API_KEY"));
-    else g_telemetry_api_key[0] = '\0';
-    
-    if (getenv("TRUST_PROXY_IP")) (void)snprintf(g_trust_proxy_ip, sizeof(g_trust_proxy_ip), "%s", getenv("TRUST_PROXY_IP"));
-    else g_trust_proxy_ip[0] = '\0';
-    
-    if (getenv("CORS_ALLOWED_ORIGINS")) (void)snprintf(g_allowed_origin, sizeof(g_allowed_origin), "%s", getenv("CORS_ALLOWED_ORIGINS"));
-    else g_allowed_origin[0] = '\0';
+    load_env_string("REMOTE_API_KEY", g_remote_api_key, sizeof(g_remote_api_key), true);
+    load_env_string("TELEMETRY_API_KEY", g_telemetry_api_key, sizeof(g_telemetry_api_key), true);
+    load_env_string("TRUST_PROXY_IP", g_trust_proxy_ip, sizeof(g_trust_proxy_ip), true);
+    load_env_string("CORS_ALLOWED_ORIGINS", g_allowed_origin, sizeof(g_allowed_origin), true);
+    load_env_string("UPLOADS_DIR", g_uploads_dir, sizeof(g_uploads_dir), true);
     
     if (getenv("JWT_TIMEOUT_SECONDS")) {
         g_jwt_timeout_seconds = safe_strtol_env(getenv("JWT_TIMEOUT_SECONDS"), 3600, 1, 86400 * 30);
     }
     
-    if (getenv("UPLOADS_DIR")) (void)snprintf(g_uploads_dir, sizeof(g_uploads_dir), "%s", getenv("UPLOADS_DIR"));
-    else g_uploads_dir[0] = '\0';
-    
-    if (g_allowed_origin[0] != '\0') {
-        (void)snprintf(g_allowed_origin_copy, sizeof(g_allowed_origin_copy), "%s", g_allowed_origin);
-        char* saveptr = nullptr;
-        char* token = strtok_r(g_allowed_origin_copy, ",", &saveptr);
-        while (token != nullptr && g_allowed_origin_count < 64) {
-            token = trim_whitespace(token);
-            if (token[0] != '\0') {
-                g_allowed_origin_ptrs[g_allowed_origin_count++] = token;
-            }
-            token = strtok_r(nullptr, ",", &saveptr);
-        }
-    }
+    parse_cors_origins();
 }
 
 void config_reload(void) {
