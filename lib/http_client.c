@@ -222,10 +222,8 @@ static bool perform_http_request(const char* base_url, const char* uri, const ch
 
 static struct json_object* do_http_request(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
     [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
-    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code)) {
-        if (chunk.size > 0 && chunk.memory) {
-            return json_tokener_parse(chunk.memory);
-        }
+    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code) && chunk.size > 0 && chunk.memory) {
+        return json_tokener_parse(chunk.memory);
     }
     return nullptr;
 }
@@ -250,10 +248,8 @@ void http_client_cleanup_thread(void) {
 
 char* http_client_post_raw(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
     [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
-    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code)) {
-        if (chunk.size > 0 && chunk.memory) {
-            return strdup(chunk.memory);
-        }
+    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code) && chunk.size > 0 && chunk.memory) {
+        return strdup(chunk.memory);
     }
     return nullptr;
 }
