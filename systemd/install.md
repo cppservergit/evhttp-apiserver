@@ -211,7 +211,170 @@ LoadCredentialEncrypted=api_pass:/opt/evhttp/credentials.encrypted/api_pass.cred
 > [!TIP]
 > This pattern allows the binary to remain 100% 12-Factor and Cloud/Kubernetes-native (consuming standard environment variables), while satisfying enterprise at-rest encryption requirements under systemd.
 
-## 5. Install the Systemd Service
+## 5. Advanced: Enterprise Secret Management with HashiCorp Vault (Optional)
+If your organization or customer uses **HashiCorp Vault** (or a compatible KMS/Secrets Manager), you can manage all sensitive credentials centrally while preserving the exact same `getenv()` application interface.
+
+### The "Universal getenv" Architecture
+A core design strength of this server is that **all configuration is consumed via standard environment variables**. The C application code remains identical across every target:
+* **Local Development / QA:** Simple `.env` file or terminal export.
+* **LXD / Bare-Metal (Native Systemd):** Encrypted at rest via `systemd-creds` (Section 4).
+* **LXD / Bare-Metal (Enterprise IT):** Managed and rotated via HashiCorp Vault into `/run` tmpfs (this section).
+* **Kubernetes / Cloud Native:** Injected via K8s `SecretKeyRef` or AWS/GCP/Azure Secret Managers.
+
+Only the deployment and provisioning instructions change—never the application binary.
+
+---
+
+### How Vault Agent Works in LXD / Systemd
+1. **`vault-agent`** runs inside the LXD container as an auxiliary systemd daemon.
+2. It authenticates to the customer's Vault cluster using **AppRole** (the enterprise standard for non-human machine auth).
+3. Vault Agent templates the secrets directly into a memory-only directory: `/run/apiserver/vault.env` (permissions `0400`, owned by `apiserver`).
+4. Systemd reads `/run/apiserver/vault.env` via `EnvironmentFile=`.
+5. The API server starts, reads the secrets via `getenv()`, and immediately wipes them from the process environment table with `explicit_bzero()`.
+6. When secrets (e.g. database passwords) rotate in Vault, Vault Agent automatically executes `systemctl restart apiserver` to cleanly rebuild the ODBC connection pools.
+
+---
+
+### Step 1: Install Vault on Ubuntu (LXD Container)
+Add the official HashiCorp repository and install the `vault` binary:
+
+```bash
+sudo apt-get update && sudo apt-get install -y gpg wget
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install -y vault
+```
+
+---
+
+### Step 2: Configure Vault Agent (`/etc/vault/agent.hcl`)
+Create the Vault Agent configuration:
+
+```bash
+sudo mkdir -p /etc/vault
+sudo nano /etc/vault/agent.hcl
+```
+
+```hcl
+pid_file = "/run/vault-agent.pid"
+
+vault {
+  address = "https://vault.company.internal:8200"
+}
+
+auto_auth {
+  method "approle" {
+    config = {
+      role_id_file_path   = "/etc/vault/role-id"
+      secret_id_file_path = "/etc/vault/secret-id"
+      remove_secret_id_file_after_reading = false
+    }
+  }
+}
+
+template {
+  contents = <<EOF
+{{ with secret "secret/data/apiserver/production" }}
+DB_0="{{ .Data.data.db_0 }}"
+JWT_SECRET="{{ .Data.data.jwt_secret }}"
+API_PASS="{{ .Data.data.api_pass }}"
+REMOTE_API_KEY="{{ .Data.data.remote_api_key }}"
+TELEMETRY_API_KEY="{{ .Data.data.telemetry_api_key }}"
+{{ end }}
+EOF
+  destination = "/run/apiserver/vault.env"
+  perms       = "0400"
+
+  # Restart apiserver upon secret rotation to rebind ODBC connection pools:
+  command     = "systemctl restart apiserver"
+}
+```
+
+Deploy the `role-id` and `secret-id` provided by the IT Security team:
+```bash
+echo "your-approle-role-id"   | sudo tee /etc/vault/role-id
+echo "your-approle-secret-id" | sudo tee /etc/vault/secret-id
+sudo chmod 0600 /etc/vault/role-id /etc/vault/secret-id
+sudo chown -R apiserver:apiserver /etc/vault
+```
+
+---
+
+### Step 3: Create the Vault Agent Systemd Unit
+Create `/etc/systemd/system/vault-agent.service`:
+
+```ini
+[Unit]
+Description=HashiCorp Vault Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=apiserver
+Group=apiserver
+RuntimeDirectory=apiserver
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/vault agent -config=/etc/vault/agent.hcl
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the agent:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now vault-agent.service
+```
+
+Verify that `/run/apiserver/vault.env` is populated with secrets in memory:
+```bash
+sudo cat /run/apiserver/vault.env
+```
+
+---
+
+### Step 4: Configure `apiserver.service` to Consume Vault Secrets
+Update `/etc/systemd/system/apiserver.service` to declare dependency on `vault-agent.service` and load `/run/apiserver/vault.env`:
+
+```ini
+[Unit]
+Description=EvHttp API Server
+After=network.target vault-agent.service
+Requires=vault-agent.service
+
+[Service]
+Type=simple
+User=apiserver
+Group=apiserver
+WorkingDirectory=/opt/evhttp/bin
+
+# 1. Non-sensitive defaults from base file
+EnvironmentFile=/opt/evhttp/bin/apiserver.env
+
+# 2. Sensitive secrets rendered into RAM by Vault Agent (overrides values above)
+EnvironmentFile=-/run/apiserver/vault.env
+
+ExecStart=/opt/evhttp/bin/apiserver
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=apiserver
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+### Security Benefits of this Model
+1. **Zero Plaintext on Disk:** `/run` is a memory-backed `tmpfs`. Secrets never touch the non-volatile storage/SSD and leave no trace in LXD container snapshots.
+2. **Immediate In-Memory Scrubbing:** The server consumes the environment variables on boot and immediately scrubs them using `explicit_bzero()`, leaving `/proc/$PID/environ` empty.
+3. **Automated Secret Rotation:** If IT security changes the database password in Vault, Vault Agent automatically updates `/run/apiserver/vault.env` and issues `systemctl restart apiserver` to reconnect the ODBC pool with zero manual intervention.
+
+## 6. Install the Systemd Service
 Link the provided systemd service file into the global systemd directory and start the service.
 
 ```bash
@@ -231,7 +394,7 @@ sudo systemctl start apiserver.service
 sudo systemctl status apiserver.service
 ```
 
-## 6. View Logs and Telemetry
+## 7. View Logs and Telemetry
 Since the application strictly logs JSON to standard error, systemd automatically captures and routes this to `journalctl`.
 
 ```bash
@@ -239,7 +402,7 @@ Since the application strictly logs JSON to standard error, systemd automaticall
 sudo journalctl -u apiserver -f -o cat
 ```
 
-## 7. Trigger a Hot-Reload
+## 8. Trigger a Hot-Reload
 If you update `apiserver.env`, you do not need to restart the server and drop active requests. You can trigger the internal `SIGHUP` reload using `systemctl`:
 
 ```bash
