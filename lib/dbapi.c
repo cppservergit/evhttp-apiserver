@@ -456,24 +456,7 @@ static void evbuffer_append_escaped_str(struct evbuffer *buf, const char *str, s
 static _Thread_local ColumnDescriptor tl_cols[TLS_MAX_COLS];
 static _Thread_local char tl_arena[TLS_ARENA_SIZE];
 
-static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols) {
-    if (num_cols <= 0) return false;
-
-    meta->hstmt = hstmt;
-    meta->count = num_cols;
-    
-    if (num_cols <= TLS_MAX_COLS) {
-        meta->cols = tl_cols;
-        meta->uses_tls_cols = true;
-        memset(meta->cols, 0, (size_t)num_cols * sizeof(ColumnDescriptor));
-    } else {
-        meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
-        meta->uses_tls_cols = false;
-    }
-    
-    if (!meta->cols) return false;
-
-    size_t total_arena_size = 0;
+static bool setup_column_metadata(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols, size_t* total_arena_size) {
     for (SQLSMALLINT i = 0; i < num_cols; ++i) {
         SQLULEN col_size = 0;
         SQLSMALLINT digits = 0; 
@@ -482,8 +465,6 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
                                        &meta->cols[i].name_len, &meta->cols[i].sql_type, &col_size, &digits, &nullable);
         if (!SQL_SUCCEEDED(ret)) {
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Failed to describe column.");
-            if (!meta->uses_tls_cols) free(meta->cols);
-            meta->cols = nullptr;
             return false;
         }
         switch (meta->cols[i].sql_type) {
@@ -512,12 +493,36 @@ static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetM
                 meta->cols[i].alloc_size = (col_size == 0 || col_size > ODBC_MAX_COL_SIZE) ? ODBC_MAX_COL_SIZE : (col_size + 64);
                 break;
         }
-        if (ckd_add(&total_arena_size, total_arena_size, meta->cols[i].alloc_size)) {
+        if (ckd_add(total_arena_size, *total_arena_size, meta->cols[i].alloc_size)) {
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Column allocation size overflowed.");
-            if (!meta->uses_tls_cols) free(meta->cols);
-            meta->cols = nullptr;
             return false;
         }
+    }
+    return true;
+}
+
+static bool alloc_metadata_cols(DbConnectionId db_id, SQLHSTMT hstmt, ResultSetMetadata *meta, SQLSMALLINT num_cols) {
+    if (num_cols <= 0) return false;
+
+    meta->hstmt = hstmt;
+    meta->count = num_cols;
+    
+    if (num_cols <= TLS_MAX_COLS) {
+        meta->cols = tl_cols;
+        meta->uses_tls_cols = true;
+        memset(meta->cols, 0, (size_t)num_cols * sizeof(ColumnDescriptor));
+    } else {
+        meta->cols = calloc((size_t)num_cols, sizeof(ColumnDescriptor));
+        meta->uses_tls_cols = false;
+    }
+    
+    if (!meta->cols) return false;
+
+    size_t total_arena_size = 0;
+    if (!setup_column_metadata(db_id, hstmt, meta, num_cols, &total_arena_size)) {
+        if (!meta->uses_tls_cols) free(meta->cols);
+        meta->cols = nullptr;
+        return false;
     }
 
     if (total_arena_size == 0) {
