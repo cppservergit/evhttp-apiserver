@@ -124,10 +124,11 @@ static bool worker_process_payload(http_task_t* task) {
         if (obj) {
             task->parsed_body = obj;
         }
-        enum json_tokener_error jerr = json_tokener_get_error(tok);
-        if (jerr == json_tokener_success) break;
-        if (jerr != json_tokener_continue) break;
-        if (evbuffer_ptr_set(in_buf, &ptr, v[0].iov_len, EVBUFFER_PTR_ADD) < 0) break;
+        
+        if (json_tokener_get_error(tok) != json_tokener_continue || 
+            evbuffer_ptr_set(in_buf, &ptr, v[0].iov_len, EVBUFFER_PTR_ADD) < 0) {
+            break;
+        }
     }
     
     enum json_tokener_error jerr = json_tokener_get_error(tok);
