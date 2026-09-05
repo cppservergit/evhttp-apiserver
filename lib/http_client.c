@@ -167,30 +167,6 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
     return curl;
 }
 
-static struct json_object* parse_curl_response(CURL* curl, CURLcode res, const char* url, struct memory_struct* chunk, long* out_http_code, const char* errbuf) {
-    struct json_object* json_response = nullptr;
-    if (res == CURLE_OK) {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        if (out_http_code) *out_http_code = http_code;
-        
-        if (http_code >= 400) {
-            char trunc_body[256] = {0};
-            if (chunk->memory) {
-                (void)snprintf(trunc_body, sizeof(trunc_body), "%s", chunk->memory);
-            }
-            set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, trunc_body[0] ? trunc_body : "<empty>");
-        }
-        
-        if (chunk->size > 0) {
-            json_response = json_tokener_parse(chunk->memory);
-        }
-    } else {
-        set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s (%s) | URL: %s", curl_easy_strerror(res), errbuf[0] ? errbuf : "no details", url);
-        if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
-    }
-    return json_response;
-}
 
 static bool build_request_url(const char* base_url, const char* uri, char* url, size_t max_len) {
     int written = 0;
@@ -205,12 +181,28 @@ static bool build_request_url(const char* base_url, const char* uri, char* url, 
     }
     return (written >= 0 && (size_t)written < max_len);
 }
+static bool perform_http_request(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, struct memory_struct* chunk, long* out_http_code) {
+    char url[1024];
+    if (!build_request_url(base_url, uri, url, sizeof(url))) {
+        set_thread_error(TL_ERR_ERROR, "URL truncation error");
+        if (out_http_code) *out_http_code = HTTP_INTERNAL;
+        return false;
+    }
 
-static char* parse_curl_raw_response(CURL* curl, CURLcode res, const char* url, struct memory_struct* chunk, long* out_http_code, const char* errbuf) {
+    [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist* chunk_headers = nullptr;
+    CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, chunk);
+    if (!curl) return false;
+
+    char errbuf[CURL_ERROR_SIZE] = {0};
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
+
     if (res != CURLE_OK) {
         set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s (%s) | URL: %s", curl_easy_strerror(res), errbuf[0] ? errbuf : "no details", url);
         if (out_http_code) *out_http_code = HTTP_SERVUNAVAIL;
-        return nullptr;
+        return false;
     }
 
     long http_code = 0;
@@ -224,33 +216,18 @@ static char* parse_curl_raw_response(CURL* curl, CURLcode res, const char* url, 
         }
         set_thread_error(TL_ERR_ERROR, "HTTP %ld from %s | Response: %s", http_code, url, trunc_body[0] ? trunc_body : "<empty>");
     }
-    
-    if (chunk->size > 0 && chunk->memory) {
-        return strdup(chunk->memory);
-    }
-    return nullptr;
+
+    return true;
 }
 
 static struct json_object* do_http_request(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
-    char url[1024];
-    if (!build_request_url(base_url, uri, url, sizeof(url))) {
-        set_thread_error(TL_ERR_ERROR, "URL truncation error");
-        if (out_http_code) *out_http_code = HTTP_INTERNAL;
-        return nullptr;
-    }
-
     [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
-    [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist* chunk_headers = nullptr;
-    CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
-    if (!curl) return nullptr;
-
-    char errbuf[CURL_ERROR_SIZE] = {0};
-    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
-
-    CURLcode res = curl_easy_perform(curl);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
-
-    return parse_curl_response(curl, res, url, &chunk, out_http_code, errbuf);
+    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code)) {
+        if (chunk.size > 0 && chunk.memory) {
+            return json_tokener_parse(chunk.memory);
+        }
+    }
+    return nullptr;
 }
 
 struct json_object* http_client_get_json(const char* base_url, const char* uri, const char** headers, int num_headers, long* out_http_code) {
@@ -272,23 +249,11 @@ void http_client_cleanup_thread(void) {
 }
 
 char* http_client_post_raw(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {
-    char url[1024];
-    if (!build_request_url(base_url, uri, url, sizeof(url))) {
-        set_thread_error(TL_ERR_ERROR, "URL truncation error");
-        if (out_http_code) *out_http_code = HTTP_INTERNAL;
-        return nullptr;
-    }
-
     [[gnu::cleanup(cleanup_memory_struct)]] struct memory_struct chunk = {0};
-    [[gnu::cleanup(cleanup_curl_slist)]] struct curl_slist* chunk_headers = nullptr;
-    CURL* curl = setup_curl_request(url, body, headers, num_headers, &chunk_headers, &chunk);
-    if (!curl) return nullptr;
-
-    char errbuf[CURL_ERROR_SIZE] = {0};
-    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
-
-    CURLcode res = curl_easy_perform(curl);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
-
-    return parse_curl_raw_response(curl, res, url, &chunk, out_http_code, errbuf);
+    if (perform_http_request(base_url, uri, body, headers, num_headers, &chunk, out_http_code)) {
+        if (chunk.size > 0 && chunk.memory) {
+            return strdup(chunk.memory);
+        }
+    }
+    return nullptr;
 }
