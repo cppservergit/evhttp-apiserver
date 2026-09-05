@@ -387,12 +387,14 @@ static inline void jbuf_flush(JsonBuffer *jbuf) {
 
 static inline void jbuf_add(JsonBuffer *jbuf, const void *data, size_t len) {
     if (jbuf->offset + len > sizeof(jbuf->stack_buf)) {
+        if (jbuf->offset > 0) {
+            evbuffer_add(jbuf->evbuf, jbuf->stack_buf, jbuf->offset);
+            jbuf->offset = 0;
+        }
         if (len >= sizeof(jbuf->stack_buf)) {
-            jbuf_flush(jbuf);
             evbuffer_add(jbuf->evbuf, data, len);
             return;
         }
-        jbuf_flush(jbuf);
     }
     memcpy(jbuf->stack_buf + jbuf->offset, data, len);
     jbuf->offset += len;
@@ -400,7 +402,10 @@ static inline void jbuf_add(JsonBuffer *jbuf, const void *data, size_t len) {
 
 static inline void jbuf_add_char(JsonBuffer *jbuf, char c) {
     if (jbuf->offset + 1 > sizeof(jbuf->stack_buf)) {
-        jbuf_flush(jbuf);
+        if (jbuf->offset > 0) {
+            evbuffer_add(jbuf->evbuf, jbuf->stack_buf, jbuf->offset);
+            jbuf->offset = 0;
+        }
     }
     jbuf->stack_buf[jbuf->offset++] = c;
 }
