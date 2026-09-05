@@ -195,6 +195,15 @@ static void apply_initial_config_vars(void) {
     parse_cors_origins();
 }
 
+static void scrub_env_var(const char *name) {
+    char *val = getenv(name);
+    if (val) {
+        size_t len = strlen(val);
+        explicit_bzero(val, len);
+        unsetenv(name);
+    }
+}
+
 void config_reload(void) {
     if (!is_first_load) {
         locate_and_load_env(true);
@@ -234,14 +243,14 @@ void config_reload(void) {
 
     apply_initial_config_vars();
     
-    unsetenv("JWT_SECRET");
-    unsetenv("API_PASS");
-    unsetenv("REMOTE_API_KEY");
-    unsetenv("TELEMETRY_API_KEY");
+    scrub_env_var("JWT_SECRET");
+    scrub_env_var("API_PASS");
+    scrub_env_var("REMOTE_API_KEY");
+    scrub_env_var("TELEMETRY_API_KEY");
     for (int i = 0; i < 4; i++) {
         char env_key[8];
         (void)snprintf(env_key, sizeof(env_key), "DB_%d", i);
-        unsetenv(env_key);
+        scrub_env_var(env_key);
     }
     
     is_first_load = false;
