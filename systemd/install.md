@@ -374,6 +374,81 @@ WantedBy=multi-user.target
 2. **Immediate In-Memory Scrubbing:** The server consumes the environment variables on boot and immediately scrubs them using `explicit_bzero()`, leaving `/proc/$PID/environ` empty.
 3. **Automated Secret Rotation:** If IT security changes the database password in Vault, Vault Agent automatically updates `/run/apiserver/vault.env` and issues `systemctl restart apiserver` to reconnect the ODBC pool with zero manual intervention.
 
+---
+
+### Bonus: Testing the Vault Integration Locally with Docker
+Before integrating with a production corporate Vault, you can test this entire pipeline locally using HashiCorp's official Docker image in **dev mode** (in-memory, unsealed, Web UI enabled).
+
+#### 1. Spin up the Vault Container
+Run the official Vault image with a predictable root token:
+
+```bash
+docker run -d \
+  --name vault-dev \
+  -p 8200:8200 \
+  --cap-add=IPC_LOCK \
+  -e 'VAULT_DEV_ROOT_TOKEN_ID=dev-test-token' \
+  -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' \
+  hashicorp/vault
+```
+
+> The Web UI will be accessible immediately at `http://localhost:8200` using Token authentication with `dev-test-token`.
+
+#### 2. Populate Test Secrets
+Seed the expected key-value secrets inside the container:
+
+```bash
+docker exec -e VAULT_TOKEN=dev-test-token vault-dev \
+  vault kv put secret/apiserver/production \
+    DB_0="Driver=FreeTDS;SERVER=10.0.0.5;PORT=1433;DATABASE=demodb;UID=sa;PWD=SecretPass123;" \
+    JWT_SECRET="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
+    API_PASS="SecretBackendPass456" \
+    REMOTE_API_KEY="remote-test-api-key" \
+    TELEMETRY_API_KEY="telemetry-test-key"
+```
+
+#### 3. Test One-Shot Rendering with Vault Agent
+For local testing, you can authenticate Vault Agent using a simple `token_file` instead of full AppRole:
+
+1. Save the dev token:
+   ```bash
+   echo "dev-test-token" | sudo tee /etc/vault/test-token
+   sudo chmod 0600 /etc/vault/test-token
+   ```
+
+2. Create a test config `/etc/vault/agent-test.hcl`:
+   ```hcl
+   vault {
+     address = "http://127.0.0.1:8200"
+   }
+
+   auto_auth {
+     method "token_file" {
+       config = {
+         token_file_path = "/etc/vault/test-token"
+       }
+     }
+   }
+
+   template {
+     contents    = "{{ with secret \"secret/data/apiserver/production\" }}{{ range $k, $v := .Data.data }}{{ $k }}=\"{{ $v }}\"\n{{ end }}{{ end }}"
+     destination = "/run/apiserver/vault.env"
+   }
+   ```
+
+3. Run Vault Agent once to verify file creation:
+   ```bash
+   sudo mkdir -p /run/apiserver
+   vault agent -config=/etc/vault/agent-test.hcl -exit-after-auth
+   ```
+
+4. Verify the rendered output:
+   ```bash
+   cat /run/apiserver/vault.env
+   ```
+
+Once verified, your systemd `apiserver.service` will boot and consume these secrets seamlessly via `getenv()`.
+
 ## 6. Install the Systemd Service
 Link the provided systemd service file into the global systemd directory and start the service.
 
