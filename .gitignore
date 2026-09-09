@@ -27,6 +27,7 @@ test/*
 !test/api-tester-emp.sh
 !test/api-tester-sup.sh
 !test/test-upload.sh
+!test/benchmark_strcopy.c
 
 # Docs
 issues*.md

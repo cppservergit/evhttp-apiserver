@@ -115,6 +115,17 @@ void db_set_error(DbConnectionId db_id, SQLSMALLINT handle_type, SQLHANDLE handl
 [[nodiscard("ODBC function return value must be evaluated")]]
 bool db_query_single_row(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count, OutParam* out_params, size_t out_count, bool* found);
 
+/** 
+ * \brief Executes a query or stored procedure with input parameters that returns no resultset or output parameters.
+ * \param db_id The database connection ID from the thread-local pool.
+ * \param query The SQL query or stored procedure call string.
+ * \param in_params Array of input query parameters to bind, or nullptr if none.
+ * \param in_count Number of parameters in the in_params array.
+ * \return true on successful execution, false on error.
+ */
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool db_exec(DbConnectionId db_id, const char* query, QueryParam* in_params, size_t in_count);
+
 /** \brief Allocates a statement handle and handles cleanup/logging on failure. */
 SQLHSTMT db_alloc_stmt(DbConnectionId db_id, SQLHDBC hdbc);
 

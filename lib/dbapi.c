@@ -824,6 +824,29 @@ bool db_query_single_row(
     return true;
 }
 
+[[nodiscard("ODBC function return value must be evaluated")]]
+bool db_exec(
+    DbConnectionId db_id,
+    const char* query,
+    QueryParam* in_params,
+    size_t in_count
+) {
+    if (!query || (in_count > 0 && !in_params)) return false;
+    [[gnu::cleanup(db_cleanup_stmt)]] SQLHSTMT hstmt = SQL_NULL_HSTMT;
+    if (!db_prepare_and_bind(db_id, in_params, in_count, &hstmt)) return false;
+
+    SQLRETURN exec_ret = SQLExecDirect(hstmt, (SQLCHAR*)(uintptr_t)query, SQL_NTS);
+    if (!SQL_SUCCEEDED(exec_ret) && exec_ret != SQL_NO_DATA) {
+        char err_msg[256];
+        (void)snprintf(err_msg, sizeof(err_msg), "Failed to execute query");
+        db_set_error(db_id, SQL_HANDLE_STMT, hstmt, err_msg);
+        return false;
+    }
+
+    return true;
+}
+
+
 
 
 
