@@ -1,3 +1,4 @@
+#include <apiserver/logger.h>
 #include <apiserver/jwt.h>
 #include <string.h>
 #include <stdio.h>
@@ -27,6 +28,23 @@ void generate_uuidv4(char out[37]) {
              bytes[6], bytes[7],
              bytes[8], bytes[9],
              bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+}
+
+#include <apiserver/config.h>
+
+static unsigned char g_jwt_secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
+
+void jwt_init(void) {
+    const char* secret_hex = config_get_jwt_secret();
+    size_t secret_bin_len = 0;
+    if (sodium_hex2bin(g_jwt_secret_bytes, sizeof(g_jwt_secret_bytes), secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
+        LOG_FATAL("Failed to decode JWT_SECRET. Must be valid hex.");
+        exit(1);
+    }
+    if (secret_bin_len != crypto_auth_hmacsha256_KEYBYTES) {
+        LOG_FATAL("JWT_SECRET must be exactly 64 hex characters (32 bytes).");
+        exit(1);
+    }
 }
 
 static bool b64_decode_segment(const char* start, size_t len, char* out, size_t out_maxlen) {
@@ -73,14 +91,6 @@ time_t jwt_get_expiration(const char* jwt) {
     return exp;
 }
 
-static bool get_secret_bytes(const char* secret_hex, unsigned char* out_bytes) {
-    size_t secret_bin_len = 0;
-    if (sodium_hex2bin(out_bytes, crypto_auth_hmacsha256_KEYBYTES, secret_hex, strlen(secret_hex), nullptr, &secret_bin_len, nullptr) != 0) {
-        return false;
-    }
-    return secret_bin_len == crypto_auth_hmacsha256_KEYBYTES;
-}
-
 static bool jwt_build_payload(const char* username, const char* session_id, long timeout_seconds, char* payload, size_t payload_max) {
     char escaped_user[128];
     json_encode_string(username, escaped_user, sizeof(escaped_user));
@@ -104,16 +114,12 @@ static bool jwt_sign_msg(const char* msg, const unsigned char* secret_bytes, cha
     return final_len >= 0 && final_len < (int)out_jwt_size;
 }
 
-bool jwt_create(const char* username, const char* session_id, const char* secret_hex, long timeout_seconds, char* out_jwt, size_t out_jwt_size) {
-    if (!username || !session_id || !secret_hex || !out_jwt || out_jwt_size == 0) return false;
-    
-    unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
-    if (!get_secret_bytes(secret_hex, secret_bytes)) return false;
+bool jwt_create(const char* username, const char* session_id, long timeout_seconds, char* out_jwt, size_t out_jwt_size) {
+    if (!username || !session_id || !out_jwt || out_jwt_size == 0) return false;
     
     const char* header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
     char payload[512];
     if (!jwt_build_payload(username, session_id, timeout_seconds, payload, sizeof(payload))) {
-        sodium_memzero(secret_bytes, sizeof(secret_bytes));
         return false;
     }
     
@@ -121,7 +127,6 @@ bool jwt_create(const char* username, const char* session_id, const char* secret
     char payload_b64[512];
     if (sodium_base64_ENCODED_LEN(strlen(header), sodium_base64_VARIANT_URLSAFE_NO_PADDING) > sizeof(header_b64) ||
         sodium_base64_ENCODED_LEN(strlen(payload), sodium_base64_VARIANT_URLSAFE_NO_PADDING) > sizeof(payload_b64)) {
-        sodium_memzero(secret_bytes, sizeof(secret_bytes));
         return false;
     }
 
@@ -130,12 +135,10 @@ bool jwt_create(const char* username, const char* session_id, const char* secret
     
     char msg[768];
     int msg_len = snprintf(msg, sizeof(msg), "%s.%s", header_b64, payload_b64);
-    if (msg_len >= (int)sizeof(msg) || !jwt_sign_msg(msg, secret_bytes, out_jwt, out_jwt_size)) {
-        sodium_memzero(secret_bytes, sizeof(secret_bytes));
+    if (msg_len >= (int)sizeof(msg) || !jwt_sign_msg(msg, g_jwt_secret_bytes, out_jwt, out_jwt_size)) {
         return false;
     }
     
-    sodium_memzero(secret_bytes, sizeof(secret_bytes));
     return true;
 }
 
@@ -143,22 +146,13 @@ static bool jwt_check_header_alg(const char* token) {
     char header_json[1024];
     if (!jwt_decode_header(token, header_json, sizeof(header_json))) return false;
     
-    [[gnu::cleanup(cleanup_json_object)]] struct json_object* header_obj = json_tokener_parse(header_json);
-    if (!header_obj) return false;
-    
-    struct json_object* alg_obj;
-    if (!json_object_object_get_ex(header_obj, "alg", &alg_obj)) return false;
-    
-    return (strcmp(json_object_get_string(alg_obj), "HS256") == 0);
+    return strstr(header_json, "\"alg\":\"HS256\"") != nullptr || strstr(header_json, "\"alg\": \"HS256\"") != nullptr;
 }
 
 static bool jwt_verify_mac(const char* msg, size_t msg_len, const char* secret_hex, const char* signature) {
-    unsigned char secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
-    if (!get_secret_bytes(secret_hex, secret_bytes)) return false;
-
+    (void)secret_hex;
     unsigned char mac[crypto_auth_hmacsha256_BYTES];
-    crypto_auth_hmacsha256(mac, (const unsigned char*)msg, msg_len, secret_bytes);
-    sodium_memzero(secret_bytes, sizeof(secret_bytes));
+    crypto_auth_hmacsha256(mac, (const unsigned char*)msg, msg_len, g_jwt_secret_bytes);
 
     unsigned char provided_mac[crypto_auth_hmacsha256_BYTES];
     size_t provided_len = 0;
@@ -207,8 +201,8 @@ static int jwt_parse_payload(const char* payload_json, char* out_username, size_
     return JWT_OK;
 }
 
-int jwt_verify(const char* token, const char* secret_hex, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
-    if (!token || !secret_hex) return JWT_ERR_INVALID;
+int jwt_verify(const char* token, char* out_username, size_t out_uname_size, char* out_session_id, size_t out_sess_size) {
+    if (!token) return JWT_ERR_INVALID;
 
     const char* dot1 = strchr(token, '.');
     if (!dot1) return JWT_ERR_INVALID;
@@ -219,7 +213,7 @@ int jwt_verify(const char* token, const char* secret_hex, char* out_username, si
     size_t msg_len = (size_t)(dot2 - token);
     
     if (!jwt_check_header_alg(token)) return JWT_ERR_INVALID;
-    if (!jwt_verify_mac(token, msg_len, secret_hex, dot2 + 1)) return JWT_ERR_INVALID;
+    if (!jwt_verify_mac(token, msg_len, nullptr, dot2 + 1)) return JWT_ERR_INVALID;
 
     char payload_json[8192];
     if (!jwt_decode_payload(token, payload_json, sizeof(payload_json))) return JWT_ERR_INVALID;

@@ -66,8 +66,7 @@ static bool worker_process_jwt(http_task_t* task, const middleware_ctx_t* ctx) {
         return false;
     }
 
-    const char* jwt_secret = config_get_jwt_secret();
-    int jwt_res = jwt_verify(&auth_hdr[7], jwt_secret, task->username, sizeof(task->username), task->session_id, sizeof(task->session_id));
+    int jwt_res = jwt_verify(&auth_hdr[7], task->username, sizeof(task->username), task->session_id, sizeof(task->session_id));
     
     if (jwt_res == JWT_ERR_EXPIRED) {
         task->status_code = 401;

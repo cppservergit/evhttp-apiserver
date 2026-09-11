@@ -1,3 +1,4 @@
+#include <apiserver/jwt.h>
 #include <apiserver/server.h>
 #include <stdalign.h>
 #include <sched.h>
@@ -74,6 +75,13 @@ static const char* server_extract_client_ip(struct evhttp_request* req) {
     const char* x_forwarded_for = evhttp_find_header(headers, "X-Forwarded-For");
 
     if (!x_forwarded_for || !is_trusted_proxy(req, nullptr)) {
+        if (x_forwarded_for) {
+            const char* peer_ip = nullptr;
+            is_trusted_proxy(req, &peer_ip);
+            LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
+                     x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(req));
+        }
+        
         struct evhttp_connection* evcon = evhttp_request_get_connection(req);
         if (evcon) {
             return server_get_client_ip_fast(evcon);
@@ -589,7 +597,7 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
 }
 
 
-static bool server_validate_cors(struct evhttp_request* req) {
+static bool server_validate_cors(struct evhttp_request* req, const char* client_ip) {
     const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
     const char* origin = evhttp_find_header(in_headers, "Origin");
     if (origin) {
@@ -601,7 +609,6 @@ static bool server_validate_cors(struct evhttp_request* req) {
             evhttp_add_header(out_headers, "Access-Control-Max-Age", "86400");
             evhttp_add_header(out_headers, "Vary", "Origin");
         } else {
-            const char* client_ip = server_extract_client_ip(req);
             LOG_WARN("CORS validation failed for Origin: '%s' from IP: %s accessing URI: %s", origin, client_ip, evhttp_request_get_uri(req));
             struct evbuffer* out_buf = evhttp_request_get_output_buffer(req);
             const char* msg = "{\"error\":\"CORS origin not allowed.\"}";
@@ -632,8 +639,7 @@ static bool server_validate_method_and_auth(struct evhttp_request* req, const mi
     return true;
 }
 
-static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx_t* ctx, struct timespec start_time) {
-    const char* extracted_client_ip = server_extract_client_ip(req);
+static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx_t* ctx, struct timespec start_time, const char* extracted_client_ip) {
     const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
 
     http_task_t* task = task_pool_alloc();
@@ -695,13 +701,15 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     
     inject_security_headers(req);
 
+    const char* client_ip = server_extract_client_ip(req);
+
     const middleware_ctx_t* ctx = (const middleware_ctx_t*)arg;
     if (ctx == nullptr || ctx->handler == nullptr) {
         evhttp_send_error(req, HTTP_INTERNAL, "Middleware Routing Fault");
         return;
     }
     
-    if (!server_validate_cors(req)) {
+    if (!server_validate_cors(req, client_ip)) {
         return;
     }
     
@@ -713,21 +721,11 @@ static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     struct timespec start_time;
     clock_gettime(CLOCK_MONOTONIC, &start_time);
     
-    const struct evkeyvalq* in_headers = evhttp_request_get_input_headers(req);
-    const char* x_forwarded_for = evhttp_find_header(in_headers, "X-Forwarded-For");
-    if (x_forwarded_for) {
-        const char* peer_ip = nullptr;
-        if (!is_trusted_proxy(req, &peer_ip)) {
-            LOG_WARN("Untrusted X-Forwarded-For header '%s' from peer %s for URI %s",
-                     x_forwarded_for, peer_ip ? peer_ip : "unknown", evhttp_request_get_uri(req));
-        }
-    }
-
     if (!server_validate_method_and_auth(req, ctx)) {
         return;
     }
     
-    server_enqueue_task(req, ctx, start_time);
+    server_enqueue_task(req, ctx, start_time, client_ip);
 }
 
 static struct event_base* create_optimized_event_base(void) {
@@ -956,6 +954,8 @@ int server_start(void) {
     if (setup_core_tracking(&threads, &num_cores) != 0) {
         return EXIT_FAILURE;
     }
+
+    jwt_init();
 
     LOG_INFO("Spawning Multi-Reactor engine across %ld core-isolated pipes...", num_cores);
     LOG_INFO("Background Async Worker Pool size: %zu threads", worker_pool_get_size());

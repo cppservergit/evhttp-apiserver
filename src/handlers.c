@@ -92,11 +92,10 @@ static void handle_login_success(
     char session_id[37];
     generate_uuidv4(session_id);
 
-    const char* jwt_secret = config_get_jwt_secret();
     long jwt_timeout = config_get_jwt_timeout_seconds();
 
     char token[1024];
-    if (jwt_create(username, session_id, jwt_secret, jwt_timeout, token, sizeof(token))) {
+    if (jwt_create(username, session_id, jwt_timeout, token, sizeof(token))) {
         char esc_token[2048];
         json_encode_string(token, esc_token, sizeof(esc_token));
         
