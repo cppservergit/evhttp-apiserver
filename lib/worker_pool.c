@@ -170,7 +170,7 @@ static void worker_process_task(http_task_t* task) {
             }
             const char* ctype = context_get_content_type();
             if (ctype) {
-                (void)snprintf(task->out_content_type, sizeof(task->out_content_type), "%s", ctype);
+                (void)strlcpy(task->out_content_type, ctype, sizeof(task->out_content_type));
             } else {
                 task->out_content_type[0] = '\0';
             }
