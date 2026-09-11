@@ -44,14 +44,25 @@ static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
         qrcode->width + 2, qrcode->width + 2);
     evbuffer_add(out_buf, svg_start, start_len < (int)sizeof(svg_start) ? (size_t)start_len : sizeof(svg_start) - 1);
 
-    char path_buf[128];
+    char batch_buf[8192];
+    size_t batch_len = 0;
+    
     for (int y = 0; y < qrcode->width; y++) {
         for (int x = 0; x < qrcode->width; x++) {
             if (qrcode->data[y * qrcode->width + x] & 1) {
-                int len = snprintf(path_buf, sizeof(path_buf), "M%d,%dh1v1h-1z ", x + 1, y + 1);
-                evbuffer_add(out_buf, path_buf, len < (int)sizeof(path_buf) ? (size_t)len : sizeof(path_buf) - 1);
+                if (batch_len + 32 > sizeof(batch_buf)) {
+                    evbuffer_add(out_buf, batch_buf, batch_len);
+                    batch_len = 0;
+                }
+                int len = snprintf(batch_buf + batch_len, sizeof(batch_buf) - batch_len, "M%d,%dh1v1h-1z ", x + 1, y + 1);
+                if (len > 0) {
+                    batch_len += (size_t)len;
+                }
             }
         }
+    }
+    if (batch_len > 0) {
+        evbuffer_add(out_buf, batch_buf, batch_len);
     }
 
     const char* svg_end = "\" fill=\"black\"/>\n</svg>\n";

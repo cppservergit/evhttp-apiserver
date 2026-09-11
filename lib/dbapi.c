@@ -339,11 +339,13 @@ typedef struct {
     char       *buffer;
     size_t      alloc_size;
     SQLLEN      ind;
+    size_t      precomputed_key_len;
     SQLSMALLINT name_len;
     SQLSMALLINT sql_type;
     SQLSMALLINT c_type;
+    char        _padding1[2];
     SQLCHAR     name[128];
-    char        _padding[2];
+    char        precomputed_key[256];
 } ColumnDescriptor;
 
 typedef struct {
@@ -499,6 +501,21 @@ static bool setup_column_metadata(DbConnectionId db_id, SQLHSTMT hstmt, ResultSe
             db_set_error(db_id, SQL_HANDLE_STMT, hstmt, "Column allocation size overflowed.");
             return false;
         }
+
+        struct evbuffer *tmp_buf = evbuffer_new();
+        if (tmp_buf) {
+            evbuffer_append_escaped_str(tmp_buf, (const char*)meta->cols[i].name, meta->cols[i].name_len);
+            evbuffer_add(tmp_buf, ":", 1);
+            meta->cols[i].precomputed_key_len = evbuffer_get_length(tmp_buf);
+            if (meta->cols[i].precomputed_key_len >= sizeof(meta->cols[i].precomputed_key)) {
+                meta->cols[i].precomputed_key_len = sizeof(meta->cols[i].precomputed_key) - 1;
+            }
+            evbuffer_remove(tmp_buf, meta->cols[i].precomputed_key, meta->cols[i].precomputed_key_len);
+            meta->cols[i].precomputed_key[meta->cols[i].precomputed_key_len] = '\0';
+            evbuffer_free(tmp_buf);
+        } else {
+            meta->cols[i].precomputed_key_len = 0;
+        }
     }
     return true;
 }
@@ -634,8 +651,12 @@ static void jbuf_append_row_object(JsonBuffer *jbuf, const ResultSetMetadata *me
     for (SQLSMALLINT i = 0; i < meta->count; ++i) {
         const ColumnDescriptor *col = &meta->cols[i];
 
-        jbuf_append_escaped_str(jbuf, (const char*)col->name, col->name_len);
-        jbuf_add_char(jbuf, ':');
+        if (col->precomputed_key_len > 0) {
+            jbuf_add(jbuf, col->precomputed_key, col->precomputed_key_len);
+        } else {
+            jbuf_append_escaped_str(jbuf, (const char*)col->name, col->name_len);
+            jbuf_add_char(jbuf, ':');
+        }
 
         if (col->ind == SQL_NULL_DATA) {
             jbuf_add(jbuf, "null", 4);
