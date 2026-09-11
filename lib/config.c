@@ -146,7 +146,7 @@ static bool parse_boolean_env(const char* env_val, bool default_val) {
 static void load_env_string(const char* key, char* dest, size_t dest_size, bool clear_on_miss) {
     const char* val = getenv(key);
     if (val) {
-        (void)snprintf(dest, dest_size, "%s", val);
+        (void)strlcpy(dest, val, dest_size);
     } else if (clear_on_miss) {
         dest[0] = '\0';
     }
@@ -155,7 +155,7 @@ static void load_env_string(const char* key, char* dest, size_t dest_size, bool 
 static void parse_cors_origins(void) {
     if (g_allowed_origin[0] == '\0') return;
     
-    (void)snprintf(g_allowed_origin_copy, sizeof(g_allowed_origin_copy), "%s", g_allowed_origin);
+    (void)strlcpy(g_allowed_origin_copy, g_allowed_origin, sizeof(g_allowed_origin_copy));
     char* saveptr = nullptr;
     char* token = strtok_r(g_allowed_origin_copy, ",", &saveptr);
     while (token != nullptr && g_allowed_origin_count < 64) {

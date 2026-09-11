@@ -193,7 +193,7 @@ static int jwt_parse_payload(const char* payload_json, char* out_username, size_
         if (!json_object_object_get_ex(jwt_obj, "username", &sub_obj)) return JWT_ERR_INVALID;
         const char* uname = json_object_get_string(sub_obj);
         if (!uname || strlen(uname) >= out_uname_size) return JWT_ERR_INVALID;
-        (void)snprintf(out_username, out_uname_size, "%s", uname);
+        (void)strlcpy(out_username, uname, out_uname_size);
     }
     
     if (out_session_id) {
@@ -201,7 +201,7 @@ static int jwt_parse_payload(const char* payload_json, char* out_username, size_
         if (!json_object_object_get_ex(jwt_obj, "sessionId", &jti_obj)) return JWT_ERR_INVALID;
         const char* sess = json_object_get_string(jti_obj);
         if (!sess || strlen(sess) >= out_sess_size) return JWT_ERR_INVALID;
-        (void)snprintf(out_session_id, out_sess_size, "%s", sess);
+        (void)strlcpy(out_session_id, sess, out_sess_size);
     }
 
     return JWT_OK;

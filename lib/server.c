@@ -37,7 +37,7 @@
 #include <sys/eventfd.h>
 
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
-constexpr char SERVER_VERSION[] = "APIServer 1.02";
+constexpr char SERVER_VERSION[] = "APIServer 1.03";
 
 const char* get_server_version(void) {
     return SERVER_VERSION;
@@ -169,14 +169,14 @@ static int init_server_metadata(size_t num_reactors) {
     
     g_num_reactors = num_reactors;
     if (gethostname(g_hostname, sizeof(g_hostname)) != 0) {
-        (void)snprintf(g_hostname, sizeof(g_hostname), "unknown-host");
+        (void)strlcpy(g_hostname, "unknown-host", sizeof(g_hostname));
     }
     
     struct utsname os_info;
     if (uname(&os_info) == 0) {
         (void)snprintf(g_os_version, sizeof(g_os_version), "%s %s", os_info.sysname, os_info.release);
     } else {
-        (void)snprintf(g_os_version, sizeof(g_os_version), "unknown-os");
+        (void)strlcpy(g_os_version, "unknown-os", sizeof(g_os_version));
     }
     
     time_t now = time(nullptr);
@@ -575,9 +575,9 @@ static bool validate_telemetry_api_key(struct evhttp_request* req) {
     
     char provided_key[MAX_CONFIG_STR] = {0};
     if (auth_header) {
-        (void)snprintf(provided_key, sizeof(provided_key), "%s", auth_header);
+        (void)strlcpy(provided_key, auth_header, sizeof(provided_key));
     } else if (bearer && strncasecmp(bearer, "Bearer ", 7) == 0) {
-        (void)snprintf(provided_key, sizeof(provided_key), "%s", bearer + 7);
+        (void)strlcpy(provided_key, bearer + 7, sizeof(provided_key));
     }
     
     // Constant-time compare over the entire maximum buffer size to prevent length leakage
@@ -667,9 +667,9 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
     task->reactor_id = tl_reactor_id;
     task->username[0] = '\0';
     task->session_id[0] = '\0';
-    (void)snprintf(task->client_ip, sizeof(task->client_ip), "%s", extracted_client_ip ? extracted_client_ip : "unknown");
-    (void)snprintf(task->uri, sizeof(task->uri), "%s", raw_uri);
-    (void)snprintf(task->request_id, sizeof(task->request_id), "%s", req_id ? req_id : "");
+    (void)strlcpy(task->client_ip, extracted_client_ip ? extracted_client_ip : "unknown", sizeof(task->client_ip));
+    (void)strlcpy(task->uri, raw_uri, sizeof(task->uri));
+    (void)strlcpy(task->request_id, req_id ? req_id : "", sizeof(task->request_id));
     
     atomic_store_explicit(&task->cancelled, false, memory_order_release);
     
