@@ -147,9 +147,12 @@ static bool validate_type_string(const json_object *obj, const FieldValidator *f
         return emit_error(err, len, ERR_NOT_STRING, field->field_name);
     }
     if (field->max_len > 0) {
-        const char *str = json_object_get_string((struct json_object*)(uintptr_t)obj);
-        if (str && utf8_strlen(str) > field->max_len) {
-            return emit_error(err, len, ERR_TOO_LONG, field->field_name);
+        int byte_len = json_object_get_string_len((struct json_object*)(uintptr_t)obj);
+        if (byte_len > (int)field->max_len) {
+            const char *str = json_object_get_string((struct json_object*)(uintptr_t)obj);
+            if (str && utf8_strlen(str) > field->max_len) {
+                return emit_error(err, len, ERR_TOO_LONG, field->field_name);
+            }
         }
     }
     return true;

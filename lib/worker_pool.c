@@ -114,19 +114,27 @@ static bool worker_process_payload(http_task_t* task) {
     }
     [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener* tok = json_tokener_new();
     
-    struct evbuffer_ptr ptr;
-    evbuffer_ptr_set(in_buf, &ptr, 0, EVBUFFER_PTR_SET);
-    struct evbuffer_iovec v[1];
-    
-    while (evbuffer_peek(in_buf, -1, &ptr, v, 1) > 0) {
-        struct json_object* obj = json_tokener_parse_ex(tok, (const char*)v[0].iov_base, (int)v[0].iov_len);
-        if (obj) {
-            task->parsed_body = obj;
-        }
+    size_t contig = evbuffer_get_contiguous_space(in_buf);
+    if (contig >= len) {
+        // Fast path: entirely contiguous
+        const char* data = (const char*)evbuffer_pullup(in_buf, len);
+        task->parsed_body = json_tokener_parse_ex(tok, data, (int)len);
+    } else {
+        // Slow path: chunked
+        struct evbuffer_ptr ptr;
+        evbuffer_ptr_set(in_buf, &ptr, 0, EVBUFFER_PTR_SET);
+        struct evbuffer_iovec v[1];
         
-        if (json_tokener_get_error(tok) != json_tokener_continue || 
-            evbuffer_ptr_set(in_buf, &ptr, v[0].iov_len, EVBUFFER_PTR_ADD) < 0) {
-            break;
+        while (evbuffer_peek(in_buf, -1, &ptr, v, 1) > 0) {
+            struct json_object* obj = json_tokener_parse_ex(tok, (const char*)v[0].iov_base, (int)v[0].iov_len);
+            if (obj) {
+                task->parsed_body = obj;
+            }
+            
+            if (json_tokener_get_error(tok) != json_tokener_continue || 
+                evbuffer_ptr_set(in_buf, &ptr, v[0].iov_len, EVBUFFER_PTR_ADD) < 0) {
+                break;
+            }
         }
     }
     
