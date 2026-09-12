@@ -302,8 +302,17 @@ static void test_coverage(void) {
     // And test that it fails when it actually exceeds 10 characters (11 characters, 12 bytes)
     root = json_tokener_parse("{\"age\": 25, \"score\": 50.0, \"username\": \"123456anatá\"}");
     assert_validation_error(&BoundsContext, root, "exceeds maximum allowed length");
-    json_object_put(root);
+    // Test json_get_string_ex
+    int out_len = 0;
+    const char* ex_str = json_get_string_ex(root, "username", &out_len);
+    assert(ex_str != nullptr);
+    assert(out_len == 12);
+    
+    // Test json_get_string_ex for missing key
+    const char* missing_str = json_get_string_ex(root, "missing_key", &out_len);
+    assert(missing_str == nullptr);
 
+    json_object_put(root);
     json_object_put(empty_obj);
     printf("All validation edge cases passed successfully!\n");
 }
