@@ -7,6 +7,7 @@
 #include <json-c/json.h>
 #include <apiserver/json_util.h>
 #include <apiserver/raii.h>
+#include <apiserver/config.h>
 
 void generate_uuidv4(char out[37]) {
     unsigned char bytes[16];
@@ -31,8 +32,6 @@ void generate_uuidv4(char out[37]) {
     }
     *p = '\0';
 }
-
-#include <apiserver/config.h>
 
 static unsigned char g_jwt_secret_bytes[crypto_auth_hmacsha256_KEYBYTES];
 

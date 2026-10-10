@@ -47,17 +47,18 @@ static void totp_append_qr_svg_path(struct evbuffer* out_buf, QRcode *qrcode) {
     char batch_buf[8192];
     size_t batch_len = 0;
     
-    for (int y = 0; y < qrcode->width; y++) {
-        for (int x = 0; x < qrcode->width; x++) {
-            if (qrcode->data[y * qrcode->width + x] & 1) {
-                if (batch_len + 32 > sizeof(batch_buf)) {
-                    evbuffer_add(out_buf, batch_buf, batch_len);
-                    batch_len = 0;
-                }
-                int len = snprintf(batch_buf + batch_len, sizeof(batch_buf) - batch_len, "M%d,%dh1v1h-1z ", x + 1, y + 1);
-                if (len > 0) {
-                    batch_len += (size_t)len;
-                }
+    int total_pixels = qrcode->width * qrcode->width;
+    for (int i = 0; i < total_pixels; i++) {
+        if (qrcode->data[i] & 1) {
+            int x = i % qrcode->width;
+            int y = i / qrcode->width;
+            if (batch_len + 32 > sizeof(batch_buf)) {
+                evbuffer_add(out_buf, batch_buf, batch_len);
+                batch_len = 0;
+            }
+            int len = snprintf(batch_buf + batch_len, sizeof(batch_buf) - batch_len, "M%d,%dh1v1h-1z ", x + 1, y + 1);
+            if (len > 0) {
+                batch_len += (size_t)len;
             }
         }
     }
