@@ -2,7 +2,6 @@
 #include <json-c/json.h>
 #include <event2/http.h>
 #include <apiserver/validation.h>
-#include "mcp.h"
 
 /**
  * \file handlers.h

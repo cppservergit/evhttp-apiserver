@@ -523,10 +523,6 @@ static void process_completed_task(http_task_t* task) {
     
     bool has_body = (evbuffer_get_length(out_buf) > 0);
     struct evkeyvalq* headers = evhttp_request_get_output_headers(task->req);
-    
-    if (ctx && strcmp(ctx->path, "/mcp") == 0) {
-        evhttp_add_header(headers, "MCP-Protocol-Version", "2026-07-28");
-    }
 
     send_http_reply(task, out_buf, headers, has_body);
     
