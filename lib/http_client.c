@@ -157,6 +157,7 @@ static CURL* setup_curl_request(const char* url, const char* body, const char** 
             *out_headers = chunk_headers; // So RAII can free the ones successfully allocated
             // Note: chunk->memory was already allocated above. It will be freed automatically 
             // by the [[gnu::cleanup]] macro on the 'chunk' variable in the caller (do_http_request).
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)nullptr);
             return nullptr;
         }
         chunk_headers = temp;
@@ -198,6 +199,8 @@ static bool perform_http_request(const char* base_url, const char* uri, const ch
 
     CURLcode res = curl_easy_perform(curl);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, (struct curl_slist*)nullptr);
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, (char*)nullptr);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)nullptr);
 
     if (res != CURLE_OK) {
         set_thread_error(TL_ERR_ERROR, "libcurl network failure: %s (%s) | URL: %s", curl_easy_strerror(res), errbuf[0] ? errbuf : "no details", url);
@@ -241,9 +244,12 @@ void http_client_init_thread(void) {
 }
 
 void http_client_cleanup_thread(void) {
-    // Intentional no-op kept for API symmetry. 
-    // Curl handles are automatically destroyed by the pthread_key destructor 
-    // (curl_thread_destructor) when the thread exits.
+    pthread_once(&g_curl_tls_once, curl_init_tls_key);
+    CURL* curl = pthread_getspecific(g_curl_tls_key);
+    if (curl) {
+        pthread_setspecific(g_curl_tls_key, nullptr);
+        curl_easy_cleanup(curl);
+    }
 }
 
 char* http_client_post_raw(const char* base_url, const char* uri, const char* body, const char** headers, int num_headers, long* out_http_code) {

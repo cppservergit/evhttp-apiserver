@@ -38,7 +38,7 @@
 #include <sys/eventfd.h>
 
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
-constexpr char SERVER_VERSION[] = "APIServer 1.0.4";
+constexpr char SERVER_VERSION[] = "APIServer 1.0.5";
 
 const char* get_server_version(void) {
     return SERVER_VERSION;
