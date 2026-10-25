@@ -152,9 +152,15 @@ struct json_object* customer_service_get_info(const char* customer_id, long* out
         return nullptr;
     }
     
-    [[gnu::cleanup(cleanup_json_object)]] struct json_object* req_payload = json_object_new_object();
-    json_object_object_add(req_payload, "id", json_object_new_string(customer_id));
-    const char* body = json_object_to_json_string(req_payload);
+    char escaped_id[JSON_ENCODE_BUFSIZE(64)];
+    json_encode_string(customer_id ? customer_id : "", escaped_id, sizeof(escaped_id));
+    char body[JSON_ENCODE_BUFSIZE(64) + 32];
+    int body_len = snprintf(body, sizeof(body), "{\"id\":\"%s\"}", escaped_id);
+    if (body_len < 0 || (size_t)body_len >= sizeof(body)) {
+        if (out_http_code) *out_http_code = 500;
+        sodium_memzero(token, sizeof(token));
+        return nullptr;
+    }
     
     char auth_header[1100];
     (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);

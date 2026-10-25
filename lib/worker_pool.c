@@ -113,6 +113,13 @@ static bool worker_process_payload(http_task_t* task) {
         return false;
     }
     [[gnu::cleanup(cleanup_json_tokener)]] struct json_tokener* tok = json_tokener_new();
+    if (!tok) {
+        task->status_code = HTTP_SERVUNAVAIL;
+        task->status_txt = "Service Unavailable";
+        const char* msg = "{\"error\":\"Out of memory allocating JSON parser\"}";
+        evbuffer_add(task->worker_buf, msg, strlen(msg));
+        return false;
+    }
     
     size_t contig = evbuffer_get_contiguous_space(in_buf);
     if (contig >= len) {

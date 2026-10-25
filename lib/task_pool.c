@@ -124,6 +124,10 @@ http_task_t* task_pool_alloc(void) {
         task->worker_buf = cached_buf;
     } else {
         task->worker_buf = evbuffer_new();
+        if (!task->worker_buf) {
+            task_pool_free(task);
+            return nullptr;
+        }
     }
     return task;
 }
