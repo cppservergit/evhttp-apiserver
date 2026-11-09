@@ -38,7 +38,7 @@
 #include <sys/eventfd.h>
 
 constexpr int REQUEST_TIMEOUT_SECONDS = 15;
-constexpr char SERVER_VERSION[] = "APIServer 1.0.5";
+constexpr char SERVER_VERSION[] = "APIServer 1.0.6";
 
 const char* get_server_version(void) {
     return SERVER_VERSION;
@@ -692,6 +692,13 @@ static void server_enqueue_task(struct evhttp_request* req, const middleware_ctx
 static void api_middleware_wrapper(struct evhttp_request* req, void* arg) {
     if (evhttp_request_get_connection(req) == nullptr) {
         LOG_AUDIT("Client disconnected abruptly. Ignoring duplicate callback trigger.");
+        return;
+    }
+    
+    const char* raw_uri = evhttp_request_get_uri(req);
+    // Reject percent-encoded NUL bytes immediately (CWE-444 / CVE-2026-63385 mitigation)
+    if (raw_uri != nullptr && (strstr(raw_uri, "%00") != nullptr || strstr(raw_uri, "%0") != nullptr)) {
+        evhttp_send_error(req, HTTP_BADREQUEST, "Invalid URI encoding");
         return;
     }
     
